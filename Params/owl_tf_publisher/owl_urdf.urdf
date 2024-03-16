@@ -1,0 +1,79 @@
+<?xml version="1.0" ?>
+<robot name="turtlebot3_waffle" xmlns:xacro="http://ros.org/wiki/xacro">
+  <link name="base_link">
+  </link>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.0 0 0.0" rpy="0 0.3 0"/>
+  </joint>
+
+  <link name="imu_link"/>
+
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="0.11 0.0 0.0" rpy="0 0.3 0"/>
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+  </joint>
+
+  <link name="camera_link">
+  </link>
+
+  <joint name="camera_rgb_joint" type="fixed">
+    <origin xyz="0.005 0.018 0.013" rpy="0 0 0"/>
+    <parent link="camera_link"/>
+    <child link="camera_rgb_frame"/>
+  </joint>
+  <link name="camera_rgb_frame"/>
+
+  <joint name="camera_rgb_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57 0 -1.57"/>
+    <parent link="camera_rgb_frame"/>
+    <child link="camera_rgb_optical_frame"/>
+  </joint>
+  <link name="camera_rgb_optical_frame"/>
+
+  <joint name="camera_depth_joint" type="fixed">
+    <origin xyz="0.005 0.018 0.013" rpy="0 0 0"/>
+    <parent link="camera_link"/>
+    <child link="camera_depth_frame"/>
+  </joint>
+  <link name="camera_depth_frame"/>
+
+  <joint name="camera_depth_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57 0 -1.57"/>
+    <parent link="camera_depth_frame"/>
+    <child link="camera_depth_optical_frame"/>
+  </joint>
+  <link name="camera_depth_optical_frame"/>
+<!-- 
+  <joint name="camera_stereo_left_joint" type="fixed">
+    <origin xyz="0.005 0.028 0.013" rpy="0 0 0"/>
+    <parent link="camera_link"/>
+    <child link="camera_stereo_left_frame"/>
+  </joint>
+  <link name="camera_stereo_left_frame"/>
+
+  <joint name="camera_stereo_left_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57 0 -1.57"/>
+    <parent link="camera_stereo_left_frame"/>
+    <child link="camera_stereo_left_optical_frame"/>
+  </joint>
+  <link name="camera_stereo_left_optical_frame"/>
+
+  <joint name="camera_stereo_right_joint" type="fixed">
+    <origin xyz="0.005 0.008 0.013" rpy="0 0 0"/>
+    <parent link="camera_link"/>
+    <child link="camera_stereo_right_frame"/>
+  </joint>
+  <link name="camera_stereo_right_frame"/>
+
+  <joint name="camera_stereo_right_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57 0 -1.57"/>
+    <parent link="camera_stereo_right_frame"/>
+    <child link="camera_stereo_right_optical_frame"/>
+  </joint>
+  <link name="camera_stereo_right_optical_frame"/>
+ -->
+</robot>
