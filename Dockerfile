@@ -22,14 +22,14 @@ RUN apt install -y --no-install-recommends \
 RUN	add-apt-repository -y universe && apt update
 
 # <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
-COPY ./NICE-GPG-KEY /
-COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
-RUN cd /
-RUN gpg --import NICE-GPG-KEY
-RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
-        cd nice-dcv-2023.0-15487-ubuntu2204-x86_64 && \
-        apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
-RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
+# COPY ./NICE-GPG-KEY /
+# COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
+# RUN cd /
+# RUN gpg --import NICE-GPG-KEY
+# RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
+#         cd nice-dcv-2023.0-15487-ubuntu2204-x86_64 && \
+#         apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
+# RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
 
 # # <Directly Get source (we had filtering problems therefore we download it manually and Copy it :) )>
 RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
