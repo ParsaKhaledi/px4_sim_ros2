@@ -18,7 +18,7 @@ jobs:
         with: 
           image: alienkh/px4_sim
           tags: $(date +%s), latest
-          registry: registry-url.io
+          registry: docker.io
           dockerfile: Dockerfile
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
