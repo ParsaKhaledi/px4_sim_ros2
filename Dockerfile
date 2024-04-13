@@ -117,7 +117,7 @@ RUN pip3 install -U empy pyros-genmsg setuptools
 RUN rm -rf /var/lib/apt/lists/* 
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
-RUN mkdir -p ./ws_px4_ros2/src
+RUN mkdir -p /ws_px4_ros2/src
 RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
 RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
 # RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
