@@ -61,7 +61,7 @@ RUN apt install -y --no-install-recommends \
 RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
-RUN git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot
+RUN cd / && git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot
 RUN cd /PX4-Autopilot &&\
 	# git checkout cea185268  &&\
 	# git submodule update --init --recursive &&\
