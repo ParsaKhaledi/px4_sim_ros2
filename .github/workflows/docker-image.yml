@@ -13,14 +13,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - name: docker login
-        env:
-          DOCKER_USER: '${{ secrets.DOCKER_USER }}'
-          DOCKER_PASSWORD: '${{ secrets.DOCKER_PASSWORD }}'
-        run: |
-          docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-      - name: docker build ocelotgateway
-        run: |
-          cd px4_sim_ros2/
-          docker build . -f Dockerfile -t alienkh/px4_sim:$(date +%s)
+      - name: Build & push Docker image
+        uses: mr-smithers-excellent/docker-build-push@v6
+        with: 
+          image: alienkh/px4_sim
+          tags: $(date +%s), latest
+          registry: docker.io
+          dockerfile: px4_sim_ros2/Dockerfile
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
