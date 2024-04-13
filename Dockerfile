@@ -78,7 +78,7 @@ RUN apt install -y  \
 
 ## Install Micro XRCE-DDS
 RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
-RUN cd Micro-XRCE-DDS-Agent &&\
+RUN cd /Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
 	make -j $12 && make install && sudo ldconfig /usr/local/lib/ &&\
 	cd / 
