@@ -45,7 +45,7 @@ RUN apt update && apt -y install locales && \
 RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
         apt update &&\
-        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete
+        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete ros-$ROS_DISTRO-rviz2
 
 # Install Gazebo and some Reqs
 RUN curl -sSL http://get.gazebosim.org | sh
@@ -114,7 +114,7 @@ RUN cd Micro-XRCE-DDS-Agent &&\
 # 	make install
 	
 RUN pip3 install -U empy pyros-genmsg setuptools
-RUN rm -rf /var/lib/apt/lists/* 
+
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ./ws_px4_ros2/src
@@ -132,3 +132,6 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 ## Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 RUN echo "source /ws_px4_ros2/install/setup.bash" >> ~/.bashrc
+
+## Finalize 
+RUN rm -rf /var/lib/apt/lists/* 
