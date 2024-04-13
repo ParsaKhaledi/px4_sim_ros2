@@ -113,7 +113,7 @@ RUN cd Micro-XRCE-DDS-Agent &&\
 # 	make install
 	
 RUN pip3 install -U empy pyros-genmsg setuptools
-RUN rm -rf /var/lib/apt/lists/* 
+
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ./ws_px4_ros2/src
@@ -131,3 +131,6 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 ## Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 RUN echo "source /ws_px4_ros2/install/setup.bash" >> ~/.bashrc
+
+## Finalize 
+RUN rm -rf /var/lib/apt/lists/* 
