@@ -22,21 +22,21 @@ RUN apt install -y --no-install-recommends \
 RUN	add-apt-repository -y universe && apt update
 
 # <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
-# COPY ./NICE-GPG-KEY /
-# COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
-# RUN cd /
-# RUN gpg --import NICE-GPG-KEY
-# RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
-#         cd nice-dcv-2023.0-15487-ubuntu2204-x86_64 && \
-#         apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
-# RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
+COPY ./NICE-GPG-KEY /
+COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
+RUN cd /
+RUN gpg --import NICE-GPG-KEY
+RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
+        cd nice-dcv-2023.0-15487-ubuntu2204-x86_64 && \
+        apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
+RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
 
 # # <Directly Get source (we had filtering problems therefore we download it manually and Copy it :) )>
 RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
         wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
         tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
 		cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
-		apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb
+		apt install ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb
 
 ## INSTALL ROS2
 RUN apt update && apt -y install locales && \
@@ -45,7 +45,7 @@ RUN apt update && apt -y install locales && \
 RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
         apt update &&\
-        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete ros-$ROS_DISTRO-rviz2
+        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete
 
 # Install Gazebo and some Reqs
 RUN curl -sSL http://get.gazebosim.org | sh
@@ -62,7 +62,7 @@ RUN apt install -y --no-install-recommends \
 RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
-RUN git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot
+RUN cd / && git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot
 RUN cd /PX4-Autopilot &&\
 	# git checkout cea185268  &&\
 	# git submodule update --init --recursive &&\
@@ -77,7 +77,7 @@ RUN apt install -y  \
 	ros-$ROS_DISTRO-gazebo*
 
 ## Install Micro XRCE-DDS
-RUN git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
+RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 RUN cd Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
 	make -j $12 && make install && sudo ldconfig /usr/local/lib/ &&\
@@ -114,7 +114,7 @@ RUN cd Micro-XRCE-DDS-Agent &&\
 # 	make install
 	
 RUN pip3 install -U empy pyros-genmsg setuptools
-
+RUN rm -rf /var/lib/apt/lists/* 
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ./ws_px4_ros2/src
@@ -132,6 +132,3 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 ## Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 RUN echo "source /ws_px4_ros2/install/setup.bash" >> ~/.bashrc
-
-## Finalize 
-RUN rm -rf /var/lib/apt/lists/* 
