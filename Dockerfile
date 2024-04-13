@@ -36,7 +36,7 @@ RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE
         wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
         tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
 		cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
-		apt install ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb
+		apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb
 
 ## INSTALL ROS2
 RUN apt update && apt -y install locales && \
