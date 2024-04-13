@@ -73,8 +73,8 @@ RUN cd /PX4-Autopilot &&\
 RUN apt install -y  \
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
-	ros-$ROS_DISTRO-rtabmap-ros \
-	ros-$ROS_DISTRO-gazebo*
+	ros-$ROS_DISTRO-rtabmap-ros 
+	# ros-$ROS_DISTRO-gazebo*
 
 ## Install Micro XRCE-DDS
 RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
