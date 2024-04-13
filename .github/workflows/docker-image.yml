@@ -19,6 +19,6 @@ jobs:
           image: alienkh/px4_sim
           tags: $(date +%s), latest
           registry: docker.io
-          dockerfile: ./Dockerfile
+          dockerfile: ParsaKhaledi/px4_sim_ros2/Dockerfile
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
