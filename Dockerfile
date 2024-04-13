@@ -9,6 +9,7 @@ ENV LANG=en_US.UTF-8
 # ENV ROS_DISTRO=foxy
 ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
+WORKDIR /px4_sim_ros2
 
 RUN apt-get clean
 RUN apt update && apt -y upgrade
@@ -20,7 +21,7 @@ RUN apt install -y --no-install-recommends \
 	xauth xorg openbox python3-argcomplete python3 python3-pip
 RUN	add-apt-repository -y universe && apt update
 
-# <Get from Source (we had filtering problems therefore we download it manually and Copy it :) )>
+# <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
 COPY ./NICE-GPG-KEY /
 COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
 RUN cd /
@@ -30,7 +31,7 @@ RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
         apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
 RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
 
-# # <Get source directly (we had filtering problems therefore we download it manually and Copy it :) )>
+# # <Directly Get source (we had filtering problems therefore we download it manually and Copy it :) )>
 RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
         wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
         tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
@@ -82,7 +83,7 @@ RUN cd Micro-XRCE-DDS-Agent &&\
 	make -j $12 && make install && sudo ldconfig /usr/local/lib/ &&\
 	cd / 
 
-# Install micro_rtps_agent
+# Install micro_rtps_agent for PX4 V1.13 only
 
 ### Install Foonathan_memory
 # RUN git clone https://github.com/eProsima/foonathan_memory_vendor.git &&\
