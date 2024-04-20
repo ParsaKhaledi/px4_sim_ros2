@@ -113,7 +113,7 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 # 	make -j$(nproc --all) && \
 # 	make install
 	
-RUN pip3 install -U empy pyros-genmsg setuptools
+RUN pip3 install -U pyros-genmsg setuptools
 RUN rm -rf /var/lib/apt/lists/* 
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
@@ -121,6 +121,7 @@ RUN mkdir -p /ws_px4_ros2/src
 RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
 RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
 # RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
+RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/ && colcon build
 # RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
 # Tumux conf
