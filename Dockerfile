@@ -11,6 +11,10 @@ ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 WORKDIR /px4_sim_ros2
 
+COPY ./Params /px4_sim_ros2/
+COPY ./startFiles /px4_sim_ros2/
+COPY ./microxrce_offboard.py /px4_sim_ros2/
+
 RUN apt-get clean
 RUN apt update && apt -y upgrade
 RUN apt install -y --no-install-recommends \
@@ -48,10 +52,10 @@ RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.ke
         apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete
 
 # Install Gazebo and some Reqs
-RUN curl -sSL http://get.gazebosim.org | sh
-# RUN sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
-# RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
-# RUN apt update && apt install -y gazebo libgazebo-dev
+# RUN curl -sSL http://get.gazebosim.org | sh
+RUN sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
+RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
+RUN apt update && apt install -y gazebo libgazebo-dev
 
 RUN rosdep init && rosdep update
 RUN apt install -y --no-install-recommends \
