@@ -6,13 +6,43 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  Registery: docker.io
+  ImageName: alienkh/px4_sim
+  ImageTag: 1.${{ github.run_number }}
+
 jobs:
 
-  build:
+  build_and_push_docker_image:
 
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - name: setup Docker buildx
+        uses: docker/setuo-buildx-action@v1
+
+      - name: Login to DockerHub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          registery: ${{ env.Registery }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v1
+        with:
+          images: ${{ env.Registery }}/${{ env.ImageName }}
+
+      - name: Build and Push docker image
+        id: build-and-push
+        uses: docker/build-push-action@v2
+        with:
+          push:   ${{ github.event_name != 'pull_request' }}
+          tags:   ${{ env.Registery }}/${{ env.ImageName }}:${{ env.ImageTag }}
+          labels: ${{ steps.meta.outputs.labels }}
