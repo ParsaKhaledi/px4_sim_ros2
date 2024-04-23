@@ -118,13 +118,13 @@ RUN pip3 install -U pyros-genmsg setuptools
 
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
-RUN mkdir -p $WORKDIR/src
-RUN cd $WORKDIR/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
-RUN cd $WORKDIR/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
-RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd $WORKDIR && colcon build
+RUN mkdir -p /ws_px4/src
+RUN cd /ws_px4/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
+RUN cd /ws_px4/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
+RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4 && colcon build
 
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
-RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
+# RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
 
 # RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
