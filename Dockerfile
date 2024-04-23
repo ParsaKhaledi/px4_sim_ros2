@@ -11,10 +11,6 @@ ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 WORKDIR /px4_sim_ros2
 
-COPY ./Params /px4_sim_ros2/
-COPY ./startFiles /px4_sim_ros2/
-COPY ./microxrce_offboard.py /px4_sim_ros2/
-
 RUN apt-get clean
 RUN apt update && apt -y upgrade
 RUN apt install -y --no-install-recommends \
@@ -25,7 +21,7 @@ RUN apt install -y --no-install-recommends \
 	xauth xorg openbox python3-argcomplete python3 python3-pip
 RUN	add-apt-repository -y universe && apt update
 
-# <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
+# # <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
 # COPY ./NICE-GPG-KEY /
 # COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
 # RUN cd /
@@ -35,7 +31,8 @@ RUN	add-apt-repository -y universe && apt update
 #         apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
 # RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
 
-# # <Directly Get source (we had filtering problems therefore we download it manually and Copy it :) )>
+
+# < Directly Get source >
 RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
         wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
         tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
@@ -51,7 +48,7 @@ RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.ke
         apt update &&\
         apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete
 
-# Install Gazebo and some Reqs
+### Install Gazebo and some Reqs
 # RUN curl -sSL http://get.gazebosim.org | sh
 RUN sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
 RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
@@ -87,21 +84,21 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 	make -j $12 && make install && sudo ldconfig /usr/local/lib/ &&\
 	cd / 
 
-# Install micro_rtps_agent for PX4 V1.13 only
+# ### Install micro_rtps_agent for PX4 V1.13 only
 
-### Install Foonathan_memory
+# ## Install Foonathan_memory
 # RUN git clone https://github.com/eProsima/foonathan_memory_vendor.git &&\
 # 	cd foonathan_memory_vendor &&\
 # 	mkdir build && cd build  &&\
 # 	cmake ..  &&\
 # 	cmake --build . --target install
 
-### Install Gradle
+# ## Install Gradle
 # RUN curl -s "https://get.sdkman.io" | bash &&\
 # 	source "$HOME/.sdkman/bin/sdkman-init.sh" &&\
 # 	sdk install gradle 6.3
 
-# ### Install FAST-RTPS
+# ## Install FAST-RTPS
 # RUN git clone --recursive https://github.com/eProsima/Fast-RTPS.git -b 1.8.x &&\
 # 	cd Fast-RTPS && mkdir build && cd build && cmake -DTHIRDPARTY=ON -DSECURITY=ON .. &&\
 # 	make && make install
@@ -109,7 +106,7 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 # RUN git clone --recursive https://github.com/eProsima/Fast-RTPS-Gen.git -b v1.0.4 /Fast-RTPS-Gen 
 # RUN source "$HOME/.sdkman/bin/sdkman-init.sh" && cd /Fast-RTPS-Gen && gradle assemble && gradle install
 
-### Install FAST-DDS
+# ## Install FAST-DDS
 # RUN git clone --recursive https://github.com/eProsima/Fast-DDS.git -b v2.0.2 ~/FastDDS-2.0.2 && \
 # 	cd ~/FastDDS-2.0.2 && \
 # 	mkdir build && cd build && \
@@ -118,22 +115,28 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 # 	make install
 	
 RUN pip3 install -U pyros-genmsg setuptools
-RUN rm -rf /var/lib/apt/lists/* 
+
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
-RUN mkdir -p /ws_px4_ros2/src
-RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
-RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
-# RUN cd /ws_px4_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
-RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/ && colcon build
+RUN mkdir -p $WORKDIR/src
+RUN cd $WORKDIR/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
+RUN cd $WORKDIR/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
+RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd $WORKDIR && colcon build
+
+# RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
+RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
+
 # RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
-# Tumux conf
+### Tumux conf
 RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 	ln -s -f .tmux/.tmux.conf &&\
 	cp .tmux/.tmux.conf.local . &&\
 	echo "set -g mouse on" >> ~/.tmux.conf 
 
-## Write in ~/.bashrc
+### Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 RUN echo "source /ws_px4_ros2/install/setup.bash" >> ~/.bashrc
+
+### Finilize
+RUN rm -rf /var/lib/apt/lists/* 
