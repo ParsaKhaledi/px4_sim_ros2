@@ -1,9 +1,10 @@
 # px4_sim_ros2
 
 This repository holds the [PX4](http://px4.io) flight control solution for drones, with the main applications located in the [src/modules](https://github.com/PX4/PX4-Autopilot/tree/main/src/modules) directory. It also contains the PX4 Drone Middleware Platform, which provides drivers and middleware to run drones.
+This repo Contains a ci platform for simulating px4 drones with gazebo with docker image and container with nvidia graphic card capabilites. There are some startFiles which can initiate different tools and Parameters for running simulation with different tools. Base on discribtion below you can add camera for image prossecing purposes.
 
 # Add models and worlds
-PX4-Autopilot has changed so that iris drone can have stereo cameras and depth camera with ros2 compatible plugins. Also, apt world was added to this repo to be able to fly inside a house for mapping and exploration purposes.
+PX4-Autopilot has changed so that iris drone can have stereo cameras and depth camera with ros2 compatible plugins. Also, apt world was added to this repo to be able to fly inside a house for mapping and exploration purposes. Beside in startFiles directory, you can use gazebo_modification.sh to modify worlds and models.
 ## Adding your own model
 For adding your own model, you have to go to these 3 locations and add your model:
  - ./Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/ (Add your model here)

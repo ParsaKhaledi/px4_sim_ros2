@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t px4_simulation_1.14:latest -f Dockerfile .
+docker build -t alienkh/px4_sim:latest -f Dockerfile .
