@@ -29,8 +29,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          # registery: ${{ env.Registery }}
-          username: ${{ secrets.DOCKER_USERNAME }}
+          registery: ${{ env.Registery }}
+          username: ${{ secrets.DOCKER_TOKEN }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       # - name: Extract Docker metadata
