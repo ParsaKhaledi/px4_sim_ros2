@@ -1,4 +1,5 @@
-FROM humble-perception-jammy
+#FROM nvidia/opengl:1.0-glvnd-runtime-ubuntu20.04
+FROM nvidia/opengl:1.0-glvnd-devel-ubuntu22.04
 
 SHELL ["/bin/bash", "-c"]
 
