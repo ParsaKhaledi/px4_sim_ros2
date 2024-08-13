@@ -33,12 +33,6 @@ jobs:
           username: ${{ secrets.DOCKER_TOKEN }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # - name: Extract Docker metadata
-      #   id: meta
-      #   uses: docker/metadata-action@v1
-      #   with:
-      #     images: ${{ env.Registery }}/${{ env.ImageName }}
-
       - name: Build and Push docker image
         id: build-and-push
         uses: docker/build-push-action@v2
