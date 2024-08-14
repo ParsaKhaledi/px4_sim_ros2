@@ -13,7 +13,7 @@ RUN apt-get clean
 RUN apt update && apt -y upgrade
 RUN apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
-	ros-dev-tools \
+	ros-dev-tools sudo \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
