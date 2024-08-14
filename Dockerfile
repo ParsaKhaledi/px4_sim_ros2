@@ -10,14 +10,14 @@ ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 WORKDIR /px4_sim_ros2
 
 RUN apt-get clean
-RUN apt update && apt -y upgrade
-RUN apt install -y --no-install-recommends \
+RUN apt update && apt -y upgrade && \
+	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	ros-dev-tools sudo \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \ 
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update && apt install -y --no-install-recommends \
 	gz-harmonic ros-${ROS_DISTRO}-ros-gz
