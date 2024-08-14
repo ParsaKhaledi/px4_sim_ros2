@@ -29,7 +29,7 @@ RUN rosdep update
 
 ## PX4 Stuff
 RUN cd / && wget -O PX4-Autopilot.zip  https://github.com/PX4/PX4-Autopilot/archive/refs/tags/v1.14.3.zip && \
-	unzip PX4-Autopilot.zip && rm -f ./PX4-Autopilot.zip && \
+	unzip PX4-Autopilot.zip &&  rm -f ./PX4-Autopilot.zip && mv PX4-Autopilot-1.14.3 PX4-Autopilot\
 	./PX4-Autopilot/Tools/setup/ubuntu.sh
 
 
