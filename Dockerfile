@@ -19,7 +19,8 @@ RUN apt install -y --no-install-recommends \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
-	apt update && apt install gz-harmonic ros-${ROS_DISTRO}-ros-gz
+	apt update && apt install -y --no-install-recommends \
+	gz-harmonic ros-${ROS_DISTRO}-ros-gz
 
 RUN rosdep init && rosdep update
 
