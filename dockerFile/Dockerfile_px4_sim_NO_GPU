@@ -16,7 +16,7 @@ RUN apt update && apt -y upgrade && \
 	ros-dev-tools sudo \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
-	gcc-arm-none-eabi && \
+	gcc-arm-none-eabi apt-utils  && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
