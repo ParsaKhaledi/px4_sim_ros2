@@ -14,7 +14,7 @@ RUN apt-get clean
 RUN apt update && apt -y upgrade && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
-	ros-dev-tools sudo \
+	sudo \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
 	gcc-arm-none-eabi apt-utils 
@@ -41,7 +41,7 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update && apt install -y \
-	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic
+	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 
 
 ## PX4 Stuff
 RUN cd / && wget -O PX4-Autopilot.zip  https://github.com/PX4/PX4-Autopilot/archive/refs/tags/v1.14.3.zip && \
