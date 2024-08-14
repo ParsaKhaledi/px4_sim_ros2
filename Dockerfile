@@ -1,11 +1,10 @@
-FROM humble-perception-jammy
+FROM ros:humble-perception-jammy
 
 SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
-# ENV ROS_DISTRO=foxy
 ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 WORKDIR /px4_sim_ros2
@@ -14,52 +13,17 @@ RUN apt-get clean
 RUN apt update && apt -y upgrade
 RUN apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
-	software-properties-common cmake libgoogle-glog-dev \
-	libatlas-base-dev libsuitesparse-dev python3-future \
-	ca-certificates devilspie gnupg2 mesa-utils lsb-release \
-	xauth xorg openbox python3-argcomplete python3 python3-pip
-RUN	add-apt-repository -y universe && apt update
-
-# # <Manually Get Source (we had filtering problems therefore we download it manually and Copy it :) )>
-# COPY ./NICE-GPG-KEY /
-# COPY ./nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz /
-# RUN cd /
-# RUN gpg --import NICE-GPG-KEY
-# RUN tar xzf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz && \
-#         cd nice-dcv-2023.0-15487-ubuntu2204-x86_64 && \
-#         apt install ./nice-dcv-web-viewer_2023.0.15487-1_amd64.ubuntu2204.deb
-# RUN rm -rf nice-dcv-2023.0-15487-ubuntu2204-x86_64.tgz nice-dcv-2023.0-15487-ubuntu2204-x86_64
-
-
-# < Directly Get source >
-RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
-        wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
-        tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
-		cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
-		apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb
-
-## INSTALL ROS2
-RUN apt update && apt -y install locales && \
-        locale-gen en_US en_US.UTF-8 && \
-        update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
-        apt update &&\
-        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools python3-argcomplete
-
-### Install Gazebo and some Reqs
-# RUN curl -sSL http://get.gazebosim.org | sh
-RUN sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
-RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
-RUN apt update && apt install -y gazebo libgazebo-dev
+	ros-dev-tools \
+	gnupg2 lsb-release \
+	xauth xorg openbox python3-argcomplete python3 python3-pip && \
+	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \ 
+	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
+	apt update && apt install gz-gardenbgazebo-dev ros-${ROS_DISTRO}-ros-gzgarden
 
 RUN rosdep init && rosdep update
-RUN apt install -y --no-install-recommends \
-	ros-$ROS_DISTRO-gazebo-dev ros-$ROS_DISTRO-gazebo-plugins ros-$ROS_DISTRO-gazebo-plugins-dbgsym \
-	ros-$ROS_DISTRO-gazebo-ros ros-$ROS_DISTRO-gazebo-ros-dbgsym ros-$ROS_DISTRO-gazebo-ros-pkgs \
-	ros-$ROS_DISTRO-gazebo-ros2-control ros-$ROS_DISTRO-gazebo-ros2-control-dbgsym \
-	ros-$ROS_DISTRO-gazebo-ros2-control-demos ros-$ROS_DISTRO-gazebo-ros2-control-demos-dbgsym
-RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
+
+# RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
 RUN cd / && git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot
