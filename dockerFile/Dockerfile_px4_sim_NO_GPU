@@ -13,7 +13,7 @@ RUN apt-get clean
 RUN apt update && apt -y upgrade && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
-	ros-dev-tools sudo \
+	ros-dev-tools \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
 	gcc-arm-none-eabi apt-utils  && \
