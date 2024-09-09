@@ -65,7 +65,7 @@ RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p /ws_px4/src
-RUN cd /ws_px4/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git
+RUN cd /ws_px4/src && git clone --progress --verbose -b release/1.14 https://github.com/PX4/px4_msgs.git
 RUN cd /ws_px4/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
 RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4 && colcon build
 
