@@ -9,7 +9,7 @@ on:
 env:
   Registery: docker.io
   ImageName: alienkh/px4_sim
-  ImageTag: 1.14.4_${{ github.run_number }}
+  ImageTag: 1.15.0_${{ github.run_number }}
 
 jobs:
 
