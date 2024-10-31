@@ -17,7 +17,7 @@ RUN apt update && apt -y upgrade
 RUN apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	software-properties-common cmake libgoogle-glog-dev \
-	libatlas-base-dev libsuitesparse-dev python3-future \
+	libatlas-base-dev libsuitesparse-dev python3-future aptitude\
 	ca-certificates devilspie gnupg2 mesa-utils lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip
 RUN	add-apt-repository -y universe && apt update
@@ -51,16 +51,16 @@ RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.ke
 
 ### Install Gazebo and some Reqs
 # RUN curl -sSL http://get.gazebosim.org | sh
-RUN sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
-RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
-RUN apt update && apt install -y gazebo libgazebo-dev
+# RUN sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
+# RUN wget https://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
+# RUN apt update && apt install -y gazebo libgazebo-dev
 
 RUN rosdep init && rosdep update
-RUN apt install -y --no-install-recommends \
-	ros-$ROS_DISTRO-gazebo-dev ros-$ROS_DISTRO-gazebo-plugins ros-$ROS_DISTRO-gazebo-plugins-dbgsym \
-	ros-$ROS_DISTRO-gazebo-ros ros-$ROS_DISTRO-gazebo-ros-dbgsym ros-$ROS_DISTRO-gazebo-ros-pkgs \
-	ros-$ROS_DISTRO-gazebo-ros2-control ros-$ROS_DISTRO-gazebo-ros2-control-dbgsym \
-	ros-$ROS_DISTRO-gazebo-ros2-control-demos ros-$ROS_DISTRO-gazebo-ros2-control-demos-dbgsym
+# RUN apt install -y --no-install-recommends \
+# 	ros-$ROS_DISTRO-gazebo-dev ros-$ROS_DISTRO-gazebo-plugins ros-$ROS_DISTRO-gazebo-plugins-dbgsym \
+# 	ros-$ROS_DISTRO-gazebo-ros ros-$ROS_DISTRO-gazebo-ros-dbgsym ros-$ROS_DISTRO-gazebo-ros-pkgs \
+# 	ros-$ROS_DISTRO-gazebo-ros2-control ros-$ROS_DISTRO-gazebo-ros2-control-dbgsym \
+# 	ros-$ROS_DISTRO-gazebo-ros2-control-demos ros-$ROS_DISTRO-gazebo-ros2-control-demos-dbgsym
 RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
