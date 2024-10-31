@@ -64,7 +64,7 @@ RUN apt install -y --no-install-recommends \
 RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
-RUN cd / && git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot -b v1.14.4
+RUN cd / && git clone --recursive --progress --verbose https://github.com/PX4/PX4-Autopilot -b v1.15.0
 RUN cd /PX4-Autopilot &&\
 	# git checkout cea185268  &&\
 	# git submodule update --init --recursive &&\
@@ -82,7 +82,7 @@ RUN apt install -y  \
 RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 RUN cd /Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
-	make -j $12 && make install && sudo ldconfig /usr/local/lib/ &&\
+	make -j $(nproc) && make install && sudo ldconfig /usr/local/lib/ &&\
 	cd / 
 
 # ### Install micro_rtps_agent for PX4 V1.13 only
@@ -120,8 +120,8 @@ RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p $WS_PX4/src &&\
-	cd $WS_PX4/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git -b release/1.14 
-	# source /opt/ros/$ROS_DISTRO/setup.bash && cd $WS_PX4 && colcon build 
+	cd $WS_PX4/src && git clone --progress --verbose https://github.com/PX4/px4_msgs.git -b release/1.15 &&\
+	source /opt/ros/$ROS_DISTRO/setup.bash && cd $WS_PX4 && colcon build 
 
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
 # RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
