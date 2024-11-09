@@ -22,7 +22,7 @@ echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 curl -fsSL https://get.docker.com -o get-docker.sh &&
 sh get-docker.sh <<< y
 sudo groupadd docker
-sudo usermod -aG docker vagrnat
+sudo usermod -aG docker $USER
 newgrp docker
 
 
