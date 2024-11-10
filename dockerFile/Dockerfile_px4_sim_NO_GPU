@@ -31,8 +31,8 @@ RUN apt update && \
 # RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
-RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive &&\
-	cd PX4-Autopilot && ./Tools/setup/ubuntu.sh
+RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
+RUN cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh
 
 
 ## Install Nav2 and rtabmap
