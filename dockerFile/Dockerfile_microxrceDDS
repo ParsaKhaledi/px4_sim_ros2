@@ -26,7 +26,7 @@ RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
     rm -rf build
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
-RUN mkdir -p ${WORKDIR}/src && cd ${WORKDIR}/src \
+RUN mkdir -p ${WORKDIR}/src && cd ${WORKDIR}/src && \
 	git clone --progress --verbose -b release/1.15 https://github.com/PX4/px4_msgs.git && \
 	git clone --progress --verbose https://github.com/PX4/px4_ros_com.git && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
@@ -34,12 +34,12 @@ RUN mkdir -p ${WORKDIR}/src && cd ${WORKDIR}/src \
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
 # RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
 
-# RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
+# RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR}/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
 
 ### Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
-RUN echo "source /ws_px4_ros2/install/setup.bash" >> ~/.bashrc
+RUN echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* 
