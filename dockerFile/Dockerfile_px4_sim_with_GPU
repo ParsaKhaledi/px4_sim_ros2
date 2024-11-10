@@ -42,7 +42,7 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 
 
 ## PX4 Stuff
-RUN cd / && wget -O PX4-Autopilot.zip  https://github.com/PX4/PX4-ARUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive && \
+RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive && \
 	cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh
 
 ## Install Nav2 and rtabmap
