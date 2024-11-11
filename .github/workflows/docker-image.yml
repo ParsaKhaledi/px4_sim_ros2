@@ -9,7 +9,7 @@ on:
 env:
   Registery: docker.io
   ImageName: alienkh/px4_sim
-  ImageTag: 1.${{ github.run_number }}
+  ImageTag: 1.15.0_${{ github.run_number }}
 
 jobs:
 
@@ -32,6 +32,7 @@ jobs:
           # registery: ${{ env.Registery }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
 
       # - name: Extract Docker metadata
       #   id: meta
