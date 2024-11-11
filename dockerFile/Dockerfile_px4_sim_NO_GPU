@@ -7,10 +7,10 @@ ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-WORKDIR /px4_sim_ros2
+WORKDIR /ws_px4
 
 ## Install Gazebo harmonic Nav2 and rtabmap 
-RUN apt update && \
+RUN apt update 1>/dev/null	&& \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	ros-dev-tools \
@@ -20,22 +20,17 @@ RUN apt update && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
-	apt update && apt install -y \
+	apt update 1>/dev/null && apt install -y \
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic \
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
-	ros-$ROS_DISTRO-rtabmap-ros 
-
-# RUN rosdep update
+	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
 
 # RUN pip3 install --user -U pyros-genmsg jsonschema jinja2 colcon-ros kconfiglib scipy
 
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
 RUN cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh
-
-
-## Install Nav2 and rtabmap
 
 
 ## Install Micro XRCE-DDS
@@ -49,15 +44,15 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
-RUN mkdir -p /ws_px4/src
-RUN cd /ws_px4/src && git clone --progress --verbose -b release/1.15 https://github.com/PX4/px4_msgs.git
-RUN cd /ws_px4/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
-RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4 && colcon build
+RUN mkdir -p ${WORKDIR}/src
+RUN cd ${WORKDIR}/src && git clone --progress --verbose -b release/1.15 https://github.com/PX4/px4_msgs.git
+RUN cd ${WORKDIR}/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
+RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
 # RUN cd / && git clone --progress --verbose https://github.com/ParsaKhaledi/px4_sim_ros2.git
 
-# RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd /ws_px4_ros2/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
+# RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR}/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
 ### Tumux conf
 RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
@@ -67,7 +62,7 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 
 ### Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
-RUN echo "source /ws_px4/install/setup.bash" >> ~/.bashrc
+RUN echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* 
