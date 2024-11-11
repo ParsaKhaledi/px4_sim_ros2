@@ -39,15 +39,17 @@ jobs:
         with:
           # push:   ${{ github.event_name != 'pull_request' }}
           push: true
-          tags:   ${{ env.Registery }}/${{ env.ImageName }}:dev_noGPU_${{ env.ImageTag }}
+          tags: ${{ env.Registery }}/${{ env.ImageName }}:dev_noGPU_${{ env.ImageTag }}
           file: ./dockerFile/Dockerfile_px4_sim_NO_GPU
           # labels: ${{ steps.meta.outputs.labels }}
+      - name: Docker builder prune
+        run: docker builder prune -fa
       - name: Build and Push docker image with GPU
         id: build-and-push-WitGPU
         uses: docker/build-push-action@v2
         with:
           # push:   ${{ github.event_name != 'pull_request' }}
           push: true
-          tags:   ${{ env.Registery }}/${{ env.ImageName }}:dev_withGPU_${{ env.ImageTag }}
+          tags: ${{ env.Registery }}/${{ env.ImageName }}:dev_withGPU_${{ env.ImageTag }}
           file: ./dockerFile/Dockerfile_px4_sim_with_GPU
           # labels: ${{ steps.meta.outputs.labels }}
