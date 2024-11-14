@@ -7,7 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-WORKDIR /ws_px4
+ENV WORKDIR=/ws_px4
+WORKDIR ${WORKDIR}
 
 RUN apt-get clean
 RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
@@ -25,6 +26,7 @@ RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE
 		apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb 1>/dev/null
 
 ## INSTALL ROS2
+WORKDIR /ws_px4
 RUN apt update 1>/dev/null && apt -y install locales && \
         locale-gen en_US en_US.UTF-8 && \
         update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 1>/dev/null

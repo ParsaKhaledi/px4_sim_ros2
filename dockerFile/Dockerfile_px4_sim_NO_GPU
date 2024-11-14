@@ -7,7 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-WORKDIR /ws_px4
+ENV WORKDIR=/ws_px4
+WORKDIR ${WORKDIR}
 
 ## Install Gazebo harmonic Nav2 and rtabmap 
 RUN apt update 1>/dev/null	&& \
@@ -45,8 +46,8 @@ RUN cd /Micro-XRCE-DDS-Agent &&\
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ${WORKDIR}/src
-RUN cd ${WORKDIR}/src && git clone --progress --verbose -b release/1.15 https://github.com/PX4/px4_msgs.git
-RUN cd ${WORKDIR}/src && git clone --progress --verbose https://github.com/PX4/px4_ros_com.git
+RUN cd ${WORKDIR}/src && git clone -b release/1.15 https://github.com/PX4/px4_msgs.git
+RUN cd ${WORKDIR}/src && git clone https://github.com/PX4/px4_ros_com.git
 RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
