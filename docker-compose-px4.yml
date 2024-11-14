@@ -55,6 +55,28 @@ services:
     network_mode: "host"
     # networks:
     #   mins:
+    #     ipv4_address: "10.20.10.4"
+    # restart: unless-stopped
+    depends_on:
+      - PX4
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+
+    command: /bin/bash -c "
+      source /opt/ros/humble/setup.bash && rqt"
+
+  uxrcedds:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: uxrcedds
+    hostname: uxrcedds
+    tty: true
+    network_mode: "host"
+    # networks:
+    #   mins:
     #     ipv4_address: "10.20.10.5"
     # restart: unless-stopped
     depends_on:
@@ -66,7 +88,7 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
 
     command: /bin/bash -c "
-      source /opt/ros/humble/setup.bash && rqt"
+      source /opt/ros/${ROS_DISTRO}/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
 
 
