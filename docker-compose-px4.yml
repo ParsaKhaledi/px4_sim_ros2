@@ -1,0 +1,79 @@
+version: '3.6'
+
+services:
+  PX4:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: px4_sim
+    hostname: px4_sim
+    tty: true
+    privileged: true
+    network_mode: "host"
+    # networks:
+    #   px4:
+    #     ipv4_address: "10.20.10.2"
+
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+      - /dev:/dev/
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - /home/alien/docker_ws/octa:/octa/
+    command: /bin/bash -c "sleep inf"
+
+
+  # imu_filter:
+  #   image: "mins:${minsTAG:?error}"
+  #   privileged: true
+  #   # restart: unless-stopped
+  #   network_mode: "host"
+  #   # networks:
+  #   #   mins:
+  #   #     ipv4_address: "10.20.10.3"
+  #   depends_on:
+  #     # - roscore
+  #     - oak
+  #   # environment:
+  #   #   DISPLAY: ${DISPLAY}
+  #   #   "XAUTHORITY": ${XAUTH}
+  #   volumes:
+  #     # - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #     # - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #     - /dev/:/dev/
+  #   command: /bin/bash -c "
+  #     rosrun imu_filter_madgwick imu_filter_node \
+  #     _use_mag:=false _use_magnetic_field_msg:=false _publish_tf:=false _world_frame:='enu' 
+  #      /imu/data_raw:=/stereo_inertial_publisher/imu \
+  #      /imu/data:=/imu/data "
+
+  rqt:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: rqt
+    hostname: rqt
+    tty: true
+    network_mode: "host"
+    # networks:
+    #   mins:
+    #     ipv4_address: "10.20.10.5"
+    # restart: unless-stopped
+    depends_on:
+      - PX4
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+
+    command: /bin/bash -c "
+      source /opt/ros/humble/setup.bash && rqt"
+
+
+
+
+# networks:
+#   px4:
+#     ipam:
+#       driver: default
+#       config:
+#         - subnet: "10.20.10.0/24"
