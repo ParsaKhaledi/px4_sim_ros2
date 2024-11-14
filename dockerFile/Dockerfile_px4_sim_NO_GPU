@@ -8,6 +8,7 @@ ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 ENV WORKDIR=/ws_px4
+ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
 
 ## Install Gazebo harmonic Nav2 and rtabmap 
