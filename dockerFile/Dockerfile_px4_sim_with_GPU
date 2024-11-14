@@ -1,3 +1,4 @@
+ARG ROS_DISTRO=Humble
 FROM nvidia/opengl:1.0-glvnd-devel-ubuntu22.04
 
 SHELL ["/bin/bash", "-c"]
@@ -5,7 +6,6 @@ SHELL ["/bin/bash", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
-ENV ROS_DISTRO=humble
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 WORKDIR /ws_px4
 
@@ -44,7 +44,8 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh
+	cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh &&\
+	pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
 
 ## Install Nav2 and rtabmap
 RUN apt install -y  \
@@ -58,9 +59,6 @@ RUN cd / && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
 	mkdir build && cd build && cmake .. &&\
 	make && make install && sudo ldconfig /usr/local/lib/ &&\
 	cd / && rm -rf /Micro-XRCE-DDS-Agent/build
-	
-# RUN pip3 install -U pyros-genmsg setuptools
-
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ${WORKDIR}/src
