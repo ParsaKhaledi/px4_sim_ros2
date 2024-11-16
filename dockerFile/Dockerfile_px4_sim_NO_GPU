@@ -28,7 +28,7 @@ RUN apt update 1>/dev/null	&& \
 	ros-$ROS_DISTRO-nav2-bringup \
 	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
 
-RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
+# RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
 
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
