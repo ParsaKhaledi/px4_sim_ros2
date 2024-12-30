@@ -19,8 +19,31 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - /dev:/dev/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - /home/alien/docker_ws/octa:/octa/
+      - /home/phf/ws_docker/ws_px4/px4_sim_ros2/volume:/volume/
     command: /bin/bash -c "sleep inf"
+    # command: /bin/bash -c "
+      # cd /PX4-Autopilot && make px4_sitl gz_x500_depth |
+      # ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image[ignition.msgs.Image"
+  # GZ_Bridge:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: gz_bridge
+  #   hostname: gz_bridge
+  #   tty: true
+  #   privileged: true
+  #   network_mode: "host"
+  #   # networks:
+  #   #   px4:
+  #   #     ipv4_address: "10.20.10.2"
+
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #     "XAUTHORITY": ${XAUTH}
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #     - /dev:/dev/
+  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #     - /home/phf/ws_docker/ws_px4/px4_sim_ros2/volume:/volume/
+  #   command: /bin/bash -c "sleep inf"
 
 
   # imu_filter:
@@ -67,7 +90,7 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
 
     command: /bin/bash -c "
-      source /opt/ros/humble/setup.bash && rqt"
+      source /ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -88,7 +111,7 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
 
     command: /bin/bash -c "
-      source /opt/ros/${ROS_DISTRO}/setup.bash && MicroXRCEAgent udp4 -p 8888"
+      source /ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
 
 
