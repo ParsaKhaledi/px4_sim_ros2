@@ -12,7 +12,7 @@ ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
 
 ## Install Gazebo harmonic Nav2 and rtabmap 
-RUN apt update 1>/dev/null	&& apt upgrade 1>/dev/null && \
+RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	ros-dev-tools \
