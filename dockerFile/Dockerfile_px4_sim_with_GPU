@@ -52,6 +52,7 @@ RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recu
 
 ## Install Nav2 and rtabmap
 RUN apt install -y  \
+	ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
 	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
@@ -78,8 +79,9 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 	echo "set -g mouse on" >> ~/.tmux.conf 
 
 ### Write in ~/.bashrc
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
-RUN echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
+	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc && \
+	export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* 
