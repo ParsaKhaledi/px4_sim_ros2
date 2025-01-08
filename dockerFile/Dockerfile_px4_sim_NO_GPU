@@ -12,7 +12,7 @@ ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
 
 ## Install Gazebo harmonic Nav2 and rtabmap 
-RUN apt update 1>/dev/null	&& \
+RUN apt update 1>/dev/null	&& apt upgrade 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	ros-dev-tools \
@@ -24,6 +24,7 @@ RUN apt update 1>/dev/null	&& \
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update 1>/dev/null && apt install -y \
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic \
+	ros-$ROS_DISTRO-rmw-cyclonedds-cpp\
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
 	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
@@ -63,8 +64,9 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 	echo "set -g mouse on" >> ~/.tmux.conf 
 
 ### Write in ~/.bashrc
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
-RUN echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
+	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc &&\
+	export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* 
