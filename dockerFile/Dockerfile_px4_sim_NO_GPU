@@ -65,8 +65,8 @@ RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
 
 ### Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
-	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc &&\
-	export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc 
+	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* 
