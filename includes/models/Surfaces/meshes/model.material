@@ -1,0 +1,208 @@
+material floor_1_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wood1.png
+			}
+		}
+	}
+}
+material floor_2_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_carpet.png
+			}
+		}
+	}
+}
+material floor_3_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_carpet.png
+			}
+		}
+	}
+}
+material floor_4_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture black_concrete.png
+			}
+		}
+	}
+}
+material floor_5_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_tiles.png
+			}
+		}
+	}
+}
+material floor_6_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_tiles.png
+			}
+		}
+	}
+}
+material floor_7_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_tiles.png
+			}
+		}
+	}
+}
+material floor_8_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_carpet.png
+			}
+		}
+	}
+}
+material floor_9_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wood1.png
+			}
+		}
+	}
+}
+material floor_10_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_carpet.png
+			}
+		}
+	}
+}
+material floor_11_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wood1.png
+			}
+		}
+	}
+}
+material floor_12_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_carpet.png
+			}
+		}
+	}
+}
+material floor_13_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_tiles.png
+			}
+		}
+	}
+}
+material floor_14_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture black_concrete.png
+			}
+		}
+	}
+}
+material wall_1_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture white_wall.png
+			}
+		}
+	}
+}
+material wall_2_Diffuse
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wood2.png
+			}
+		}
+	}
+}
