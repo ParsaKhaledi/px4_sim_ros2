@@ -22,7 +22,7 @@ services:
       - /home/phf/ws_docker/ws_px4/px4_sim_ros2/volume:/volume/
     command: /bin/bash -c "sleep inf"
     # command: /bin/bash -c "
-      # cd /PX4-Autopilot && make px4_sitl gz_x500_depth |
+      # cd /PX4-Autopilot && PX4_GZ_WORLD=husarion_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth |
       # ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image[ignition.msgs.Image /depth_camera@sensor_msgs/msg/Image[ignition.msgs.Image"
 
   # imu_filter:
