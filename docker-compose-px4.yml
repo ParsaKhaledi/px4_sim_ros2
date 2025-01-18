@@ -22,7 +22,7 @@ services:
       - /home/phf/ws_docker/ws_px4/px4_sim_ros2/volume:/volume/
     command: /bin/bash -c "sleep inf"
     # command: /bin/bash -c "
-      # cd /PX4-Autopilot && PX4_GZ_WORLD=husarion_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth |
+      # cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth |
       # ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image[ignition.msgs.Image /depth_camera@sensor_msgs/msg/Image[ignition.msgs.Image"
 
   # imu_filter:
@@ -49,27 +49,27 @@ services:
   #      /imu/data_raw:=/stereo_inertial_publisher/imu \
   #      /imu/data:=/imu/data "
 
-  rqt:
-    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-    container_name: rqt
-    hostname: rqt
-    tty: true
-    network_mode: "host"
-    # networks:
-    #   px4:
-    #     ipv4_address: "10.20.10.3"
-    # restart: unless-stopped
-    depends_on:
-      - PX4
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
+  # rqt:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: rqt
+  #   hostname: rqt
+  #   tty: true
+  #   network_mode: "host"
+  #   # networks:
+  #   #   px4:
+  #   #     ipv4_address: "10.20.10.3"
+  #   # restart: unless-stopped
+  #   depends_on:
+  #     - PX4
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #     "XAUTHORITY": ${XAUTH}
 
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
 
-    command: /bin/bash -c "
-      source /ws_px4/install/setup.bash && rqt"
+  #   command: /bin/bash -c "
+  #     source /ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
