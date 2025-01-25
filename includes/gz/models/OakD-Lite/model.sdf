@@ -35,7 +35,7 @@
         </geometry>
       </collision>
       <sensor name="IMX214" type="camera">
-        <pose>0.01233 -0.03 .01878 0 0 0</pose>
+        <pose>0.01233 -0.03 .01878 0 0.3 0</pose>
         <camera>
           <horizontal_fov>1.204</horizontal_fov>
           <image>
@@ -46,14 +46,16 @@
             <near>0.1</near>
             <far>100</far>
           </clip>
+          <camera_info_topic>camera/rgb/camera_info</camera_info_topic>
         </camera>
         <always_on>1</always_on>
         <update_rate>30</update_rate>
         <visualize>true</visualize>
-        <topic>camera</topic>
+        <topic>camera/rgb/image_raw</topic>
+        <gz_frame_id>camera_rgb_frame</gz_frame_id>
       </sensor>
-      <sensor name="stereo" type="camera">
-        <pose>0.115 -0.05 0.013 0 0.3 0</pose>
+      <sensor name="stereo_right" type="camera">
+        <pose>0.1233 -0.05 0.013 0 0.3 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>
@@ -68,16 +70,17 @@
             <near>0.02</near>
             <far>300</far>
           </clip>
+          <camera_info_topic>camera/stereo/right/camera_info</camera_info_topic>          
           <noise>
             <type>gaussian</type>
             <mean>0.0</mean>
             <stddev>0.00</stddev>
           </noise>
         </camera>
-        <topic>right_camera</topic>
+        <topic>camera/stereo/right/image_raw</topic>
       </sensor>
-      <sensor name="stereo" type="camera">
-        <pose>0.115 0.05 0.013 0 0.3 0</pose>
+      <sensor name="stereo_left" type="camera">
+        <pose>0.1233 0.05 0.013 0 0.3 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>
@@ -97,11 +100,12 @@
             <mean>0.0</mean>
             <stddev>0.0</stddev>
           </noise>
+          <camera_info_topic>camera/stereo/left/camera_info</camera_info_topic>          
         </camera>
-        <topic>left_camera</topic>
+        <topic>camera/stereo/left/image_raw</topic>
       </sensor>
       <sensor name="StereoOV7251" type="depth_camera">
-        <pose>0.01233 -0.03 .01878 0 0 0</pose>
+        <pose>0.01233 -0.03 .01878 0 0.3 0</pose>
         <camera>
           <horizontal_fov>1.274</horizontal_fov>
           <image>
@@ -117,7 +121,7 @@
         <always_on>1</always_on>
         <update_rate>30</update_rate>
         <visualize>true</visualize>
-        <topic>depth_camera</topic>
+        <topic>camera/depth/image_raw</topic>
       </sensor>
       <gravity>true</gravity>
       <velocity_decay/>
