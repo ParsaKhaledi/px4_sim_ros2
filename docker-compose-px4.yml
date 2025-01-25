@@ -19,11 +19,11 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - /dev:/dev/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - /home/phf/ws_docker/ws_px4/px4_sim_ros2/volume:/volume/
+      - ./includes:/volume/includes/
     command: /bin/bash -c "sleep inf"
     # command: /bin/bash -c "
       # cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth |
-      # ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image[ignition.msgs.Image /depth_camera@sensor_msgs/msg/Image[ignition.msgs.Image"
+      # ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/volume/includes/gz/config_gz_bridge"
 
   # imu_filter:
   #   image: "mins:${minsTAG:?error}"
