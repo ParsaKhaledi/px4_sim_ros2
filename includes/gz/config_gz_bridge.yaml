@@ -1,0 +1,51 @@
+# RGB Camera
+- ros_topic_name: "/camera/rgb/image_raw"
+  # topic_name:     "chatter" # Apply topic to both
+  gz_topic_name:  "/camera/rgb/image_raw"
+  ros_type_name:  "sensor_msgs/msg/Image"
+  gz_type_name:   "ignition.msgs.Image"
+  # subscriber_queue: 5       # Default 10
+  # publisher_queue: 6        # Default 10
+  # lazy: true                # Default "false"
+  direction:      "GZ_TO_ROS" # Default "BIDIRECTIONAL" - Bridge both directions
+                              # "GZ_TO_ROS" - Bridge Gz topic to ROS
+                              # "ROS_TO_GZ" - Bridge ROS topic to Gz
+- ros_topic_name: "/camera/rgb/camera_info"
+  gz_topic_name:  "/camera/rgb/camera_info"
+  ros_type_name:  "sensor_msgs/msg/CameraInfo"
+  gz_type_name:   "gz.msgs.CameraInfo"
+  direction:      "GZ_TO_ROS"
+
+
+# Depth Camera
+- ros_topic_name: "/camera/depth/image_raw"
+  gz_topic_name:  "/camera/depth/image_raw"
+  ros_type_name:  "sensor_msgs/msg/Image"
+  gz_type_name:   "ignition.msgs.Image"
+  direction:      "GZ_TO_ROS"
+
+# Stereo Cameras
+- ros_topic_name: "/camera/stereo/right/image_raw"
+  gz_topic_name:  "/camera/stereo/right/image_raw"
+  ros_type_name:  "sensor_msgs/msg/Image"
+  gz_type_name:   "ignition.msgs.Image"
+  direction:      "GZ_TO_ROS"
+
+- ros_topic_name: "/camera/stereo/right/camera_info"
+  gz_topic_name:  "/camera/stereo/right/camera_info"
+  ros_type_name:  "sensor_msgs/msg/CameraInfo"
+  gz_type_name:   "gz.msgs.CameraInfo"
+  direction:      "GZ_TO_ROS"
+
+
+- ros_topic_name: "/camera/stereo/left/image_raw"
+  gz_topic_name:  "/camera/stereo/left/image_raw"
+  ros_type_name:  "sensor_msgs/msg/Image"
+  gz_type_name:   "ignition.msgs.Image"
+  direction:      "GZ_TO_ROS"
+
+- ros_topic_name: "/camera/stereo/left/camera_info"
+  gz_topic_name:  "/camera/stereo/left/camera_info"
+  ros_type_name:  "sensor_msgs/msg/CameraInfo"
+  gz_type_name:   "gz.msgs.CameraInfo"
+  direction:      "GZ_TO_ROS"
