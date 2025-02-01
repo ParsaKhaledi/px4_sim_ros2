@@ -27,3 +27,15 @@ For adding your own world, you have to go to these locations and add your world:
 Discribtion will be added here soon ...
 In include folder there is a file named replacments.bash which you can check it and volume mounted in docker-compose file to see where to copy include folder and run the very script to add word to px4.
 
+Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/replacments_gz.bash to add some worlds and stereo camera to x500 model.
+
+For running simulation : 
+```
+cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth
+```
+For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command:
+```
+ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/volume/includes/gz/config_gz_bridge.yaml
+```
+## ROS_GZ
+in [ros_gz](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_bridge) messeage types can be found plus some examples to check connection between GZ and ROS2. How to write yaml for bridge is also writen. [Husarion](https://github.com/husarion/husarion_gz_worlds) is a good repo for more gz worlds. For Migration from Gazebo-classic [this link](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/) can be beneficial. Documentation of PX4 for gz simulation can be found [here](https://docs.px4.io/main/en/sim_gazebo_gz/#specify-world).
