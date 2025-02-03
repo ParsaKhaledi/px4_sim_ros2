@@ -3,6 +3,10 @@ FROM ros:${ROS_DISTRO}-ros-base-jammy
 
 SHELL ["/bin/bash", "-c"]
 
+# ARG USER_NAME=ardupilot
+# ARG USER_UID=1000
+# ARG USER_GID=1000
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
@@ -30,6 +34,17 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
 
 # RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
+
+# # Set User	
+# RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+#     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
+# 	echo "ardupilot ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
+# 	mkdir -p /ardupilot && \
+# 	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} &&\
+# 	usermod -a -G dialout ${USER_NAME}
+
+# # Change user
+# USER ${USER_NAME}
 
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
