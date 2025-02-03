@@ -22,7 +22,8 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	ros-dev-tools \
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
-	gcc-arm-none-eabi apt-utils  && \
+	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
+	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev  && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
@@ -45,6 +46,12 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 
 # # Change user
 # USER ${USER_NAME}
+
+# Install Qground
+RUN usermod -a -G dialout $USER && apt remove modemmanager -y &&\
+	cd / && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	chmod +x ./QGroundControl.AppImage
+
 
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
@@ -84,4 +91,4 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
-RUN rm -rf /var/lib/apt/lists/* 
+RUN sudo apt autoremove -y && rm -rf /var/lib/apt/lists/* 
