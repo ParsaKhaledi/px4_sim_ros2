@@ -34,6 +34,24 @@
           </box>
         </geometry>
       </collision>
+      <!-- IMU Sensor -->
+      <sensor name="IMU" type="imu">
+        <pose>0.01233 -0.03 .014 0 0 0</pose>
+        <imu>
+          <topic>imu/data</topic>
+          <orientation>
+            <covariance>0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</covariance>
+          </orientation>
+          <angular_velocity>
+            <covariance>0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</covariance>
+          </angular_velocity>
+          <linear_acceleration>
+            <covariance>0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</covariance>
+          </linear_acceleration>
+        </imu>
+        <always_on>true</always_on>
+        <update_rate>50</update_rate>
+      </sensor>
       <sensor name="IMX214" type="camera">
         <pose>0.01233 -0.03 .01878 0 0.3 0</pose>
         <camera>
