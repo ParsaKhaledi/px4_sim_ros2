@@ -16,6 +16,8 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	gnupg2 lsb-release \
+	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
+	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
 	gcc-arm-none-eabi apt-utils 1>/dev/null
 
@@ -43,6 +45,11 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update && apt install -y \
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 1>/dev/null
+
+# Install Qground
+RUN usermod -a -G dialout $USER && apt remove modemmanager -y &&\
+	cd / && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	chmod +x ./QGroundControl.AppImage
 
 ## PX4 Stuff
 RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive \
