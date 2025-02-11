@@ -6,18 +6,18 @@ while true; do
     if [ "$input" -eq 1 ]; then
         rm -rf /PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
               /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
-        cp -r /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
-        cp -r /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
-        cp -r /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
+        cp -rv /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
+        cp -rv /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
+        cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
         mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-stereo /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
         echo "Replacments with stereo camera is done"
         break
     elif [ "$input" -eq 2 ]; then
         rm -rf /PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
               /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
-        cp -r /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
-        cp -r /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
-        cp -r /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
+        cp -rv /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
+        cp -rv /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
+        cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
         mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-rgbd /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
         echo "Replacments with rgbd camera is done"
         break
