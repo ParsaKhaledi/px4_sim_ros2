@@ -3,7 +3,7 @@
   <link name="base_link">
     <!-- Base link parameters can be added here -->
   </link>
-  
+
   <!-- OakD-Lite camera module -->
   <link name="oakd_lite_base_link">
     <inertial>
