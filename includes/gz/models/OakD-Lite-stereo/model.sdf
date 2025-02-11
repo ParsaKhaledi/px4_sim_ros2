@@ -57,8 +57,8 @@
         <camera>
           <horizontal_fov>1.204</horizontal_fov>
           <image>
-            <width>1920</width>
-            <height>1080</height>
+            <width>640</width>
+            <height>480</height>
           </image>
           <clip>
             <near>0.1</near>
@@ -72,7 +72,7 @@
         <topic>camera/rgb/image_raw</topic>
         <gz_frame_id>camera_rgb_frame</gz_frame_id>
       </sensor>
-      <sensor name="stereo_right" type="camera">
+      <!-- <sensor name="stereo_right" type="camera">
         <pose>0.1233 -0.05 0.013 0 0.3 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
@@ -121,7 +121,7 @@
           <camera_info_topic>camera/stereo/left/camera_info</camera_info_topic>          
         </camera>
         <topic>camera/stereo/left/image_raw</topic>
-      </sensor>
+      </sensor> -->
       <sensor name="StereoOV7251" type="depth_camera">
         <pose>0.01233 -0.03 .01878 0 0.3 0</pose>
         <camera>
