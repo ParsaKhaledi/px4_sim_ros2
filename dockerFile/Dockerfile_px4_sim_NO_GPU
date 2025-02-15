@@ -48,7 +48,7 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 # USER ${USER_NAME}
 
 # Install Qground
-RUN usermod -a -G dialout $USER && apt remove modemmanager -y &&\
+RUN echo USER=root && usermod -a -G dialout $USER && apt remove modemmanager -y &&\
 	cd / && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage
 
