@@ -7,6 +7,7 @@ SHELL ["/bin/bash", "-c"]
 # ARG USER_UID=1000
 # ARG USER_GID=1000
 
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
