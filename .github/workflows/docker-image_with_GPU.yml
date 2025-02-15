@@ -2,9 +2,9 @@ name: Docker Image with GPU CI
 
 on:
   push:
-    paths:
-      - 'dockerFile/Dockerfile_px4_sim_with_GPU'
-    # branches: [ "docker" ]
+    # paths:
+    #   - 'dockerFile/Dockerfile_px4_sim_with_GPU'
+    branches: [ "docker" ]
   # pull_request:
   #   branches: [ "main" ]
 
