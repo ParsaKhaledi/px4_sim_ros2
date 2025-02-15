@@ -53,7 +53,7 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 1>/dev/null
 
 # Install Qground
-RUN usermod -a -G dialout $USER && apt remove modemmanager -y &&\
+RUN usermod -a -G dialout root && apt remove modemmanager -y &&\
 	cd / && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage
 
