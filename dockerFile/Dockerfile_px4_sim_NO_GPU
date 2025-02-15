@@ -54,8 +54,9 @@ RUN usermod -a -G dialout $USER && apt remove modemmanager -y &&\
 
 
 ## PX4 Stuff
-RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive
-RUN cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh
+RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive \
+	--progress --verbose 1>/dev/null && \
+	cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh 
 
 
 ## Install Micro XRCE-DDS
@@ -91,4 +92,5 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
-RUN sudo apt autoremove -y && rm -rf /var/lib/apt/lists/* 
+RUN rm -rf /var/lib/apt/lists/* &&\
+	sudo apt autoremove -y && rm -rf /var/lib/apt/lists/* 

@@ -1,14 +1,18 @@
-ARG ROS_DISTRO=Humble
+ARG ROS_DISTRO=humble
 FROM nvidia/opengl:1.0-glvnd-devel-ubuntu22.04
 
 SHELL ["/bin/bash", "-c"]
+
+# ARG USER_NAME=ardupilot
+# ARG USER_UID=1000
+# ARG USER_GID=1000
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-ENV ROS_DISTRO=humble
 ENV WORKDIR=/ws_px4
+ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
 
 RUN apt-get clean
@@ -19,7 +23,7 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
-	gcc-arm-none-eabi apt-utils 1>/dev/null
+	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl 1>/dev/null
 
 # < Directly Get source >
 RUN wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
@@ -91,4 +95,5 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
-RUN rm -rf /var/lib/apt/lists/* 
+RUN rm -rf /var/lib/apt/lists/* &&\
+	sudo apt autoremove -y && rm -rf /var/lib/apt/lists/* 
