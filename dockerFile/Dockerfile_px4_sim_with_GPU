@@ -98,4 +98,4 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* &&\
-	sudo apt autoremove -y && rm -rf /var/lib/apt/lists/* 
+	sudo apt autoremove -y && rm -rf /var/lib/apt/lists/*
