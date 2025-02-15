@@ -16,13 +16,13 @@ env:
 
 jobs:
   build_and_push_docker_image_gpu:
-    if: contains(github.event.head_commit.message, 'dockerFile/Dockerfile_px4_sim_with_GPU')
     runs-on: ubuntu-latest
+    if: "contains(github.event.commits*.added + github.event.commits*.modified, 'dockerFile/Dockerfile_px4_sim_with_GPU')"
     permissions:
       contents: read
       packages: write
       id-token: write
-      
+
     steps:
       - name: setup Docker buildx
         uses: docker/setup-buildx-action@v3
@@ -44,13 +44,13 @@ jobs:
           file: ./dockerFile/Dockerfile_px4_sim_with_GPU
 
   build_and_push_docker_image_no_gpu:
-    if: contains(github.event.head_commit.message, 'dockerFile/Dockerfile_px4_sim_NO_GPU')
     runs-on: ubuntu-latest
+    if: "contains(github.event.commits*.added + github.event.commits*.modified, 'dockerFile/Dockerfile_px4_sim_NO_GPU')"
     permissions:
       contents: read
       packages: write
       id-token: write
-      
+
     steps:
       - name: setup Docker buildx
         uses: docker/setup-buildx-action@v3
