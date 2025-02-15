@@ -17,7 +17,7 @@ env:
 jobs:
   build_and_push_docker_image_gpu:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'dockerFile/Dockerfile_px4_sim_with_GPU')
+    if: contains(github.event.head_commit.message, 'Dockerfile_px4_sim_with_GPU')
     permissions:
       contents: read
       packages: write
@@ -45,7 +45,7 @@ jobs:
 
   build_and_push_docker_image_no_gpu:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'dockerFile/Dockerfile_px4_sim_NO_GPU')
+    if: contains(github.event.head_commit.message, 'Dockerfile_px4_sim_NO_GPU')
     permissions:
       contents: read
       packages: write
