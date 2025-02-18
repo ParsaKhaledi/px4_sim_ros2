@@ -12,7 +12,6 @@ if [ "$input" = Stereo ] || [ "$input" = stereo ]; then
     cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
     mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-stereo /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
     echo "Replacments with $input camera is done"
-    exit 0
 elif [ "$input" = rgbd ] || [ "$input" = RGBD ] ; then
     rm -rf /PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
             /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
@@ -21,10 +20,9 @@ elif [ "$input" = rgbd ] || [ "$input" = RGBD ] ; then
     cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
     mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-rgbd /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
     echo "Replacments with $input camera is done"
-    exit 0
 else
     echo "Invalid input, please try again."
-    # exit 1
+    exit 1
 fi
 
 
