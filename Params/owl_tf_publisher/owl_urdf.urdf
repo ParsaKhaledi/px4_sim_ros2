@@ -47,6 +47,8 @@
     <child link="camera_depth_optical_frame"/>
   </joint>
   <link name="camera_depth_optical_frame"/>
+
+  
 <!-- 
   <joint name="camera_stereo_left_joint" type="fixed">
     <origin xyz="0.005 0.028 0.013" rpy="0 0 0"/>
@@ -63,7 +65,7 @@
   <link name="camera_stereo_left_optical_frame"/>
 
   <joint name="camera_stereo_right_joint" type="fixed">
-    <origin xyz="0.005 0.008 0.013" rpy="0 0 0"/>
+    <origin xyz="0.005 -0.05 0.013" rpy="0 0 0"/>
     <parent link="camera_link"/>
     <child link="camera_stereo_right_frame"/>
   </joint>
