@@ -31,7 +31,7 @@ Files related to gz simulation has been relocated to include folder. Some modifi
 
 For running simulation : 
 ```
-cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth
+CameraType=rgbd docker compose -f docker-compose-px4.yml up
 ```
 For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command:
 ```
