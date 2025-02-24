@@ -25,7 +25,7 @@ services:
     # entrypoint: ["/bin/sh", "-c"]
     command: /bin/bash -c "
       . /volume/includes/gz/replacments_gz.bash ${CameraType} &&\
-      cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-2,0,0,0,0" make px4_sitl gz_x500_depth &
+      cd /PX4-Autopilot && PX4_GZ_WORLD=apt_world PX4_GZ_MODEL_POSE="-3,-1.5,0,0,0,3.14" make px4_sitl gz_x500_depth &
       ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/volume/includes/gz/config_gz_bridge.yaml & \
       sleep inf"
 
