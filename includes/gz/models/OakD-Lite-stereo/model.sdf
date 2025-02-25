@@ -92,7 +92,7 @@
         <topic>camera/depth/image_raw</topic>
       </sensor> -->
       <sensor name="stereo_right" type="camera">
-        <pose>0.1233 -0.05 0.013 0 0.3 0</pose>
+        <pose>0.1233 -0.037 0.013 0 0.3 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>
@@ -117,7 +117,7 @@
         <topic>camera/stereo/right/image_raw</topic>
       </sensor>
       <sensor name="stereo_left" type="camera">
-        <pose>0.1233 0.05 0.013 0 0.3 0</pose>
+        <pose>0.1233 0.037 0.013 0 0.3 0</pose>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>
