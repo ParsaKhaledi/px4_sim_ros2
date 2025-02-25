@@ -3,9 +3,9 @@ FROM nvidia/opengl:1.0-glvnd-devel-ubuntu22.04
 
 SHELL ["/bin/bash", "-c"]
 
-# ARG USER_NAME=ardupilot
-# ARG USER_UID=1000
-# ARG USER_GID=1000
+ARG USER_NAME=px4
+ARG USER_UID=1000
+ARG USER_GID=1000
 
 
 
@@ -22,8 +22,8 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	gnupg2 lsb-release \
-	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
-	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev \
+	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 kmod fuse \
+	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev  \
 	xauth xorg openbox python3-argcomplete python3 python3-pip \
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl 1>/dev/null
 
@@ -42,15 +42,26 @@ RUN apt update 1>/dev/null && apt -y install locales && \
 RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
         apt update 1>/dev/null &&\
-        apt install -y ros-$ROS_DISTRO-desktop ros-dev-tools 1>/dev/null && \
+        apt install -y --no-install-recommends ros-$ROS_DISTRO-desktop ros-dev-tools 1>/dev/null && \
 		rosdep init && rosdep update 
 
 ### Install Gazebo and some Reqs
 RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
-	apt update && apt install -y \
+	apt update && apt install -y --no-install-recommends\
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 1>/dev/null
+
+# Set User	
+RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+    useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
+	echo "px4 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
+	mkdir -p /px4 && \
+	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} &&\
+	usermod -a -G dialout ${USER_NAME}
+	
+# # Change user
+# USER ${USER_NAME}
 
 # Install Qground
 RUN usermod -a -G dialout root && apt remove modemmanager -y &&\
