@@ -41,8 +41,7 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
 	echo "px4 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
 	mkdir -p /px4 && \
-	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} &&\
-	usermod -a -G dialout ${USER_NAME}
+	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} 
 
 # Install Qground
 RUN usermod -a -G dialout root && usermod -a -G dialout px4 && apt remove modemmanager -y &&\
