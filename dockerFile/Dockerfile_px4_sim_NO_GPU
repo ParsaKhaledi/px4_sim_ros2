@@ -45,7 +45,7 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
 	usermod -a -G dialout ${USER_NAME}
 
 # Install Qground
-RUN sudousermod -a -G dialout root && apt remove modemmanager -y &&\
+RUN usermod -a -G dialout root && usermod -a -G dialout px4 && apt remove modemmanager -y &&\
 	cd /${USER_NAME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage
 
