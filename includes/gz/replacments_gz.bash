@@ -2,23 +2,24 @@
 
 echo "Start Modifications for running Simulation"
 input=$1
+WORKDIR=/px4
 echo "Selected Camera Type: $input"
 
 if [ "$input" = Stereo ] || [ "$input" = stereo ]; then
-    rm -rf /PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
-            /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
-    cp -rv /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
-    cp -rv /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
-    cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
-    mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-stereo /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
+    rm -rf $WORKDIR/PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
+        $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
+    cp -rv $WORKDIR/volume/includes/gz/CMakeLists.txt $WORKDIR/PX4-Autopilot/src/modules/simulation/gz_bridge/
+    cp -rv $WORKDIR/volume/includes/gz/models/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/
+    cp -rv $WORKDIR/volume/includes/gz/worlds/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/worlds/
+    mv -v  $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-stereo $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
     echo "Replacments with $input camera is done"
 elif [ "$input" = rgbd ] || [ "$input" = RGBD ] ; then
-    rm -rf /PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
-            /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
-    cp -rv /volume/includes/gz/CMakeLists.txt /PX4-Autopilot/src/modules/simulation/gz_bridge/
-    cp -rv /volume/includes/gz/models/* /PX4-Autopilot/Tools/simulation/gz/models/
-    cp -rv /volume/includes/gz/worlds/* /PX4-Autopilot/Tools/simulation/gz/worlds/
-    mv -v /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-rgbd /PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
+    rm -rf  $WORKDIR/PX4-Autopilot/src/modules/simulation/gz_bridge/CMakeLists.txt \
+            $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
+    cp -rv $WORKDIR/volume/includes/gz/CMakeLists.txt $WORKDIR/PX4-Autopilot/src/modules/simulation/gz_bridge/
+    cp -rv $WORKDIR/volume/includes/gz/models/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/
+    cp -rv $WORKDIR/volume/includes/gz/worlds/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/worlds/
+    mv -v  $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite-rgbd $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
     echo "Replacments with $input camera is done"
 else
     echo "Invalid input, please try again."
