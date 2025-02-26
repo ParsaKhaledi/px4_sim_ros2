@@ -43,8 +43,11 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
 	mkdir -p /px4 && \
 	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} 
 
+# Change user
+USER ${USER_NAME}
+
 # Install Qground
-RUN usermod -a -G dialout root && usermod -a -G dialout px4 && apt remove modemmanager -y &&\
+RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
 	cd /${USER_NAME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage
 
@@ -59,13 +62,10 @@ RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1
 RUN cd /${USER_NAME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 RUN cd /${USER_NAME}/Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
-	make && make install && sudo ldconfig /usr/local/lib/ &&\
+	make && sudo make install && sudo ldconfig /usr/local/lib/ &&\
 	cd /${USER_NAME} && rm -rf /Micro-XRCE-DDS-Agent/build
 	
 # RUN pip3 install -U pyros-genmsg setuptools
-
-# Change user
-USER ${USER_NAME}
 
 ### Build WS (px4_ros_com && px4_msgs && m-explore-ros2)
 RUN mkdir -p ${WORKDIR}/src
