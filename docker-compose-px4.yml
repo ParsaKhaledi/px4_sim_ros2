@@ -29,29 +29,31 @@ services:
       ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/px4/volume/includes/gz/config_gz_bridge.yaml & \
       sleep inf"
 
-  # Qground:
-  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-  #   container_name: qground
-  #   hostname: qground
-  #   # depends_on:
-  #   #   - PX4
-  #   tty: true
-  #   network_mode: "host"
-  #   # networks:
-  #     # px4:
-  #     #   ipv4_address: "10.20.10.3"
-  #   # restart: unless-stopped
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  Qground:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: qground
+    hostname: qground
+    # depends_on:
+    #   - PX4
+    tty: true
+    privileged: true # To access Fuse lib 
+    network_mode: "host"
+    # networks:
+      # px4:
+      #   ipv4_address: "10.20.10.3"
+    # restart: unless-stopped
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+      # - Add bind folders to save Qground Settings and map 
 
-  #   command: /bin/bash -c " sleep inf" 
+    command: /bin/bash -c " sleep inf" 
 
 
   # imu_filter:
-  #   image: "mins:${minsTAG:?error}"
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
   #   privileged: true
   #   # restart: unless-stopped
   #   network_mode: "host"
