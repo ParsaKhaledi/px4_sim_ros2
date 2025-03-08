@@ -25,7 +25,7 @@ services:
     # entrypoint: ["/bin/sh", "-c"]
     command: /bin/bash -c "
       . /px4/volume/includes/gz/replacments_gz.bash ${CameraType} &&\
-      cd /px4/PX4-Autopilot && PX4_GZ_WORLD=${PX4World} PX4_GZ_MODEL_POSE="-3,-1.6,0,0,0,3.14" make px4_sitl gz_x500_depth &
+      cd /px4/PX4-Autopilot && PX4_GZ_WORLD=${World} PX4_GZ_MODEL_POSE="-3,-1.6,0,0,0,3.14" make px4_sitl gz_x500_depth &
       ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/px4/volume/includes/gz/config_gz_bridge.yaml & \
       sleep inf"
 
@@ -33,10 +33,10 @@ services:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
     container_name: qground
     hostname: qground
-    # depends_on:
-    #   - PX4
+    privileged: true
     tty: true
-    privileged: true # To access Fuse lib 
+    # depends_on:
+    #   - PX4source /px4/ws_px4/install/setup.bash && rqt
     network_mode: "host"
     # networks:
       # px4:
@@ -47,9 +47,11 @@ services:
       "XAUTHORITY": ${XAUTH}
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
+      - ./.qground/config/:/home/px4/.config
+      - ./.qground/cash/:/home/px4/.cash
       # - Add bind folders to save Qground Settings and map 
 
-    command: /bin/bash -c " . /px4/QGroundControl.AppImage" 
+    command: /bin/bash -c " cd /px4 && ./QGroundControl.AppImage " 
 
 
   # imu_filter:
@@ -76,27 +78,25 @@ services:
   #      /imu/data_raw:=/stereo_inertial_publisher/imu \
   #      /imu/data:=/imu/data "
 
-  # rqt:
-  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-  #   container_name: rqt
-  #   hostname: rqt
-  #   tty: true
-  #   network_mode: "host"
-  #   # networks:
-  #   #   px4:
-  #   #     ipv4_address: "10.20.10.5"
-  #   # restart: unless-stopped
-  #   depends_on:
-  #     - PX4
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     "XAUTHORITY": ${XAUTH}
-
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-
-  #   command: /bin/bash -c "
-  #     source /ws_px4/install/setup.bash && rqt"
+  rqt:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: rqt
+    hostname: rqt
+    tty: true
+    network_mode: "host"
+    # networks:
+    #   px4:
+    #     ipv4_address: "10.20.10.5"
+    # restart: unless-stopped
+    depends_on:
+      - PX4
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+    command: /bin/bash -c "
+      source /px4/ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -117,7 +117,7 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
 
     command: /bin/bash -c "
-      source /ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
+      source /px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
 
 
@@ -128,3 +128,7 @@ networks:
       driver: default
       config:
         - subnet: "10.20.10.0/24"
+
+# volumes:
+#   cash:
+#   config:
