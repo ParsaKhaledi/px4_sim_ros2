@@ -10,8 +10,8 @@ Many repos like rtabmap recommends to replace default dds of ROS2 with Cyclonedd
 sudo apt install ros-humble-rmw-cyclonedds-cpp
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ```
-# Add models and worlds in gazebo classic
-PX4-Autopilot has changed so that iris drone can have stereo cameras and depth camera with ros2 compatible plugins. Also, apt world was added to this repo to be able to fly inside a house for mapping and exploration purposes. Beside in startFiles directory, you can use gazebo_modification.sh to modify worlds and models.
+#  Gazebo Classic
+PX4-Autopilot has changed so that iris drone can have stereo cameras and depth camera with ros2 compatible plugins as a sample. Also, apt world was added to this repo to be able to fly inside a house for mapping and exploration purposes. Beside in startFiles directory, you can use gazebo_modification.sh to modify worlds and models.
 ## Adding your own model 
 For adding your own model, you have to go to these 3 locations and add your model:
  - ./Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/ (Add your model here)
@@ -25,15 +25,19 @@ For adding your own world, you have to go to these locations and add your world:
 
 # Add models and worlds in gz 
 Discribtion will be added here soon ...
-In include folder there is a file named replacments.bash which you can check it and volume mounted in docker-compose file to see where to copy include folder and run the very script to add word to px4.
+In include folder there is a file named replacments.bash which you can check it and volume mounted in docker-compose file to see where to copy include folder and run the very script to add word and modify model of PX4-Autopilote.
 
-Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/replacments_gz.bash to add some worlds and stereo camera to x500 model.
+Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/replacments_gz.bash to add some worlds and camera to x500 model that can be checked in very file. 
 
 For running simulation : 
 ```
-CameraType=rgbd docker compose -f docker-compose-px4.yml up
+# To select Camera Type and world
+# CameraType=rgbd or Stereo
+# World=apt_world
+CameraType=rgbd World=apt_world docker compose -f docker-compose-px4.yml up -d
+
 ```
-For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command:
+For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command (already exist in docker compose file):
 ```
 ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/volume/includes/gz/config_gz_bridge.yaml
 ```
