@@ -97,10 +97,7 @@ RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 # RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR}/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
 ### Tumux conf
-RUN cd ~ && git clone https://github.com/gpakosz/.tmux.git &&\
-	ln -s -f .tmux/.tmux.conf 	&&\
-	cp .tmux/.tmux.conf.local . &&\
-	echo "set -g mouse on" >> ~/.tmux.conf 
+RUN echo "set -g mouse on" >> ~/.tmux.conf 
 
 ### Write in ~/.bashrc
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
