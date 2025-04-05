@@ -32,11 +32,17 @@ In include folder there is a file named replacments.bash which you can check it 
 Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/replacments_gz.bash to add some worlds and camera to x500 model that can be checked in very file. 
 
 For running simulation : 
+Tmux and Docker needed to be installed. 
 ```
+# Allow docker to use display in host
+xhost +Local:*
+
 # To select Camera Type and world
 # CameraType=rgbd or Stereo
-# World=apt_world
+# World=apt_world (Not Working for now -> go to perivious commits)
 CameraType=rgbd World=apt_world docker compose -f docker-compose-px4.yml up -d
+# Run Simulation in your host Tmux
+CameraType=rgbd World=apt ./tmux-session.sh
 
 ```
 For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command (already exist in docker compose file):
