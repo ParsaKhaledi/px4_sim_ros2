@@ -23,7 +23,9 @@ For adding your own world, you have to go to these locations and add your world:
 - ./Tools/simulation/gazebo-classic/sitl_gazebo-classic/worlds (Add your world file here)
 - ./src/modules/simulation/simulator_mavlink/sitl_targets_gazebo-classic.cmake (Add your world to Cmake list)
 
-# Add models and worlds in gz 
+#  GZ (Recommended)
+GZ harmonic is used for simulation along PX4 v1.14. It is recommended to use this simulation since it is planed to be used in future developments of PX4 and Gazebo.
+## Add models and worlds in gz 
 Discribtion will be added here soon ...
 In include folder there is a file named replacments.bash which you can check it and volume mounted in docker-compose file to see where to copy include folder and run the very script to add word and modify model of PX4-Autopilote.
 
