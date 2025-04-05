@@ -22,15 +22,14 @@ services:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - ./includes:/px4/volume/includes/
       - ./Params:/px4/volume/Params
-      - ./startFiles/:/px4/volume/startFiles
+      - ./includes/gz/startFiles/:/px4/volume/startFiles
     # command: /bin/bash -c "sleep inf"
     # entrypoint: ["/bin/sh", "-c"]
+
     command: /bin/bash -c "
       . /px4/volume/includes/gz/gz_modifications.bash ${CameraType} &&\
-      cd /px4/PX4-Autopilot && PX4_GZ_WORLD=${World} PX4_GZ_MODEL_POSE="-3,-1.6,0,0,0,3.14" make px4_sitl gz_x500_depth &
-      ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/px4/volume/includes/gz/config_gz_bridge.yaml & \
-      cd /px4/volume/includes/gz/x500_tf_publisher && ros2 launch robot_state_publisher.launch.py &\
-      sleep inf"
+      export World=${World} && CameraType=${CameraType} &\
+      sleep inf "
 
   Qground:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
