@@ -40,6 +40,6 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: ${{ env.Registery }}/${{ env.ImageName }}:${{ env.ImageTag }}
+          tags: ${{ env.Registery }}/${{ env.ImageName }}:${{ env.ImageTag }}_GPUEnabled
           file: ./dockerFile/Dockerfile_px4_sim_with_GPU
 
