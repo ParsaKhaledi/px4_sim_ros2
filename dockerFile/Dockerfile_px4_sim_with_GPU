@@ -55,8 +55,8 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 # Set User	
 RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
-	echo "px4 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
-	mkdir -p /px4 && \
+	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
+	mkdir -p /${USER_NAME} && \
 	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} 
 
 	
@@ -109,6 +109,6 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 
 ### Finilize
 RUN rm -rf /var/lib/apt/lists/* &&\
-	sudo apt autoremove -y && rm -rf /var/lib/apt/lists/*
+	sudo apt autoremove -y 
 
 ### Adding CMD (Comming Soon :))
