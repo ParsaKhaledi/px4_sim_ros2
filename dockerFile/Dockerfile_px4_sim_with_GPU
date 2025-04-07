@@ -75,7 +75,7 @@ RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1
 	cd /${USER_NAME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 
 
 ### Install Nav2 and rtabmap
-RUN apt install -y  \
+RUN sudo apt install -y  \
 	ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
