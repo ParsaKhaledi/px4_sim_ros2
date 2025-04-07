@@ -70,9 +70,9 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 	chmod +x ./QGroundControl.AppImage
 
 ### PX4 Stuff
-RUN cd / && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.1 --recursive \
+RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd /PX4-Autopilot && ./Tools/setup/ubuntu.sh 
+	cd /${USER_NAME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 
 
 ### Install Nav2 and rtabmap
 RUN apt install -y  \
