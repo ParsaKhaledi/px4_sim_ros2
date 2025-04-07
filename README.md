@@ -20,7 +20,7 @@ sudo apt-get install xauth xorg openbox
 [PX4](https://docs.px4.io/v1.15/en/) is the Professional Autopilot. Developed by world-class developers from industry and academia, and supported by an active world wide community, it powers all kinds of vehicles from racing and cargo drones through to ground vehicles and submersibles.The V1.15.3 version of autopilot is used for this project and can be found in [PX4-Autopilot Gtihub](https://github.com/PX4/PX4-Autopilot/tree/v1.15.4).
 
 ## ROS2
-
+The Robot Operating System [(ROS)](https://www.ros.org/) is a set of software libraries and tools that help you build robot applications. From drivers to state-of-the-art algorithms, and with powerful developer tools, ROS has what you need for your next robotics project. And it's all open source. [Harmonic](https://docs.ros.org/en/humble/index.html) version of ros2 is used for this project.
 
 ##  GZ (Recommended)
 [GZ harmonic](https://gazebosim.org/docs/harmonic/getstarted/) is used for simulation along PX4 v1.14. It is recommended to use this simulation since it is planed to be used in future developments of PX4 and Gazebo.
