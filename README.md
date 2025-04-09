@@ -23,7 +23,7 @@ sudo apt-get install xauth xorg openbox
 The Robot Operating System [(ROS)](https://www.ros.org/) is a set of software libraries and tools that help you build robot applications. From drivers to state-of-the-art algorithms, and with powerful developer tools, ROS has what you need for your next robotics project. And it's all open source. [Harmonic](https://docs.ros.org/en/humble/index.html) version of ros2 is used for this project.
 
 ##  GZ (Recommended)
-[GZ harmonic](https://gazebosim.org/docs/harmonic/getstarted/) is used for simulation along PX4 v1.14. It is recommended to use this simulation since it is planed to be used in future developments of PX4 and Gazebo.
+[GZ harmonic](https://gazebosim.org/docs/harmonic/getstarted/) is used for simulation along PX4 v1.15.4. It is recommended to use this simulation since it is planed to be used in future developments of PX4 and Gazebo.
 
 ### Add models and worlds in gz 
 Discribtion will be added here soon ...
@@ -31,7 +31,7 @@ In include folder there is a file named replacments.bash which you can check it 
 Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/gz/gz_modifications.bash to add some worlds and camera to x500 model that can be checked in very file. 
 
 ## ROS_GZ
-in [ros_gz](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_bridge) messeage types can be found plus some examples to check connection between GZ and ROS2. How to write yaml for bridge is also writen. [Husarion](https://github.com/husarion/husarion_gz_worlds) is a good repo for more gz worlds. For Migration from Gazebo-classic [this link](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/) can be beneficial. Documentation of PX4 for gz simulation can be found [here](https://docs.px4.io/main/en/sim_gazebo_gz/#specify-world).
+This package provides a network bridge which enables the exchange of messages between ROS and Gazebo Transport. in [ros_gz](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_bridge) messeage types can be found plus some examples to check connection between GZ and ROS2. How to write yaml for bridge is also writen. [Husarion](https://github.com/husarion/husarion_gz_worlds) is a good repo for more gz worlds. For Migration from Gazebo-classic [this link](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/) can be beneficial. Documentation of PX4 for gz simulation can be found [here](https://docs.px4.io/main/en/sim_gazebo_gz/#specify-world).
 
 ## Running simulation
 Duo to some problems including frequency reduction of topics (when using bridge mode network of docker) and ros2 issues in getting topics data from other containers (in host network mode of docker) some services are running in same contianer for now. 
