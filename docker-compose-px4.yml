@@ -38,11 +38,12 @@ services:
     privileged: true
     tty: true
     # depends_on:
-    #   - PX4source /px4/ws_px4/install/setup.bash && rqt
+    #   - PX4
     network_mode: "host"
     # networks:
-      # px4:
-      #   ipv4_address: "10.20.10.3"
+    #   px4:
+    #     ipv4_address: "10.20.10.3"
+    
     # restart: unless-stopped
     environment:
       DISPLAY: ${DISPLAY}
@@ -50,7 +51,7 @@ services:
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - ./.qground/config/:/home/px4/.config
-      - ./.qground/cash/:/home/px4/.cash
+      - ./.qground/cache/:/home/px4/.cache
       # - Add bind folders to save Qground Settings and map 
 
     command: /bin/bash -c " cd /px4 && ./QGroundControl.AppImage " 
@@ -109,8 +110,8 @@ services:
     tty: true
     network_mode: "host"
     # networks:
-      # px4:
-      #   ipv4_address: "10.20.10.6"
+    #   px4:
+    #     ipv4_address: "10.20.10.6"
     # restart: unless-stopped
     environment:
       DISPLAY: ${DISPLAY}
@@ -121,6 +122,55 @@ services:
     command: /bin/bash -c "
       source /px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
+  # rtabmap:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: rtabmap
+  #   hostname: rtabmap
+  #   # depends_on:
+  #   #   - PX4
+  #   tty: true
+  #   network_mode: "host"
+  #   # netwo.v4_address: "10.20.10.7"
+  #   # restart: unless-stopped
+  #   environment:
+  #     - DISPLAY=${DISPLAY}
+  #     - XAUTHORITY=${XAUTH}
+  #     - CamerType=$CamerType
+
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #     - ./includes:/px4/volume/includes/
+  #     - ./Params:/px4/volume/Params
+  #     - ./includes/gz/startFiles/:/px4/volume/startFiles
+
+  #   command: /bin/bash -c "
+  #     CamerType=$CamerType && . /px4/volume/startFiles/gz_start_rtabmap.sh "
+
+  # nav2:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: nav2
+  #   hostname: nav2
+  #   # depends_on:
+  #   #   - PX4
+  #   tty: true
+  #   network_mode: "host"
+  #   # networks:
+  #     # px4:
+  #     #   ipv4_address: "10.20.10.8"
+  #   # restart: unless-stopped
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #     "XAUTHORITY": ${XAUTH}
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #     - ./includes:/px4/volume/includes/
+  #     - ./Params:/px4/volume/Params
+  #     - ./includes/gz/startFiles/:/px4/volume/startFiles
+
+  #   command: /bin/bash -c "
+  #     source /px4/ws_px4/install/setup.bash "
 
 
 
@@ -130,6 +180,7 @@ networks:
       driver: default
       config:
         - subnet: "10.20.10.0/24"
+      
 
 # volumes:
 #   cash:
