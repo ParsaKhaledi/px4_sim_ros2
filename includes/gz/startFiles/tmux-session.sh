@@ -27,9 +27,9 @@ Tmux_create_session_run_CMDs(){
     tmux send-keys -t $SESSION_NAME:0.0 "docker exec -it px4_sim /px4/volume/startFiles/gz_start_px4_gz_sim.sh"       Enter
     tmux send-keys -t $SESSION_NAME:0.1 "docker exec -it px4_sim /px4/volume/startFiles/gz_start_ros2_gz_bridge.sh"   Enter
     tmux send-keys -t $SESSION_NAME:0.2 "docker exec -it px4_sim /px4/volume/startFiles/gz_start_state_publisher.sh"  Enter
-    tmux send-keys -t $SESSION_NAME:0.3 "echo $CameraType && sleep inf" Enter
-    tmux send-keys -t $SESSION_NAME:0.4 "docker exec -it px4_sim /px4/volume/startFiles/gz_start_rtabmap_rgbd.sh " Enter
-    tmux send-keys -t $SESSION_NAME:0.5 "bash" Enter
+    tmux send-keys -t $SESSION_NAME:0.3 "docker exec -it px4_sim /px4/volume/startFiles/start_nav2.sh" Enter
+    tmux send-keys -t $SESSION_NAME:0.4 "docker exec -it px4_sim /px4/volume/startFiles/gz_start_rtabmap.sh " Enter
+    tmux send-keys -t $SESSION_NAME:0.5 "docker exec -it px4_sim /px4/volume/startFiles/start_nav2_rviz.sh" Enter
     echo Session Created
 
     # Attach to the session
