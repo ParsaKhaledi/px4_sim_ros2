@@ -1,7 +1,7 @@
 #!/bin/bash
 
 source /opt/ros/$ROS_DISTRO/setup.bash
-# CamerType=$1
+export CamerType=$1
 
 if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      echo "Run Rtabmap with $CamerType camera"
