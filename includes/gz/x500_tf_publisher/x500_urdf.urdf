@@ -5,7 +5,7 @@
   </link>
 
   <!-- OakD-Lite camera module -->
-  <link name="oakd_lite_base_link">
+  <link name="OakD-Lite/base_link">
     <inertial>
       <origin xyz="0.00358 -0.03 .014" rpy="0 0 0"/>
       <mass value="0.061"/>
@@ -28,14 +28,14 @@
   <!-- Joint connecting base_link to camera module -->
   <joint name="camera_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="oakd_lite_base_link"/>
+    <child link="OakD-Lite/base_link"/>
     <origin xyz="0.12 0.03 0.242" rpy="0 0.3 0"/>
   </joint>
 
   <!-- Sensors on the OakD-Lite camera module -->
   <link name="camera_rgb_frame"/>
   <joint name="camera_rgb_joint" type="fixed">
-    <parent link="oakd_lite_base_link"/>
+    <parent link="OakD-Lite/base_link"/>
     <child link="camera_rgb_frame"/>
     <origin xyz="0.01233 -0.03 .01878" rpy="0 0 0"/>
   </joint>
@@ -49,7 +49,7 @@
 
   <link name="depth_camera_frame"/>
   <joint name="depth_camera_joint" type="fixed">
-    <parent link="oakd_lite_base_link"/>
+    <parent link="OakD-Lite/base_link"/>
     <child link="depth_camera_frame"/>
     <origin xyz="0.01233 -0.03 .01878" rpy="0 0 0"/>
   </joint>
@@ -62,7 +62,7 @@
 
   <link name="stereo_right_camera_frame"/>
   <joint name="stereo_right_camera_joint" type="fixed">
-    <parent link="oakd_lite_base_link"/>
+    <parent link="OakD-Lite/base_link"/>
     <child link="stereo_right_camera_frame"/>
     <origin xyz="0.01233 -0.05 0.013" rpy="0 0 0"/>
   </joint>
@@ -75,7 +75,7 @@
 
   <link name="stereo_left_camera_frame"/>
   <joint name="stereo_left_camera_joint" type="fixed">
-    <parent link="oakd_lite_base_link"/>
+    <parent link="OakD-Lite/base_link"/>
     <child link="stereo_left_camera_frame"/>
     <origin xyz="0.01233 0.05 0.013" rpy="0 0 0"/>
   </joint>
@@ -89,7 +89,7 @@
   <!-- IMU sensor -->
   <link name="imu_link"/>
   <joint name="imu_joint" type="fixed">
-    <parent link="oakd_lite_base_link"/>
+    <parent link="OakD-Lite/base_link"/>
     <child link="imu_link"/>
     <origin xyz="0.01233 -0.03 .01878" rpy="1.57 3.14 1.57"/>
   </joint>
