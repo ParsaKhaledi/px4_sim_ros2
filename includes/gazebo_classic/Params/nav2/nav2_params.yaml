@@ -123,7 +123,7 @@ controller_server:
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.8
+      required_movement_radius: 0.8 # Changed
       movement_time_allowance: 10.0
     # Goal checker parameters
     #precise_goal_checker:
@@ -236,9 +236,9 @@ global_costmap:
         enabled: True
         observation_sources: pointcloud
         pointcloud:
-          topic: /camera/points
-          max_obstacle_height: 2.2
-          min_obstacle_height: 0.5
+          topic: /camera/points 
+          max_obstacle_height: 2.2  # Changed
+          min_obstacle_height: 0.5  # Changed
           clearing: True
           marking: True
           data_type: "PointCloud2"
@@ -248,7 +248,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.65
+        inflation_radius: 0.65 # Changed
       always_send_full_costmap: True
 
 map_server:
