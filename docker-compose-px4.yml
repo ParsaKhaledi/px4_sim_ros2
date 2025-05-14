@@ -124,25 +124,25 @@ services:
   #      /imu/data_raw:=/stereo_inertial_publisher/imu \
   #      /imu/data:=/imu/data "
 
-  rqt:
-    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-    container_name: rqt
-    hostname: rqt
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.5"
-    # restart: unless-stopped
-    depends_on:
-      - PX4
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-    command: /bin/bash -c "
-      source /px4/ws_px4/install/setup.bash && rqt"
+  # rqt:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: rqt
+  #   hostname: rqt
+  #   tty: true
+  #   # network_mode: "host"
+  #   networks:
+  #     px4:
+  #       ipv4_address: "10.20.10.5"
+  #   # restart: unless-stopped
+  #   depends_on:
+  #     - PX4
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #     "XAUTHORITY": ${XAUTH}
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #   command: /bin/bash -c "
+  #     source /px4/ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -189,62 +189,66 @@ services:
       - ./Params:/px4/volume/Params
       - ./includes/gz/startFiles/:/px4/volume/startFiles
 
-    command: /bin/bash -c "
-     . /px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
+    command: /bin/bash -c "sleep inf"
 
-  # NAV2:
-  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-  #   container_name: nav2
-  #   hostname: nav2
-  #   # depends_on:
-  #   #   - PX4
-  #   tty: true
-  #   # network_mode: "host"
-  #   networks:
-  #     px4:
-  #       ipv4_address: "10.20.10.8"
-  #   # restart: unless-stopped
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-  #     - ./includes:/px4/volume/includes/
-  #     - ./Params:/px4/volume/Params
-  #     - ./includes/gz/startFiles/:/px4/volume/startFiles
+    # command: /bin/bash -c "
+    #  . /px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
+
+  NAV2:
+    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+    container_name: nav2
+    hostname: nav2
+    # depends_on:
+    #   - PX4
+    tty: true
+    # network_mode: "host"
+    networks:
+      px4:
+        ipv4_address: "10.20.10.8"
+    # restart: unless-stopped
+    environment:
+      DISPLAY: ${DISPLAY}
+      "XAUTHORITY": ${XAUTH}
+    volumes:
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - ./includes:/px4/volume/includes/
+      - ./Params:/px4/volume/Params
+      - ./includes/gz/startFiles/:/px4/volume/startFiles
 
   #   command: /bin/bash -c "
   #     ros2 launch nav2_bringup navigation_launch.py \
   #     params_file:=/px4/volume/Params/nav2/nav2_params.yaml"
 
-  Nav2_Rviz:
-    image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-    container_name: nav2_rviz
-    hostname: nav2_rivz
-    tty: true
-    privileged: true
-    restart: unless-stopped
-    # depends_on:
-    #   - nav2
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.9"
+    command: /bin/bash -c "sleep inf"
 
-    environment:
-      DISPLAY: ${DISPLAY}
-      XAUTHORITY: ${XAUTH}
+  # Nav2_Rviz:
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
+  #   container_name: nav2_rviz
+  #   hostname: nav2_rivz
+  #   tty: true
+  #   privileged: true
+  #   restart: unless-stopped
+  #   # depends_on:
+  #   #   - nav2
+  #   # network_mode: "host"
+  #   networks:
+  #     px4:
+  #       ipv4_address: "10.20.10.9"
+
+  #   environment:
+  #     DISPLAY: ${DISPLAY}
+  #     XAUTHORITY: ${XAUTH}
         
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #   volumes:
+  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
 
-    # command: /bin/bash -c "sleep inf"
+  #   # command: /bin/bash -c "sleep inf"
 
-    command: /bin/bash -c "
-      ros2 launch nav2_bringup rviz_launch.py \
-      params_file:=/px4/volume/Params/nav2/nav2_rviz"
+  #   command: /bin/bash -c "
+  #     ros2 launch nav2_bringup rviz_launch.py \
+  #     params_file:=/px4/volume/Params/nav2/nav2_rviz"
 
 
 
