@@ -46,7 +46,7 @@ xhost +Local:*
 CameraType=rgbd World=apt_world docker compose -f docker-compose-px4.yml up -d
 
 # Run Simulation in your host Tmux
-CameraType=rgbd World=apt ./tmux-session.sh
+CameraType=rgbd World=apt ./includes/gz/startFiles/tmux-session.sh
 ```
 ## ROS_bridge for using gz and ros2 topics
 For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command (already exist in docker compose file):
