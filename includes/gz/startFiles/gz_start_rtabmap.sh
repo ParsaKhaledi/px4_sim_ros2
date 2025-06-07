@@ -23,7 +23,7 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           --MaxFeatures 100 '    \
           rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info \
           imu_topic:=/imu approx_sync:=false    \
-          use_sim_time:=true  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
+          use_sim_time:=false  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
 else
     echo "Invalid CamerType"
     exit 1
