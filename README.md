@@ -34,7 +34,7 @@ Files related to gz simulation has been relocated to include folder. Some modifi
 This package provides a network bridge which enables the exchange of messages between ROS and Gazebo Transport. in [ros_gz](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_bridge) messeage types can be found plus some examples to check connection between GZ and ROS2. How to write yaml for bridge is also writen. [Husarion](https://github.com/husarion/husarion_gz_worlds) is a good repo for more gz worlds. For Migration from Gazebo-classic [this link](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/) can be beneficial. Documentation of PX4 for gz simulation can be found [here](https://docs.px4.io/main/en/sim_gazebo_gz/#specify-world).
 
 ## Running simulation
-Duo to some problems including frequency reduction of topics (when using bridge mode network of docker) and ros2 issues in getting topics data from other containers (in host network mode of docker) some services are running in same contianer for now. 
+Duo to some problems including frequency reduction of topics (when using bridge mode network of docker) and ros2 issues in getting topics data from other containers (in host network mode of docker) some services are running in same contianer for now. (The issue may related to my PC performance and bridge is working fine in my other projects).
 For running simulation : 
 Tmux and Docker needed to be installed. 
 ```
