@@ -1,6 +1,6 @@
 services:
   PX4:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: px4_sim
     hostname: px4_sim
     tty: true
@@ -46,7 +46,7 @@ services:
        "
 
   StaticTransform:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: st
     hostname: st
     tty: true
@@ -77,7 +77,7 @@ services:
 
 
   Qground:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: qground
     hostname: qground
     privileged: true
@@ -103,7 +103,7 @@ services:
 
 
   # imu_filter:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
+  #   image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
   #   privileged: true
   #   # restart: unless-stopped
   #   network_mode: "host"
@@ -127,7 +127,7 @@ services:
   #      /imu/data:=/imu/data "
 
   # rqt:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
+  #   image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
   #   container_name: rqt
   #   hostname: rqt
   #   tty: true
@@ -147,7 +147,7 @@ services:
   #     source /home/px4/ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: uxrcedds
     hostname: uxrcedds
     # depends_on:
@@ -168,7 +168,7 @@ services:
       source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
   Rtabmap:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: rtabmap
     hostname: rtabmap
     # depends_on:
@@ -197,7 +197,7 @@ services:
     #  . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
 
   NAV2:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
     container_name: nav2
     hostname: nav2
     # depends_on:
@@ -225,7 +225,7 @@ services:
     command: /bin/bash -c "sleep inf"
 
   # Nav2_Rviz:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
+  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
   #   container_name: nav2_rviz
   #   hostname: nav2_rivz
   #   tty: true
