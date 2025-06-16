@@ -26,22 +26,23 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - /dev:/dev/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes:/px4/volume/includes/
-      - ./Params:/px4/volume/Params
-      - ./includes/gz/startFiles/:/px4/volume/startFiles
+      - ./includes/gz/:/home/px4/volume/includes/gz/
+      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+      - ./Params:/home/px4/volume/Params
+
     # command: /bin/bash -c "sleep inf"
     # entrypoint: ["/bin/sh", "-c"]
 
     # command: /bin/bash -c "
-    #   . /px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-    #   /px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
-    #   /px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
-    #   /px4/volume/startFiles/gz_start_state_publisher.sh "
+    #   . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
+    #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
+    #   /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
+    #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
 
     command: /bin/bash -c "
-      . /px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-      /px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
-      /px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
+      . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
+      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
+      /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
        "
 
   StaticTransform:
@@ -64,14 +65,15 @@ services:
         
     volumes:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/startFiles/:/px4/volume/startFiles
-      - ./includes:/px4/volume/includes/
+       - ./includes/gz/:/home/px4/volume/includes/gz/
+      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+      - ./Params:/home/px4/volume/Params
 
     # command: /bin/bash -c "sleep inf"
     # entrypoint: ["/bin/sh", "-c"]
 
     command: /bin/bash -c "
-      /px4/volume/startFiles/gz_start_state_publisher.sh"
+      /home/px4/volume/startFiles/gz_start_state_publisher.sh"
 
 
   Qground:
@@ -97,7 +99,7 @@ services:
       - ./.qground/cache/:/home/px4/.cache
       # - Add bind folders to save Qground Settings and map 
 
-    command: /bin/bash -c " cd /px4 && ./QGroundControl.AppImage " 
+    command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
 
 
   # imu_filter:
@@ -142,7 +144,7 @@ services:
   #   volumes:
   #     - /tmp/.X11-unix/:/tmp/.X11-unix/
   #   command: /bin/bash -c "
-  #     source /px4/ws_px4/install/setup.bash && rqt"
+  #     source /home/px4/ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -163,7 +165,7 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
 
     command: /bin/bash -c "
-      source /px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
+      source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
   Rtabmap:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -185,14 +187,14 @@ services:
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes:/px4/volume/includes/
-      - ./Params:/px4/volume/Params
-      - ./includes/gz/startFiles/:/px4/volume/startFiles
+      - ./includes/gz/:/home/px4/volume/includes/gz/
+      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+      - ./Params:/home/px4/volume/Params
 
     command: /bin/bash -c "sleep inf"
 
     # command: /bin/bash -c "
-    #  . /px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
+    #  . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
 
   NAV2:
     image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
@@ -212,13 +214,13 @@ services:
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes:/px4/volume/includes/
-      - ./Params:/px4/volume/Params
-      - ./includes/gz/startFiles/:/px4/volume/startFiles
+      - ./includes/gz/:/home/px4/volume/includes/gz/
+      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+      - ./Params:/home/px4/volume/Params
 
   #   command: /bin/bash -c "
   #     ros2 launch nav2_bringup navigation_launch.py \
-  #     params_file:=/px4/volume/Params/nav2/nav2_params.yaml"
+  #     params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
 
     command: /bin/bash -c "sleep inf"
 
@@ -243,12 +245,13 @@ services:
   #   volumes:
   #     - /tmp/.X11-unix/:/tmp/.X11-unix/
   #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  #     - ./Params:/home/px4/volume/Params
 
   #   # command: /bin/bash -c "sleep inf"
 
   #   command: /bin/bash -c "
   #     ros2 launch nav2_bringup rviz_launch.py \
-  #     params_file:=/px4/volume/Params/nav2/nav2_rviz"
+  #     params_file:=/home/px4/volume/Params/nav2/nav2_rviz"
 
 
 
