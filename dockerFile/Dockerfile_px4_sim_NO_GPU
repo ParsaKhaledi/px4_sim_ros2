@@ -24,7 +24,8 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	vim udev git sudo unzip curl cmake wget tmux\
 	iputils-ping\
 	gnupg2 lsb-release \
-	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib\
+	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib \
+	python3-future \
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl fuse kmod libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
