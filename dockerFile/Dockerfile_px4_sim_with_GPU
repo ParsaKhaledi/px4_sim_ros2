@@ -12,53 +12,106 @@ ARG USER_GID=1000
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
-ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-ENV WORKDIR=/${USER_NAME}/ws_px4
+# ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
+ENV WORKDIR=/home/${USER_NAME}/ws_px4
 ENV ROS_DISTRO=humble
-WORKDIR /
+WORKDIR /home/${USER_NAME}
 
 RUN apt-get clean
 RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux \
 	gnupg2 lsb-release iputils-ping\
-	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 kmod fuse \
+	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 \
+	kmod fuse \
+	libdc1394-22-dev \
+	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-base1.0-dev\
+	libgstreamer-plugins-base1.0-dev \
+	pkg-config libgtk-3-dev libavcodec-dev libavformat-dev  libswscale-dev \
+    libv4l-dev libxvidcore-dev libx264-dev libjpeg-dev libpng-dev libtiff-dev \
+    gfortran openexr libatlas-base-dev \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev  \
-	xauth xorg openbox python3-argcomplete python3 python3-pip \
-	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl 1>/dev/null
+	xauth xorg openbox x11-utils\
+	python3 python3-argcomplete python3-pip python3-numpy python3-dev	 \
+	libcanberra-gtk-module libgl1-mesa-glx\
+	gcc-arm-none-eabi apt-utils  1>/dev/null
+	
+### Create User	
+RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+	useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
+	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
+	mkdir -p /${USER_NAME} && \
+	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME}
+		
+### Install NICE DCV for high performance stream
+# RUN cd ${WORKDIR} && \
+# 	wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
+#     wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
+# 	tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
+# 	cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
+# 	apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb 1>/dev/null
 
-# < Directly Get source >
-RUN cd / &&\
-		wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
-        wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
-        tar -xvzf nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
-		cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
-		apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb 1>/dev/null
+RUN mkdir -p ${WORKDIR}/OPENCV && cd ${WORKDIR}/OPENCV && \
+    curl -L https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -o opencv-${OPENCV_VERSION}.zip && \
+    curl -L https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -o opencv_contrib-${OPENCV_VERSION}.zip && \
+    unzip opencv-${OPENCV_VERSION}.zip && unzip opencv_contrib-${OPENCV_VERSION}.zip && rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
+    cd opencv-${OPENCV_VERSION} && \
+    mkdir release && cd release && \
+    cmake -D CMAKE_BUILD_TYPE=Release \
+        -D CMAKE_INSTALL_PREFIX=/usr/local \
+        -D WITH_CUDA=ON      \
+        -D WITH_CUDNN=ON     \
+        -D WITH_CUBLAS=ON    \
+        -D OPENCV_DNN_CUDA=ON \
+        -D CUDA_ARCH_BIN=8.7 \
+        -D CUDA_ARCH_PTX=""  \
+        -D OPENCV_GENERATE_PKGCONFIG=ON \
+        -D WITH_GSTREAMER=ON \
+        -D WITH_LIBV4L=ON    \
+        -D ENABLE_FAST_MATH=1 \
+        -D CUDA_FAST_MATH=1  \
+        -D WITH_CUBLAS=ON    \
+        -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules\
+        -D BUILD_EXAMPLES=OFF \
+        -D BUILD_opencv_python3=ON \
+        -D BUILD_opencv_python2=OFF \
+        -D PYTHON_EXECUTABLE=/usr/bin/python3 \
+        -D BUILD_TESTS=OFF \
+        -D BUILD_PERF_TESTS=OFF \
+        -D CMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j5 && \
+    sudo make install && \
+    echo 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH' >> ~/.bashrc && \
+    echo 'export PYTHONPATH=/usr/local/lib/python3.10/site-packages/:$PYTHONPATH' >> ~/.bashrc && \
+    source ~/.bashrc && \
+    sudo ldconfig && \
+    cd ${WORKDIR}/ && rm -rf OPENCV # Clean up
 
-### INSTALL ROS2
+### INSTALL ROS2 and Nav2
 RUN apt update 1>/dev/null && apt -y install locales && \
         locale-gen en_US en_US.UTF-8 && \
-        update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 1>/dev/null
-RUN sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+        update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 1>/dev/null && \
+	sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
-        apt update 1>/dev/null &&\
-        apt install -y --no-install-recommends ros-$ROS_DISTRO-desktop ros-dev-tools 1>/dev/null && \
-		rosdep init && rosdep update 
+    apt update 1>/dev/null &&\
+    apt install -y --no-install-recommends \
+		ros-$ROS_DISTRO-ros-base \
+	    ros-$ROS_DISTRO-tf2-eigen \
+		ros-$ROS_DISTRO-rclcpp \
+		ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+		ros-$ROS_DISTRO-rviz2* \
+		ros-$ROS_DISTRO-rqt \
+		ros-$ROS_DISTRO-rqt-image-view ros-$ROS_DISTRO-rqt-graph \
+		ros-$ROS_DISTRO-rqt-topic      ros-$ROS_DISTRO-rqt-tf-tree \
+		ros-dev-tools 1>/dev/null && \
+	rosdep init && rosdep update 
 
-### Install Gazebo and some Reqs
+### Install GZ and some Reqs
 RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update && apt install -y --no-install-recommends\
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic 1>/dev/null
-
-# Set User	
-RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
-    useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
-	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
-	mkdir -p /${USER_NAME} && \
-	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} 
-
 	
 # # Change user
 USER ${USER_NAME}
@@ -76,10 +129,11 @@ RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1
 
 ### Install Nav2 and rtabmap
 RUN sudo apt install -y  \
-	ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
-	ros-$ROS_DISTRO-navigation2 \
-	ros-$ROS_DISTRO-nav2-bringup \
-	ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
+		ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+		ros-$ROS_DISTRO-navigation2 \
+		ros-$ROS_DISTRO-nav2-bringup \
+		ros-$ROS_DISTRO-rtabmap-ros
+
 
 ### Install Micro XRCE-DDS
 RUN cd /${USER_NAME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
