@@ -54,7 +54,7 @@ USER ${USER_NAME}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd /${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage 
 
 
@@ -73,11 +73,11 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 # RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs)
-RUN mkdir -p ${WORKDIR}/src
-RUN cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
+RUN mkdir -p ${WORKDIR}/src && \
+	cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
 	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
-	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null
-RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
+	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
+	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
 ### Run PX4 Check and first build
 RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
