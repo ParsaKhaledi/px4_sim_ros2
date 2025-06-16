@@ -56,9 +56,9 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 
 
 ### PX4 Setup
-RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
+RUN cd /home/${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd /${USER_NAME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 
+	cd /${USER_NAME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 
 
 ### Install Micro XRCE-DDS
 RUN cd /${USER_NAME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
