@@ -13,9 +13,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 # ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
+ENV HOME=/home/${USER_NAME}
 ENV WORKDIR=/home/${USER_NAME}/ws_px4
 ENV ROS_DISTRO=humble
-WORKDIR /home/${USER_NAME}
+WORKDIR ${WORKDIR}
 
 RUN apt-get clean
 RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
@@ -24,7 +25,6 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	gnupg2 lsb-release iputils-ping\
 	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 \
 	kmod fuse \
-	libdc1394-22-dev \
 	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-base1.0-dev\
 	libgstreamer-plugins-base1.0-dev \
 	pkg-config libgtk-3-dev libavcodec-dev libavformat-dev  libswscale-dev \
@@ -32,18 +32,19 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
     gfortran openexr libatlas-base-dev \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev  \
 	xauth xorg openbox x11-utils\
-	python3 python3-argcomplete python3-pip python3-numpy python3-dev	 \
+	python3 python3-argcomplete python3-pip python3-numpy python3-dev python3-kconfiglib \
+	python3-future python3-jinja2  python3-jsonschema \
 	libcanberra-gtk-module libgl1-mesa-glx\
 	gcc-arm-none-eabi apt-utils  1>/dev/null
 	
 ### Create User	
 RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
-	useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
+    useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
 	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
-	mkdir -p /${USER_NAME} && \
-	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME}
-		
-### Install NICE DCV for high performance stream
+	mkdir -p ${WORKDIR} && \
+	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} ${HOME}
+
+	### Install NICE DCV for high performance stream
 # RUN cd ${WORKDIR} && \
 # 	wget https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY && gpg --import NICE-GPG-KEY && \
 #     wget https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz && \
@@ -51,7 +52,7 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
 # 	cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
 # 	apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb 1>/dev/null
 
-RUN mkdir -p ${WORKDIR}/OPENCV && cd ${WORKDIR}/OPENCV && \
+RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
     curl -L https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -o opencv-${OPENCV_VERSION}.zip && \
     curl -L https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -o opencv_contrib-${OPENCV_VERSION}.zip && \
     unzip opencv-${OPENCV_VERSION}.zip && unzip opencv_contrib-${OPENCV_VERSION}.zip && rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
@@ -85,7 +86,7 @@ RUN mkdir -p ${WORKDIR}/OPENCV && cd ${WORKDIR}/OPENCV && \
     echo 'export PYTHONPATH=/usr/local/lib/python3.10/site-packages/:$PYTHONPATH' >> ~/.bashrc && \
     source ~/.bashrc && \
     sudo ldconfig && \
-    cd ${WORKDIR}/ && rm -rf OPENCV # Clean up
+    cd ${HOME}/ && rm -rf OPENCV # Clean up
 
 ### INSTALL ROS2 and Nav2
 RUN apt update 1>/dev/null && apt -y install locales && \
@@ -106,6 +107,13 @@ RUN apt update 1>/dev/null && apt -y install locales && \
 		ros-dev-tools 1>/dev/null && \
 	rosdep init && rosdep update 
 
+### Install Nav2 and rtabmap
+RUN apt install -y  --no-install-recommends  \
+		ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+		ros-$ROS_DISTRO-navigation2 \
+		ros-$ROS_DISTRO-nav2-bringup \
+		ros-$ROS_DISTRO-rtabmap-ros 1>/dev/null
+
 ### Install GZ and some Reqs
 RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
@@ -119,37 +127,31 @@ WORKDIR /${USER_NAME}/ws_px4
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd /${USER_NAME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
-	chmod +x ./QGroundControl.AppImage
+	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	chmod +x ./QGroundControl.AppImage 
 
-### PX4 Stuff
-RUN cd /${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
+### PX4 Setup
+RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd /${USER_NAME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 
-
-### Install Nav2 and rtabmap
-RUN sudo apt install -y  \
-		ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
-		ros-$ROS_DISTRO-navigation2 \
-		ros-$ROS_DISTRO-nav2-bringup \
-		ros-$ROS_DISTRO-rtabmap-ros
-
+	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
 ### Install Micro XRCE-DDS
-RUN cd /${USER_NAME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
-	cd /${USER_NAME}/Micro-XRCE-DDS-Agent &&\
+RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
+	cd ${HOME}/Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
-	make && sudo make install && sudo ldconfig /usr/local/lib/ &&\
-	cd /${USER_NAME} && rm -rf /Micro-XRCE-DDS-Agent/build
+	make 1>/dev/null && sudo make install 1>/dev/null && sudo ldconfig /usr/local/lib/ &&\
+	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build 1>/dev/null
 
 ### Build WS (px4_ros_com && px4_msgs)
-RUN mkdir -p ${WORKDIR}/src
-RUN cd ${WORKDIR}/src && git clone -b release/1.15 https://github.com/PX4/px4_msgs.git
-RUN cd ${WORKDIR}/src && git clone https://github.com/PX4/px4_ros_com.git
-RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
+RUN mkdir -p ${WORKDIR}/src && \
+	cd ${WORKDIR}/src && pip3 install --user \ 
+	pyros-genmsg setuptools numpy kconfiglib future jinja2 jsonschema && \
+	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
+	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
 ### Run PX4 Check
-RUN cd /${USER_NAME}/PX4-Autopilot && make check_px4_sitl_default
+RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 
 # RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR}/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
 
