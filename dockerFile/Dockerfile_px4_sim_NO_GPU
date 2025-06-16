@@ -13,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
 # ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
+ENV HOME=/home/${USER_NAME}
 ENV WORKDIR=/home/${USER_NAME}/ws_px4
 ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
@@ -43,40 +44,43 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
 	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
-	mkdir -p /${USER_NAME} && \
-	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME} 
+	mkdir -p ${WORKDIR} && \
+	chmod 0440 /etc/sudoers.d/${USER_NAME} && chown -R ${USER_NAME}:${USER_NAME} ${HOME}
 
 ### Change user
 USER ${USER_NAME}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd /${USER_NAME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	cd /${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
 	chmod +x ./QGroundControl.AppImage
 
 
 ### PX4 Setup
-RUN cd /home/${USER_NAME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
+# USER root
+RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd /${USER_NAME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 
+	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 
+# USER ${USER_NAME}
 
 ### Install Micro XRCE-DDS
-RUN cd /${USER_NAME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
-	cd /${USER_NAME}/Micro-XRCE-DDS-Agent &&\
+RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
+	cd ${HOME}/Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
 	make && sudo make install && sudo ldconfig /usr/local/lib/ &&\
-	cd /${USER_NAME} && rm -rf /Micro-XRCE-DDS-Agent/build
+	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build
 	
 # RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs)
 RUN mkdir -p ${WORKDIR}/src
-RUN cd ${WORKDIR}/src && git clone -b release/1.15 https://github.com/PX4/px4_msgs.git
-RUN cd ${WORKDIR}/src && git clone https://github.com/PX4/px4_ros_com.git
+RUN cd ${WORKDIR}/src && \
+	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git && \
+	git clone https://github.com/PX4/px4_ros_com.git
 RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
-### Run PX4 Check
-RUN cd /${USER_NAME}/PX4-Autopilot && make check_px4_sitl_default
+### Run PX4 Check and first build
+RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 
 ### Install m-explore
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git
