@@ -12,8 +12,8 @@ ARG USER_GID=1000
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
-ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
-ENV WORKDIR=/${USER_NAME}/ws_px4
+# ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
+ENV WORKDIR=/home/${USER_NAME}/ws_px4
 ENV ROS_DISTRO=humble
 WORKDIR ${WORKDIR}
 
@@ -39,7 +39,7 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 # RUN pip3 install --user -U NumPy==1.19
 # RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
 
-### Set User	
+### Create User	
 RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
 	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
