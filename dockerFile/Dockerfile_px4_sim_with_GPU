@@ -26,7 +26,7 @@ WORKDIR ${WORKDIR}
 RUN apt-get clean
 RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	apt install -y --no-install-recommends \
-	vim udev git sudo unzip curl cmake wget tmux \
+	vim udev git sudo unzip curl cmake make wget tmux build-essential\
 	gnupg2 lsb-release iputils-ping\
 	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 \
 	kmod fuse \
@@ -59,7 +59,8 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
 RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
     curl -L https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -o opencv-${OPENCV_VERSION}.zip && \
     curl -L https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -o opencv_contrib-${OPENCV_VERSION}.zip && \
-    unzip opencv-${OPENCV_VERSION}.zip && unzip opencv_contrib-${OPENCV_VERSION}.zip && rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
+    unzip opencv-${OPENCV_VERSION}.zip 1>/dev/null && unzip opencv_contrib-${OPENCV_VERSION}.zip 1>/dev/null && \
+	rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
     cd opencv-${OPENCV_VERSION} && \
     mkdir release && cd release && \
     cmake -D CMAKE_BUILD_TYPE=Release \
