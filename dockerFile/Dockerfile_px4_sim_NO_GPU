@@ -75,7 +75,7 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 
 ### Build WS (px4_ros_com && px4_msgs)
 RUN mkdir -p ${WORKDIR}/src
-RUN cd ${WORKDIR}/src && \
+RUN cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
 	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git && \
 	git clone https://github.com/PX4/px4_ros_com.git
 RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
