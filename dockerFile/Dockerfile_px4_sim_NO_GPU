@@ -22,9 +22,9 @@ WORKDIR ${WORKDIR}
 RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux\
-	ros-dev-tools iputils-ping\
+	iputils-ping\
 	gnupg2 lsb-release \
-	xauth xorg openbox python3-argcomplete python3 python3-pip \
+	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl fuse kmod libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
@@ -32,6 +32,7 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update 1>/dev/null && apt install -y --no-install-recommends \
 	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic \
+	ros-dev-tools \
 	ros-$ROS_DISTRO-rmw-cyclonedds-cpp\
 	ros-$ROS_DISTRO-navigation2 \
 	ros-$ROS_DISTRO-nav2-bringup \
@@ -53,7 +54,7 @@ USER ${USER_NAME}
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
 	cd /${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
-	chmod +x ./QGroundControl.AppImage
+	chmod +x ./QGroundControl.AppImage 
 
 
 ### PX4 Setup
