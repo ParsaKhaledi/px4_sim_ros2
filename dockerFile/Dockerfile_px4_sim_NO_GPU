@@ -25,7 +25,7 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	iputils-ping\
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib \
-	python3-future python3-jinja2\
+	python3-future python3-jinja2 python3-jsonschema\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl fuse kmod libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
@@ -59,26 +59,24 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 
 
 ### PX4 Setup
-# USER root
 RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
 	--progress --verbose 1>/dev/null && \
-	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 
-# USER ${USER_NAME}
+	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
 ### Install Micro XRCE-DDS
 RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
 	cd ${HOME}/Micro-XRCE-DDS-Agent &&\
 	mkdir build && cd build && cmake .. &&\
-	make && sudo make install && sudo ldconfig /usr/local/lib/ &&\
-	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build
+	make 1>/dev/null && sudo make install 1>/dev/null && sudo ldconfig /usr/local/lib/ &&\
+	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build 1>/dev/null
 	
 # RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs)
 RUN mkdir -p ${WORKDIR}/src
 RUN cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
-	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git && \
-	git clone https://github.com/PX4/px4_ros_com.git
+	git clone -b release/1.15 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null
 RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
 ### Run PX4 Check and first build
