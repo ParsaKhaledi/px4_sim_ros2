@@ -1,5 +1,12 @@
 #!/bin/bash
 
+USER_NAME=px4
+HOME=/home/${USER_NAME}
+WORKDIR=/home/${USER_NAME}/ws_px4
+
 source /opt/ros/$ROS_DISTRO/setup.bash
-source /ws_px4_ros2/install/setup.bash
-ros2 run explore_lite explore --ros-args --params-file /px4_sim_ros2/Params/m-explore_params.yaml
+source ${WORKDIR}/install/setup.bash
+
+ros2 run explore_lite explore --ros-args \
+     --params-file ${HOME}/volume/includes/gz/m-explore_params.yaml
+# m-explore_params.yaml not included here

@@ -1,8 +1,11 @@
 #!/bin/bash
 
+USER_NAME=px4
+HOME=/home/${USER_NAME}
+WORKDIR=/home/${USER_NAME}/ws_px4
 source /opt/ros/$ROS_DISTRO/setup.bash
-export CamerType=$1
 
+export CamerType=$1
 if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      echo "Run Rtabmap with $CamerType camera"
      ros2 launch rtabmap_launch rtabmap.launch.py \
