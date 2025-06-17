@@ -6,7 +6,7 @@ LABEL maintainer="Parsa Khaledi <pa.aerospace@gmail.com>"
 SHELL ["/bin/bash", "-c"]
 
 ARG USER_NAME=px4
-ARG USER_UID=1000
+ARG USER_UID=2000
 ARG USER_GID=2000
 ARG OPENCV_VERSION=4.11.0 # Define OpenCV version as an ARG
 
