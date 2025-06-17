@@ -1,5 +1,5 @@
 ARG ROS_DISTRO=humble
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn8-devel-ubuntu22.04
 
 LABEL maintainer="Parsa Khaledi <pa.aerospace@gmail.com>"
 
@@ -66,7 +66,7 @@ RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
     cmake -D CMAKE_BUILD_TYPE=Release \
         -D CMAKE_INSTALL_PREFIX=/usr/local \
         -D WITH_CUDA=ON      \
-        -D WITH_CUDNN=OFF     \
+        -D WITH_CUDNN=ON     \
         -D WITH_CUBLAS=ON    \
         -D OPENCV_DNN_CUDA=ON \
         -D CUDA_ARCH_BIN=8.7 \
