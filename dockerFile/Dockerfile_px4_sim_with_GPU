@@ -16,6 +16,9 @@ ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
 ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+ENV PATH="/root/.local/bin:$PATH"
 # ENV ROS2_INSTALL_PATH=/opt/ros/$ROS_DISTRO
 ENV HOME=/home/${USER_NAME}
 ENV WORKDIR=/home/${USER_NAME}/ws_px4
@@ -29,7 +32,7 @@ RUN apt update 1>/dev/null && apt -y upgrade 1>/dev/null && \
 	vim udev git sudo unzip curl cmake make wget tmux build-essential\
 	gnupg2 lsb-release iputils-ping\
 	gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl libpulse-mainloop-glib0 \
-	kmod fuse libx11-6 libgtk-3-dev  libglu1-mesa \
+	kmod fuse libx11-6 libgtk-3-dev  libglu1-mesa libopenjp2-7-dev \
 	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-base1.0-dev\
 	libgstreamer-plugins-base1.0-dev \
 	pkg-config libgtk-3-dev libavcodec-dev libavformat-dev  libswscale-dev \
@@ -94,8 +97,8 @@ RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
     cd ${HOME}/ && rm -rf OPENCV # Clean up
 
 ### INSTALL ROS2 and Nav2
-RUN apt update 1>/dev/null && apt -y install locales && \
-        locale-gen en_US en_US.UTF-8 && \
+RUN apt update 1>/dev/null && apt -y install locales --no-install-recommends && \
+        ocale-gen en_US.UTF-8 && \
         update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 1>/dev/null && \
 	sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null && \
@@ -136,9 +139,17 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 	chmod +x ./QGroundControl.AppImage 
 
 ### PX4 Setup
-RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
-	--progress --verbose 1>/dev/null && \
-	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
+# RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive 1>/dev/null && \
+# 	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
+
+# PX4 Setup using zip archive instead of git clone
+RUN cd ${HOME} && \
+    wget https://github.com/PX4/PX4-Autopilot/archive/refs/tags/v1.15.4.zip && \
+    unzip v1.15.4.zip && \
+    mv PX4-Autopilot-1.15.4 PX4-Autopilot && \
+    rm v1.15.4.zip && \
+    cd ${HOME}/PX4-Autopilot && \
+    sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
 ### Install Micro XRCE-DDS
 RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git && \
