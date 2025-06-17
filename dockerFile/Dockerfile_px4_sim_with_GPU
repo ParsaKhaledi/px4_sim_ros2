@@ -66,7 +66,7 @@ RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
     cmake -D CMAKE_BUILD_TYPE=Release \
         -D CMAKE_INSTALL_PREFIX=/usr/local \
         -D WITH_CUDA=ON      \
-        -D WITH_CUDNN=ON     \
+        -D WITH_CUDNN=OFF     \
         -D WITH_CUBLAS=ON    \
         -D OPENCV_DNN_CUDA=ON \
         -D CUDA_ARCH_BIN=8.7 \
