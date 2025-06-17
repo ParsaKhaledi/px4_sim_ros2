@@ -1,5 +1,5 @@
 ARG ROS_DISTRO=humble
-FROM nvidia/cuda:12.4.1-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
 
 LABEL maintainer="Parsa Khaledi <pa.aerospace@gmail.com>"
 
