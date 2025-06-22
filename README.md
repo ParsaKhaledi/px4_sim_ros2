@@ -19,6 +19,19 @@ sudo apt-get install xauth xorg openbox
 ## PX4
 [PX4](https://docs.px4.io/v1.15/en/) is the Professional Autopilot. Developed by world-class developers from industry and academia, and supported by an active world wide community, it powers all kinds of vehicles from racing and cargo drones through to ground vehicles and submersibles.The V1.15.3 version of autopilot is used for this project and can be found in [PX4-Autopilot Gtihub](https://github.com/PX4/PX4-Autopilot/tree/v1.15.4).
 
+## QgroundControl
+QGroundControl (QGC) is a cross-platform ground control station (GCS) software used for controlling and managing drones, particularly those using PX4 or ArduPilot autopilots. It provides a user-friendly interface for flight control, mission planning, and vehicle setup. To connect to sitl, in QGC’s Application Settings → Comm Links → Add, choose “UDP”—enter the PX4 container’s IP (or hostname) and add these ports to a udp connection:
+```
+px4_sim:14550
+px4_sim:14540
+px4_sim:14580
+px4_sim:18570
+```
+These ports can be found in outputs of px4_sitl make command that can be extracted by:
+```
+docker logs px4_sim 2>&1 | grep mavlink
+```
+
 ## ROS2
 The Robot Operating System [(ROS)](https://www.ros.org/) is a set of software libraries and tools that help you build robot applications. From drivers to state-of-the-art algorithms, and with powerful developer tools, ROS has what you need for your next robotics project. And it's all open source. [Harmonic](https://docs.ros.org/en/humble/index.html) version of ros2 is used for this project.
 
