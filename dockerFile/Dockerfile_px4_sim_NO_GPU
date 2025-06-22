@@ -54,7 +54,7 @@ USER ${USER_NAME}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage &&\
+	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage &&\
 	chmod +x ./QGroundControl.AppImage 
 
 
