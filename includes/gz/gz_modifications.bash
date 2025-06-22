@@ -2,7 +2,7 @@
 
 echo "Start Modifications for running Simulation"
 input=$1
-WORKDIR=/px4
+WORKDIR=/home/px4
 echo "Selected Camera Type: $input"
 
 if [ "$input" = Stereo ] || [ "$input" = stereo ]; then
