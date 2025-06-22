@@ -1,6 +1,6 @@
 services:
   PX4:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registry}/px4_sim:${px4TAG:?error}"
     container_name: px4_sim
     hostname: px4_sim
     tty: true
@@ -10,12 +10,14 @@ services:
     networks:
       px4:
         ipv4_address: "10.20.10.2"
-    # expose:
-    #   - 14450
-    #   - 14460
-    #   - 14445
-    #   - 18570
-    #   - 14550
+    expose:
+      - 5760
+      - 14450
+      - 14550
+      - 14460
+      - 14445
+      - 18570
+
 
     environment:
       DISPLAY: ${DISPLAY}
@@ -24,8 +26,8 @@ services:
         
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /dev:/dev/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - /dev/:/dev/
       - ./includes/gz/:/home/px4/volume/includes/gz/
       - ./includes/gz/startFiles/:/home/px4/volume/startFiles
       - ./Params:/home/px4/volume/Params
@@ -41,14 +43,14 @@ services:
 
     command: /bin/bash -c "
       . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
+      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
       /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
        "
 
-  StaticTransform:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
-    container_name: st
-    hostname: st
+  StatePublisher:
+    image: "${registry}/px4_sim:${px4TAG:?error}"
+    container_name: statePublisher
+    hostname: statePublisher
     tty: true
     privileged: true
     depends_on:
@@ -65,7 +67,7 @@ services:
         
     volumes:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-       - ./includes/gz/:/home/px4/volume/includes/gz/
+      - ./includes/gz/:/home/px4/volume/includes/gz/
       - ./includes/gz/startFiles/:/home/px4/volume/startFiles
       - ./Params:/home/px4/volume/Params
 
@@ -77,7 +79,7 @@ services:
 
 
   Qground:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registry}/px4_sim:${px4TAG:?error}"
     container_name: qground
     hostname: qground
     privileged: true
@@ -95,8 +97,9 @@ services:
       "XAUTHORITY": ${XAUTH}
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - ./.qground/config/:/home/px4/.config
-      - ./.qground/cache/:/home/px4/.cache
+      - ./.qground/config/:/home/px4/.config/QGroundControl
+      - ./.qground/cache/:/home/px4/.cache/QGroundControl
+      - ./.qground/local:/home/px4/.local/share/QGroundControl/
       # - Add bind folders to save Qground Settings and map 
 
     command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
@@ -147,7 +150,7 @@ services:
   #     source /home/px4/ws_px4/install/setup.bash && rqt"
 
   uxrcedds:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registry}/px4_sim:${px4TAG:?error}"
     container_name: uxrcedds
     hostname: uxrcedds
     # depends_on:
@@ -168,7 +171,7 @@ services:
       source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
   Rtabmap:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registry}/px4_sim:${px4TAG:?error}"
     container_name: rtabmap
     hostname: rtabmap
     # depends_on:
@@ -191,13 +194,13 @@ services:
       - ./includes/gz/startFiles/:/home/px4/volume/startFiles
       - ./Params:/home/px4/volume/Params
 
-    command: /bin/bash -c "sleep inf"
+    # command: /bin/bash -c "sleep inf"
 
-    # command: /bin/bash -c "
-    #  . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
+    command: /bin/bash -c "
+     . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
 
   NAV2:
-    image: ${registry}/px4_sim:${px4TAG:?error}"
+    image: "${registry}/px4_sim:${px4TAG:?error}"
     container_name: nav2
     hostname: nav2
     # depends_on:
