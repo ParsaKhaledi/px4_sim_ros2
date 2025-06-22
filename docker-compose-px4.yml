@@ -10,13 +10,14 @@ services:
     networks:
       px4:
         ipv4_address: "10.20.10.2"
-    expose:
-      - 5760
-      - 14450
-      - 14550
-      - 14460
-      - 14445
-      - 18570
+    ports:
+      - "5760:5760"
+      # - "14550:14550/udp"
+      - "14550:14550/udp"
+      - "14540:14540/udp"
+      - "14580:14580/udp"
+      - "18570:18570/udp"
+
 
 
     environment:
@@ -99,7 +100,8 @@ services:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
       - ./.qground/config/:/home/px4/.config/QGroundControl
       - ./.qground/cache/:/home/px4/.cache/QGroundControl
-      - ./.qground/local:/home/px4/.local/share/QGroundControl/
+      - ./.qground/local/:/home/px4/.local/share/QGroundControl/
+      - ./.qground/Documents/QGroundControl:/home/px4/Documents/QGroundControl
       # - Add bind folders to save Qground Settings and map 
 
     command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
