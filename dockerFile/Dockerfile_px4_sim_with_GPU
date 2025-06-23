@@ -171,7 +171,7 @@ RUN echo "set -g mouse on" >> ~/.tmux.conf
 
 ### Write in ~/.bashrc
 RUN sudo echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ${HOME}/.bashrc && \
-	echo "source ${WORKDIR}/install/setup.bash" >> ${HOME}/.bashrc 
+	sudo echo "source ${WORKDIR}/install/setup.bash" >> ${HOME}/.bashrc 
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
