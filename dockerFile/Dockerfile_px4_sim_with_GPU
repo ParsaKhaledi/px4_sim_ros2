@@ -170,8 +170,8 @@ RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 RUN echo "set -g mouse on" >> ~/.tmux.conf 
 
 ### Write in ~/.bashrc
-RUN sudo echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ${HOME}/.bashrc && \
-	sudo echo "source ${WORKDIR}/install/setup.bash" >> ${HOME}/.bashrc 
+# RUN sudo echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ${HOME}/.bashrc && \
+# 	sudo echo "source ${WORKDIR}/install/setup.bash" >> ${HOME}/.bashrc 
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ### Finilize
