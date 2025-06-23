@@ -145,7 +145,7 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 
 # PX4 Setup using zip archive instead of git clone
 RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.15.4 --recursive \
-	--progress --verbose 1>/dev/null && \
+	--progress 1>/dev/null && \
 	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
 ### Install Micro XRCE-DDS
