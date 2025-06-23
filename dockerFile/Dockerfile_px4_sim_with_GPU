@@ -166,8 +166,6 @@ RUN mkdir -p ${WORKDIR}/src && \
 ### Run PX4 Check
 RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 
-# RUN source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR}/src/px4_ros_com/scripts/ && source build_ros2_workspace.bash
-
 ### Tumux conf
 RUN echo "set -g mouse on" >> ~/.tmux.conf 
 
