@@ -11,7 +11,7 @@ on:
 env:
   Registery: docker.io
   ImageName: alienkh/px4_sim
-  ImageTag: 1.15.1_${{ github.run_number }}_GPU
+  ImageTag: 1.15.1_${{ github.run_number }}
 
 jobs:
 
@@ -49,6 +49,6 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: ${{ env.Registery }}/${{ env.ImageName }}:${{ env.ImageTag }}_GPUEnabled
+          tags: ${{ env.Registery }}/${{ env.ImageName }}:${{ env.ImageTag }}_GPU
           file: ./dockerFile/Dockerfile_px4_sim_with_GPU
 
