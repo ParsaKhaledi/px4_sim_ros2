@@ -38,7 +38,7 @@ services:
 
     # command: /bin/bash -c "
     #   . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-    #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
+    #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
     #   /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
     #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
 
@@ -101,7 +101,8 @@ services:
       - ./.qground/config/:/home/px4/.config/QGroundControl
       - ./.qground/cache/:/home/px4/.cache/QGroundControl
       - ./.qground/local/:/home/px4/.local/share/QGroundControl/
-      - ./.qground/Documents/QGroundControl:/home/px4/Documents/QGroundControl
+      - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
+      - ./.qground/Documents/QGroundControl/:/home/px4/Documents/QGroundControl/
       # - Add bind folders to save Qground Settings and map 
 
     command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 

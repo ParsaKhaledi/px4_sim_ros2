@@ -10,12 +10,13 @@ services:
     networks:
       px4:
         ipv4_address: "10.20.10.2"
-    # expose:
-    #   - 14450
-    #   - 14460
-    #   - 14445
-    #   - 18570
-    #   - 14550
+    ports:
+      - "5760:5760"
+      # - "14550:14550/udp"
+      - "14550:14550/udp"
+      - "14540:14540/udp"
+      - "14580:14580/udp"
+      - "18570:18570/udp"
 
     environment:
       DISPLAY: ${DISPLAY}
@@ -24,8 +25,8 @@ services:
         
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /dev:/dev/
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - /dev:/dev/
       - ./includes/gz/:/home/px4/volume/includes/gz/
       - ./includes/gz/startFiles/:/home/px4/volume/startFiles
       - ./Params:/home/px4/volume/Params
@@ -40,10 +41,10 @@ services:
     #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
 
     command: /bin/bash -c "
-      . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
+      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
       /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
        "
+    # . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
 
   StaticTransform:
     image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
@@ -95,8 +96,11 @@ services:
       "XAUTHORITY": ${XAUTH}
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - ./.qground/config/:/home/px4/.config
-      - ./.qground/cache/:/home/px4/.cache
+      - ./.qground/config/:/home/px4/.config/QGroundControl
+      - ./.qground/cache/:/home/px4/.cache/QGroundControl
+      - ./.qground/local/:/home/px4/.local/share/QGroundControl/
+      - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
+      - ./.qground/Documents/QGroundControl/:/home/px4/Documents/QGroundControl/
       # - Add bind folders to save Qground Settings and map 
 
     command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
