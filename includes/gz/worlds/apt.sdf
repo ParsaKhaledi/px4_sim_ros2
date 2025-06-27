@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <sdf version="1.6">
-  <world name="apt_world">
+  <world name="apt">
     <physics type="ode">
       <max_step_size>0.004</max_step_size>
       <real_time_factor>1.0</real_time_factor>
@@ -178,7 +178,7 @@
       <shadows>1</shadows>
     </scene> -->
 
-    <model name="apt_world">
+    <model name="apt">
       <static>true</static>
       <link name="mesh">
         <pose>0.0 0.0 1.75 0 0 -1.68</pose>
