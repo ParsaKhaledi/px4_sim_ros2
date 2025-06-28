@@ -56,7 +56,7 @@ xhost +Local:*
 
 # To select Camera Type and world : CameraType=rgbd or Stereo
 # To select World                 : World=apt_world (Not Working for now -> go to perivious commits)
-CameraType=rgbd World=apt_world docker compose -f docker-compose-px4.yml up -d
+CameraType=rgbd World=apt docker compose -f docker-compose-px4.yml up -d
 
 # Run Simulation in your host Tmux
 CameraType=rgbd World=apt ./includes/gz/startFiles/tmux-session.sh
