@@ -21,12 +21,12 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      echo "Run Rtabmap with $CamerType camera"
      ros2 launch rtabmap_launch rtabmap.launch.py   \
-          args:='-d  --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Grid/MapFrameProjection true  \
-          --NormalsSegmentation false --Grid/MaxGroundHeight 0.5  --Grid/MaxObstacleHeight 2.2 --RGBD/StartAtOrigin true        \
-          --MaxFeatures 100 '    \
-          rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info \
-          imu_topic:=/imu approx_sync:=false    \
-          use_sim_time:=false  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
+          args:='-d  --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Grid/MapFrameProjection true   \
+          --NormalsSegmentation false --Grid/MaxGroundHeight 0.0  --Grid/MaxObstacleHeight 3.0 --RGBD/StartAtOrigin true         \
+          --MaxFeatures 100 --Grid/RayTracing true --Grid/3D true  --Grid/FlatObstacleDetected true                            ' \
+          rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \
+          imu_topic:=/imu approx_sync:=true    \
+          use_sim_time:=true  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
 else
     echo "Invalid CamerType"
     exit 1
