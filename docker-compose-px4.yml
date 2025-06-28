@@ -1,264 +1,302 @@
 services:
-  PX4:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: px4_sim
-    hostname: px4_sim
-    tty: true
-    privileged: true
-    restart: unless-stopped
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.2"
-    ports:
-      - "5760:5760"
-      # - "14550:14550/udp"
-      - "14550:14550/udp"
-      - "14540:14540/udp"
-      - "14580:14580/udp"
-      - "18570:18570/udp"
-
-
-
-    environment:
-      DISPLAY: ${DISPLAY}
-      XAUTHORITY: ${XAUTH}
-      CameraType: ${CameraType}
+    PX4:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: px4_sim
+      hostname: px4_sim
+      tty: true
+      privileged: true
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD", "/home/px4/volume/HealthCheck/check_multi_topic_pub.bash", "2",
+              "/clock", "/fmu/out/vehicle_odometry" ]      
+        interval:     10s
+        timeout:      5s
+        retries:      3
+        start_period: 15s
         
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - /dev/:/dev/
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.2"
+      ports:
+        - "5760:5760"
+        # - "14550:14550/udp"
+        - "14550:14550/udp"
+        - "14540:14540/udp"
+        - "14580:14580/udp"
+        - "18570:18570/udp"
+        - "8888:8888"
 
-    # command: /bin/bash -c "sleep inf"
-    # entrypoint: ["/bin/sh", "-c"]
+      environment:
+        DISPLAY: ${DISPLAY}
+        XAUTHORITY: ${XAUTH}
+        CameraType: ${CameraType}
+        XRCE_DDS_AGENT_IP: "10.20.10.7"
+          
+      volumes:
+        - /tmp/.X11-unix/:/tmp/.X11-unix/
+        - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - /dev/:/dev/
+        - ./HealthCheck/:/home/px4/volume/HealthCheck/
+        - ./includes/gz/:/home/px4/volume/includes/gz/
+        - ./includes/gz/startFiles/:/home/px4/volume/startFiles/
+        - ./Params:/home/px4/volume/Params/
 
-    # command: /bin/bash -c "
-    #   . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-    #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
-    #   /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
-    #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
+      # command: /bin/bash -c "sleep inf"
+      # entrypoint: ["/bin/sh", "-c"]
 
-    command: /bin/bash -c "
-      . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
-      /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
-       "
+      # command: /bin/bash -c "
+      #   . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
+      #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
+      #   /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
+      #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
 
-  StatePublisher:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: statePublisher
-    hostname: statePublisher
-    tty: true
-    privileged: true
-    depends_on:
-      - PX4
-    restart: unless-stopped
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.10"
+      command: /bin/bash -c "
+        . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
+        MicroXRCEAgent udp4 -p 8888 & \
+        /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
+        /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
+        "
 
-    # environment:
-    #   DISPLAY: ${DISPLAY}
-    #   XAUTHORITY: ${XAUTH}
+    StatePublisher:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: statePublisher
+      hostname: statePublisher
+      tty: true
+      privileged: true
+      depends_on:
+        PX4:
+          condition: service_healthy
+      restart: unless-stopped
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.3"
+
+      # environment:
+      #   DISPLAY: ${DISPLAY}
+      #   XAUTHORITY: ${XAUTH}
+          
+      volumes:
+        - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./includes/gz/:/home/px4/volume/includes/gz/
+        - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+        - ./Params:/home/px4/volume/Params
+
+      # command: /bin/bash -c "sleep inf"
+      # entrypoint: ["/bin/sh", "-c"]
+
+      command: /bin/bash -c "
+        /home/px4/volume/startFiles/gz_start_state_publisher.sh"
+
+
+    Qground:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: qground
+      hostname: qground
+      privileged: true
+      restart: on-failure  
+      tty: true
+      # depends_on:
+      #   - PX4
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.4"
+      
+      # restart: unless-stopped
+      environment:
+        DISPLAY: ${DISPLAY}
+        "XAUTHORITY": ${XAUTH}
+      volumes:
+        - /tmp/.X11-unix/:/tmp/.X11-unix/
+        - ./.qground/config/:/home/px4/.config/QGroundControl
+        - ./.qground/cache/:/home/px4/.cache/QGroundControl
+        - ./.qground/local/:/home/px4/.local/share/QGroundControl/
+        - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
+        - ./.qground/.config/:/home/px4/.config/
+        # - Add bind folders to save Qground Settings and map 
+
+      command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
+
+
+    # imu_filter:
+    #   image: ${registry}/px4_sim:${px4TAG:?error}"
+    #   privileged: true
+    #   # restart: unless-stopped
+    #   network_mode: "host"
+    #   # networks:
+    #   #   mins:
+    #   #     ipv4_address: "10.20.10.5"
+    #   depends_on:
+    #     # - roscore
+    #     - oak
+    #   # environment:
+    #   #   DISPLAY: ${DISPLAY}
+    #   #   "XAUTHORITY": ${XAUTH}
+    #   volumes:
+    #     # - /tmp/.X11-unix/:/tmp/.X11-unix/
+    #     # - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+    #     - /dev/:/dev/
+    #   command: /bin/bash -c "
+    #     rosrun imu_filter_madgwick imu_filter_node \
+    #     _use_mag:=false _use_magnetic_field_msg:=false _publish_tf:=false _world_frame:='enu' 
+    #      /imu/data_raw:=/stereo_inertial_publisher/imu \
+    #      /imu/data:=/imu/data "
+
+    # rqt:
+    #   image: ${registry}/px4_sim:${px4TAG:?error}"
+    #   container_name: rqt
+    #   hostname: rqt
+    #   tty: true
+    #   # network_mode: "host"
+    #   networks:
+    #     px4:
+    #       ipv4_address: "10.20.10.6"
+    #   # restart: unless-stopped
+    #   depends_on:
+    #     - PX4
+    #   environment:
+    #     DISPLAY: ${DISPLAY}
+    #     "XAUTHORITY": ${XAUTH}
+    #   volumes:
+    #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+    #   command: /bin/bash -c "
+    #     source /home/px4/ws_px4/install/setup.bash && rqt"
+
+    # uxrcedds:
+    #   image: "${registry}/px4_sim:${px4TAG:?error}"
+    #   container_name: uxrcedds
+    #   hostname: uxrcedds
+    #   tty: true
+    #   restart: unless-stopped    
+    #   healthcheck:
+    #     test: ["CMD", "/home/px4/volume/HealthCheck/check_multi_topic_pub.bash", "1",
+    #            "/fmu/out/vehicle_odometry" ]      
+    #     interval:     10s
+    #     timeout:      5s
+    #     retries:      3
+    #     start_period: 5s
+    #   depends_on:
+    #     PX4:
+    #       condition: service_healthy
+    #     StatePublisher:
+    #       condition: service_started
+      
+    #   # network_mode: "host"
+    #   networks:
+    #     px4:
+    #       ipv4_address: "10.20.10.7"
+    #   # restart: unless-stopped
+    #   environment:
+    #     DISPLAY: ${DISPLAY}
+    #     "XAUTHORITY": ${XAUTH}
+    #   volumes:
+    #     - /tmp/.X11-unix/:/tmp/.X11-unix/
+    #     - ./HealthCheck/:/home/px4/volume/HealthCheck/
+
+    #   command: /bin/bash -c "
+    #     source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
+
+    Rtabmap:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: rtabmap
+      hostname: rtabmap
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD", "/home/px4/volume/HealthCheck/check_multi_topic_pub.bash", "1",
+              "/rtabmap/odom"] 
+      depends_on:
+        PX4:
+          condition: service_healthy
+        StatePublisher:
+          condition: service_started
+        # uxrcedds:
+        #   condition: service_healthy
+      tty: true
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.8"
+      # restart: unless-stopped
+      environment:
+        - DISPLAY=${DISPLAY}
+        - XAUTHORITY=${XAUTH}
+        - CamerType=$CamerType
+
+      volumes:
+        - /tmp/.X11-unix/:/tmp/.X11-unix/
+        - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./includes/gz/:/home/px4/volume/includes/gz/
+        - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+        - ./Params:/home/px4/volume/Params
+
+      # command: /bin/bash -c "sleep inf"
+
+      command: /bin/bash -c "
+        . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
+
+    NAV2:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: nav2
+      hostname: nav2
+      restart: unless-stopped
+      depends_on:
+        PX4:
+          condition: service_healthy
+        Rtabmap:
+          condition: service_started
+      tty: true
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.9"
+      environment:
+        DISPLAY: ${DISPLAY}
+        "XAUTHORITY": ${XAUTH}
+      volumes:
+        - /tmp/.X11-unix/:/tmp/.X11-unix/
+        - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./includes/gz/:/home/px4/volume/includes/gz/
+        - ./includes/gz/startFiles/:/home/px4/volume/startFiles
+        - ./includes/gz/Params:/home/px4/volume/Params
+      
+      # command: /bin/bash -c "sleep inf"
+
+      command: /bin/bash -c "
+        ros2 launch nav2_bringup navigation_launch.py \
+        params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
         
-    volumes:
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
 
-    # command: /bin/bash -c "sleep inf"
-    # entrypoint: ["/bin/sh", "-c"]
+    Nav2_Rviz:
+      image: "${registry}/px4_sim:${px4TAG:?error}"
+      container_name: nav2_rviz
+      hostname: nav2_rivz
+      tty: true
+      privileged: true
+      restart: unless-stopped
+      depends_on:
+        NAV2:
+          condition: service_started
+      # network_mode: "host"
+      networks:
+        px4:
+          ipv4_address: "10.20.10.10"
 
-    command: /bin/bash -c "
-      /home/px4/volume/startFiles/gz_start_state_publisher.sh"
+      environment:
+        DISPLAY: ${DISPLAY}
+        XAUTHORITY: ${XAUTH}
+          
+      volumes:
+        - /tmp/.X11-unix/:/tmp/.X11-unix/
+        - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./Params:/home/px4/volume/Params
 
+      # command: /bin/bash -c "sleep inf"
 
-  Qground:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: qground
-    hostname: qground
-    privileged: true
-    tty: true
-    # depends_on:
-    #   - PX4
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.3"
-    
-    # restart: unless-stopped
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - ./.qground/config/:/home/px4/.config/QGroundControl
-      - ./.qground/cache/:/home/px4/.cache/QGroundControl
-      - ./.qground/local/:/home/px4/.local/share/QGroundControl/
-      - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
-      - ./.qground/Documents/QGroundControl/:/home/px4/Documents/QGroundControl/
-      # - Add bind folders to save Qground Settings and map 
-
-    command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
-
-
-  # imu_filter:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
-  #   privileged: true
-  #   # restart: unless-stopped
-  #   network_mode: "host"
-  #   # networks:
-  #   #   mins:
-  #   #     ipv4_address: "10.20.10.4"
-  #   depends_on:
-  #     # - roscore
-  #     - oak
-  #   # environment:
-  #   #   DISPLAY: ${DISPLAY}
-  #   #   "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     # - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #     # - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-  #     - /dev/:/dev/
-  #   command: /bin/bash -c "
-  #     rosrun imu_filter_madgwick imu_filter_node \
-  #     _use_mag:=false _use_magnetic_field_msg:=false _publish_tf:=false _world_frame:='enu' 
-  #      /imu/data_raw:=/stereo_inertial_publisher/imu \
-  #      /imu/data:=/imu/data "
-
-  # rqt:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
-  #   container_name: rqt
-  #   hostname: rqt
-  #   tty: true
-  #   # network_mode: "host"
-  #   networks:
-  #     px4:
-  #       ipv4_address: "10.20.10.5"
-  #   # restart: unless-stopped
-  #   depends_on:
-  #     - PX4
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #   command: /bin/bash -c "
-  #     source /home/px4/ws_px4/install/setup.bash && rqt"
-
-  uxrcedds:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: uxrcedds
-    hostname: uxrcedds
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.6"
-    # restart: unless-stopped
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-
-    command: /bin/bash -c "
-      source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
-
-  Rtabmap:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: rtabmap
-    hostname: rtabmap
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.7"
-    # restart: unless-stopped
-    environment:
-      - DISPLAY=${DISPLAY}
-      - XAUTHORITY=${XAUTH}
-      - CamerType=$CamerType
-
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-    # command: /bin/bash -c "sleep inf"
-
-    command: /bin/bash -c "
-     . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
-
-  NAV2:
-    image: "${registry}/px4_sim:${px4TAG:?error}"
-    container_name: nav2
-    hostname: nav2
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.8"
-    # restart: unless-stopped
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-  #   command: /bin/bash -c "
-  #     ros2 launch nav2_bringup navigation_launch.py \
-  #     params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
-
-    command: /bin/bash -c "sleep inf"
-
-  # Nav2_Rviz:
-  #   image: ${registry}/px4_sim:${px4TAG:?error}"
-  #   container_name: nav2_rviz
-  #   hostname: nav2_rivz
-  #   tty: true
-  #   privileged: true
-  #   restart: unless-stopped
-  #   # depends_on:
-  #   #   - nav2
-  #   # network_mode: "host"
-  #   networks:
-  #     px4:
-  #       ipv4_address: "10.20.10.9"
-
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     XAUTHORITY: ${XAUTH}
-        
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-  #     - ./Params:/home/px4/volume/Params
-
-  #   # command: /bin/bash -c "sleep inf"
-
-  #   command: /bin/bash -c "
-  #     ros2 launch nav2_bringup rviz_launch.py \
-  #     params_file:=/home/px4/volume/Params/nav2/nav2_rviz"
-
+      command: /bin/bash -c "
+        ros2 launch nav2_bringup rviz_launch.py \
+        params_file:=/home/px4/volume/Params/nav2/nav2_rviz"
 
 
 networks:
