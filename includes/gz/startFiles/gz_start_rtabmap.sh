@@ -28,6 +28,6 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           imu_topic:=/imu approx_sync:=true    \
           use_sim_time:=true  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
 else
-    echo "Invalid CamerType"
+    echo "Invalid CameraType"
     exit 1
 fi
