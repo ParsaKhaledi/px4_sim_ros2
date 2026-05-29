@@ -18,7 +18,7 @@ ENV WORKDIR=/home/${USER_NAME}/ws_px4
 ENV ROS_DISTRO=lyrical
 WORKDIR ${WORKDIR}
 
-### Install Gazebo harmonic Nav2 and rtabmap 
+### Install Gazebo Jetty Nav2 and rtabmap 
 RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	apt install -y --no-install-recommends \
 	vim udev git sudo unzip curl cmake wget tmux\
@@ -32,7 +32,7 @@ RUN apt update 1>/dev/null	&& apt upgrade -y 1>/dev/null && \
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update 1>/dev/null && apt install -y --no-install-recommends \
-	gz-harmonic ros-${ROS_DISTRO}-ros-gzharmonic \
+	gz-jetty ros-${ROS_DISTRO}-ros-gzjetty \
 	ros-dev-tools \
 	ros-$ROS_DISTRO-rmw-cyclonedds-cpp\
 	ros-$ROS_DISTRO-navigation2 \
