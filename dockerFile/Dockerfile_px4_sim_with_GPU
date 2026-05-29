@@ -140,11 +140,11 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 	chmod +x ./QGroundControl.AppImage 
 
 ### PX4 Setup
-# RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.16.0 --recursive 1>/dev/null && \
+# RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.17.0 --recursive 1>/dev/null && \
 # 	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
 # PX4 Setup using zip archive instead of git clone
-RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.16.0 --recursive \
+RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.17.0 --recursive \
 	--progress 1>/dev/null && \
 	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
@@ -159,7 +159,7 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 RUN mkdir -p ${WORKDIR}/src && \
 	cd ${WORKDIR}/src && pip3 install --user \ 
 	pyros-genmsg setuptools numpy kconfiglib future jinja2 jsonschema && \
-	git clone -b release/1.16 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone -b release/1.17 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
