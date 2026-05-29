@@ -31,7 +31,7 @@ RUN apt update 1>/dev/null && \
 	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib \
     python3-jinja2 python3-jsonschema\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad \
-	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 fuse kmod libpulse-mainloop-glib0 \
+	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 fuse libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
 	# Add Gazebo official repository
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
