@@ -51,14 +51,24 @@ RUN apt update 1>/dev/null && \
 # RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools
 
 ### Create User	
-RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+RUN if getent passwd 1000 > /dev/null; then userdel -r $(getent passwd 1000 | cut -d: -f1); fi && \
+    if getent group 1000 > /dev/null; then groupdel $(getent group 1000 | cut -d: -f1); fi && \
+    # Now safely create your px4 user and group \
+    groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
     usermod -a -G dialout ${USER_NAME} && \
-    apt-get remove -y modemmanager && \
     echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
     chmod 0440 /etc/sudoers.d/${USER_NAME} && \
-    mkdir -p ${WORKDIR}/src && \
+    mkdir -p ${ROS_WS}/src && \
     chown -R ${USER_NAME}:${USER_NAME} ${HOME}
+# RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+#     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
+#     usermod -a -G dialout ${USER_NAME} && \
+#     apt-get remove -y modemmanager && \
+#     echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
+#     chmod 0440 /etc/sudoers.d/${USER_NAME} && \
+#     mkdir -p ${WORKDIR}/src && \
+#     chown -R ${USER_NAME}:${USER_NAME} ${HOME}
 
 ### Change user
 USER ${USER_NAME}
