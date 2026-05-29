@@ -1,5 +1,5 @@
 ARG ROS_DISTRO=lyrical
-FROM ros:${ROS_DISTRO}-ros-base-jammy
+FROM ros:${ROS_DISTRO}-ros-base
 
 LABEL maintainer="Parsa Khaledi <pa.aerospace@gmail.com>"
 
@@ -60,7 +60,7 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 
 
 ### PX4 Setup
-RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.16.0 --recursive \
+RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v1.17.0 --recursive \
 	--progress --verbose 1>/dev/null && \
 	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
 
@@ -76,7 +76,7 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 ### Build WS (px4_ros_com && px4_msgs)
 RUN mkdir -p ${WORKDIR}/src && \
 	cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
-	git clone -b release/1.16 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone -b release/1.17 https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
