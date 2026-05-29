@@ -11,7 +11,7 @@ on:
 env:
   Registery: docker.io
   ImageName: alienkh/px4_sim
-  ImageTag: 1.15.1_${{ github.run_number }}
+  ImageTag: 1.17.0_${{ github.run_number }}
 
 jobs:
 
@@ -45,7 +45,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
       
       - name: Build and Push docker image for using GPU
-        id: build-and-push-NoGPU
+        id: build-and-push-WithGPU
         uses: docker/build-push-action@v2
         with:
           push: true

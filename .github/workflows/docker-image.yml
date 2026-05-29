@@ -12,7 +12,7 @@ on:
 env:
   Registery: docker.io
   ImageName: alienkh/px4_sim
-  ImageTag: 1.15.1_${{ github.run_number }}
+  ImageTag: 1.17.0_${{ github.run_number }}
 
 jobs:
   build_and_push_docker_image_gpu:
