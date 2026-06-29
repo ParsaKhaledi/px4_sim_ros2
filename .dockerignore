@@ -1,0 +1,10 @@
+.git
+.qground
+Params
+*.md
+vagrant
+.github
+docker-compose*.yml
+scripts
+HealthCheck
+includes/gazebo_classic
