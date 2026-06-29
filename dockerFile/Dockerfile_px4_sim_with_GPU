@@ -142,7 +142,7 @@ RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pk
 	
 # # Change user
 USER ${USER_NAME}
-WORKDIR /${USER_NAME}/ws_px4
+WORKDIR ${WORKDIR}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
@@ -158,7 +158,7 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 ARG PX4_VERSION
 RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v${PX4_VERSION} --recursive \
 	--progress 1>/dev/null && \
-	cd ${HOME}/PX4-Autopilot && sudo ./Tools/setup/ubuntu.sh 1>/dev/null
+	cd ${HOME}/PX4-Autopilot && RUNS_IN_DOCKER=true ./Tools/setup/ubuntu.sh --no-sim-tools 1>/dev/null
 
 ### Install Micro XRCE-DDS
 ARG XRCE_AGENT_VERSION
