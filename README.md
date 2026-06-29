@@ -1,74 +1,167 @@
-# PX4 Simulation with ROS2
-This repository Contains an ecosystem for easily deploy PX4 simulation and developments.
-It uses ci platform for buliding and push environment required to simulate px4 drones with gz simulator using docker image and containers (possible to use nvidia graphic cards).  
+# PX4 Simulation with ROS 2
 
-# Infrastructure
-The essential tools required for the hole ecosystem are dicribed in this section.
+Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. Pull a pre-built image from [Docker Hub](https://hub.docker.com/r/alienkh/px4_sim) and launch with Docker Compose.
 
-## Docker
-[Docker](https://docs.docker.com/get-started/docker-overview/) is a set of platform as a service products that use OS-level virtualization to deliver software in packages called containers. Docker can be installed from [this link](https://docs.docker.com/engine/). In this project [docker compose](https://docs.docker.com/compose/) is used to manage containers. The Dockerfiles are used to build docker images in infrastructure branch and then copied here. You can check [my docker hub](https://hub.docker.com/r/alienkh/px4_sim) for download docker image sepratly. 
+## Version Matrix
 
-## X11
-The X Window System (aka X11) is a client/server network protocol that's been used for decades on a variety of different hardware platforms. It has been implemented by a number of different vendors for a wide variety of hardware platforms. The xserver includes a framework for managing video and input device X drivers. These drivers interface to lower level kernel device drivers (or to the hardware directly in a few cases). Typically these drivers are developed and supported by the hardware vendor in conjunction with the kernel and X.org communitie (Waylands is a new tool for the very use case). Install X11 as fallow:
+| Component | Version |
+|-----------|---------|
+| PX4-Autopilot | v1.17.0 |
+| px4_msgs | release/1.17 |
+| px4_ros_com | main (examples only) |
+| ROS 2 | Jazzy |
+| Gazebo | Harmonic (`gz-harmonic`) |
+| DDS | CycloneDDS (`rmw_cyclonedds_cpp`) |
+| Micro-XRCE-DDS-Agent | v2.4.2 |
+
+## Quick Start
+
+```bash
+# Allow Docker containers to use the host display (for QGC / RViz)
+xhost +local:
+
+# Configure image tag from Docker Hub or a local build
+cp .env.example .env
+
+# Start full stack (core + GCS + SLAM + navigation)
+CameraType=rgbd World=default ./scripts/up.sh
+
+# Or start only the simulation core
+COMPOSE_PROFILES= ./scripts/up.sh
 ```
+
+### Environment variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `registry` | Image registry | `docker.io/alienkh` |
+| `px4TAG` | Image tag in `.env` | `1.17.0_01` |
+| `CameraType` | `rgbd` or `stereo` | `rgbd` |
+| `World` | Gazebo world filename stem | `default` |
+| `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
+
+CI publishes tags like `1.17.0_<run_number>` and `1.17.0-latest`. Update `px4TAG` in `.env` after pulling a new build.
+
+### Compose profiles
+
+| Profile | Services |
+|---------|----------|
+| *(none)* | PX4, StatePublisher |
+| `gcs` | QGroundControl |
+| `slam` | RTAB-Map |
+| `nav` | Nav2 + RViz (use with `slam`) |
+
+```bash
+# Simulation + ground station only
+COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
+
+# Full robotics stack
+COMPOSE_PROFILES=gcs,slam,nav CameraType=rgbd World=default ./scripts/up.sh
+
+# Stereo camera in a custom world
+COMPOSE_PROFILES=gcs CameraType=stereo World=husarion_office ./scripts/up.sh
+```
+
+You can also set `CameraType` and `World` in `.env` instead of the command line.
+
+### Valid worlds
+
+World names match SDF **filenames** under `includes/gz/worlds/` (without `.sdf`):
+
+- `default` — PX4 default world
+- `apt_world`
+- `husarion_office`
+- `husarion_world`
+- `sonoma_raceway`
+- `empty_with_plugins`
+
+### Runtime configuration (brief)
+
+**How `CameraType` and `World` are applied:** `scripts/up.sh` exports both variables into Compose. The PX4 container runs `gz_modifications.bash` (camera + custom models/worlds) then `gz_start_px4_gz_sim.sh` (world/make target). If the `slam` profile is active, Rtabmap receives the same `CameraType`.
+
+**Changing world or camera on a running stack:** These are applied at container start. Bring the stack down first, or recreate PX4:
+
+```bash
+docker compose -f docker-compose-px4.yml down
+CameraType=stereo World=apt_world ./scripts/up.sh
+# or: CameraType=stereo World=apt_world docker compose -f docker-compose-px4.yml up -d --force-recreate PX4
+```
+
+**Verify:** `docker logs px4_sim 2>&1 | grep "Selected Camera Type"`
+
+**Profile dependencies:** `nav` depends on `slam` (Nav2 waits for Rtabmap). Use `COMPOSE_PROFILES=slam,nav` or include both. Services without a profile (`PX4`, `StatePublisher`) always start.
+
+**Without `up.sh`:** `CameraType=rgbd World=default docker compose -f docker-compose-px4.yml --profile gcs up -d`
+
+**Display / X11:** QGC and RViz need `DISPLAY` and `xhost +local:`. Set `XAUTH` if your setup uses `/tmp/.docker.xauth` (Compose may warn if unset).
+
+| Service | Container | Role |
+|---------|-----------|------|
+| PX4 | `px4_sim` | SITL, Gazebo, XRCE agent, ros_gz bridge |
+| StatePublisher | `statePublisher` | x500 TF / URDF |
+| Qground | `qground` | QGroundControl (`gcs`) |
+| Rtabmap | `rtabmap` | SLAM (`slam`) |
+| NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
+
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
+
+## Infrastructure
+
+### Docker
+
+[Docker Compose](docker-compose-px4.yml) runs multiple containers on a custom bridge network (`10.20.10.0/24`). The PX4 container bundles SITL, Gazebo, Micro-XRCE-DDS agent, and the `ros_gz` bridge because ROS 2 discovery across containers requires extra DDS configuration.
+
+Build locally:
+
+```bash
+./DockerBuild.sh dockerFile/Dockerfile_px4_sim_NO_GPU local
+```
+
+### X11
+
+GUI apps (QGroundControl, RViz) need X11 forwarding:
+
+```bash
 sudo apt-get install xauth xorg openbox
+xhost +local:
 ```
-## Tmux
-[tmux](https://github.com/tmux/tmux/wiki) is a terminal multiplexer. It lets you switch easily between several programs in one terminal, detach them (they keep running in the background) and reattach them to a different terminal. This tool is used to make stop and start each module in containers more easily and make contiloing each part of projects more possible. 
 
-## PX4
-[PX4](https://docs.px4.io/v1.15/en/) is the Professional Autopilot. Developed by world-class developers from industry and academia, and supported by an active world wide community, it powers all kinds of vehicles from racing and cargo drones through to ground vehicles and submersibles.The V1.15.3 version of autopilot is used for this project and can be found in [PX4-Autopilot Gtihub](https://github.com/PX4/PX4-Autopilot/tree/v1.15.4).
+### PX4
 
-## QgroundControl
-QGroundControl (QGC) is a cross-platform ground control station (GCS) software used for controlling and managing drones, particularly those using PX4 or ArduPilot autopilots. It provides a user-friendly interface for flight control, mission planning, and vehicle setup. To connect to sitl, in QGC’s Application Settings → Comm Links → Add, choose “UDP”—enter the PX4 container’s IP (or hostname) and add these ports to a udp connection:
-```
-px4_sim:14550
-px4_sim:14540
-px4_sim:14580
-px4_sim:18570
-```
-These ports can be found in outputs of px4_sitl make command that can be extracted by:
-```
+[PX4 v1.17](https://docs.px4.io/v1.17/en/) with Gazebo Harmonic simulation. Custom models and worlds are overlaid at container start via [includes/gz/gz_modifications.bash](includes/gz/gz_modifications.bash).
+
+### QGroundControl
+
+Add a UDP comm link in QGC pointing at the PX4 container hostname `px4_sim` on ports `14550`, `14540`, `14580`, `18570`. MAVLink ports are visible in:
+
+```bash
 docker logs px4_sim 2>&1 | grep mavlink
 ```
 
-## ROS2
-The Robot Operating System [(ROS)](https://www.ros.org/) is a set of software libraries and tools that help you build robot applications. From drivers to state-of-the-art algorithms, and with powerful developer tools, ROS has what you need for your next robotics project. And it's all open source. [Harmonic](https://docs.ros.org/en/humble/index.html) version of ros2 is used for this project.
+### ROS 2 and ros_gz bridge
 
-##  GZ (Recommended)
-[GZ harmonic](https://gazebosim.org/docs/harmonic/getstarted/) is used for simulation along PX4 v1.15.4. It is recommended to use this simulation since it is planed to be used in future developments of PX4 and Gazebo.
+Bridge config: [includes/gz/config_gz_bridge.yaml](includes/gz/config_gz_bridge.yaml)
 
-### Add models and worlds in gz 
-Discribtion will be added here soon ...
-In include folder there is a file named replacments.bash which you can check it and volume mounted in docker-compose file to see where to copy include folder and run the very script to add word and modify model of PX4-Autopilote.
-Files related to gz simulation has been relocated to include folder. Some modifications will happen by running px4_sim_ros2/includes/gz/gz_modifications.bash to add some worlds and camera to x500 model that can be checked in very file. 
+CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
-## ROS_GZ
-This package provides a network bridge which enables the exchange of messages between ROS and Gazebo Transport. in [ros_gz](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_bridge) messeage types can be found plus some examples to check connection between GZ and ROS2. How to write yaml for bridge is also writen. [Husarion](https://github.com/husarion/husarion_gz_worlds) is a good repo for more gz worlds. For Migration from Gazebo-classic [this link](https://gazebosim.org/docs/harmonic/migrating_gazebo_classic_ros2_packages/) can be beneficial. Documentation of PX4 for gz simulation can be found [here](https://docs.px4.io/main/en/sim_gazebo_gz/#specify-world).
+## Health checks
 
-## Running simulation
-Duo to some problems including frequency reduction of topics (when using bridge mode network of docker) and ros2 issues in getting topics data from other containers (in host network mode of docker) some services are running in same contianer for now. (The issue may related to my PC performance and bridge is working fine in my other projects).
-For running simulation : 
-Tmux and Docker needed to be installed. 
-```
-# Allow docker to use X11 display in host
-xhost +Local:*
+The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. RTAB-Map checks `/rtabmap/odom`. Scripts live in [HealthCheck/](HealthCheck/).
 
-# To select Camera Type and world : CameraType=rgbd or Stereo
-# To select World                 : World=apt_world (Not Working for now -> go to perivious commits)
-CameraType=rgbd World=apt docker compose -f docker-compose-px4.yml up -d
+## CI
 
-# Run Simulation in your host Tmux
-CameraType=rgbd World=apt ./includes/gz/startFiles/tmux-session.sh
-```
-## ROS_bridge for using gz and ros2 topics
-For using camera and other data from GZ a gz_bridge has to initiate and all params related to it are written as yaml file and can be run with fallowing command (already exist in docker compose file):
-```
-ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=/volume/includes/gz/config_gz_bridge.yaml
-```
-## ROS2 Cyclonedds
-Many repos like rtabmap recommends to replace default dds of ROS2 with Cyclonedds. Its easy to use other ddses. All you need is to install them and do an export in your environment.
-```
-sudo apt install ros-humble-rmw-cyclonedds-cpp
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-```
+[.github/workflows/docker-image.yml](.github/workflows/docker-image.yml) builds NO-GPU and GPU images on Dockerfile changes, pushes versioned tags, and runs a headless SITL smoke test on the NO-GPU image.
+
+## Deferred work
+
+The following are planned but not in scope for the current non-GPU release:
+
+- **GPU compose** — [docker-compose-px4-GPU.yml](docker-compose-px4-GPU.yml) needs YAML/env fixes and NVIDIA runtime configuration
+- **Image slimming** — multi-stage builds and optional minimal image without Nav2/RTAB-Map/QGC
+- **Vagrant host** — [vagrant/](vagrant/) still targets ROS Humble on Ubuntu 22.04
+
+## Legacy
+
+- Gazebo Classic assets: [includes/gazebo_classic/](includes/gazebo_classic/)
+- [DockerRun.sh](DockerRun.sh) — legacy single-container workflow; use `scripts/up.sh` instead
+- [includes/gz/CMakeLists.txt](includes/gz/CMakeLists.txt) — legacy PX4 1.15 overlay; PX4 1.17 discovers worlds via upstream `gz_bridge` CMake GLOB after copying SDF files
