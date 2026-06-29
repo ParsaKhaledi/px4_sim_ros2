@@ -34,7 +34,7 @@ RUN apt update 1>/dev/null && \
 	vim udev git sudo unzip curl cmake wget tmux\
 	iputils-ping\
 	gnupg2 lsb-release \
-	xauth xorg openbox python3-argcomplete python3 python3-pip python3-kconfiglib \
+	xauth xorg openbox python3-argcomplete python3 python3-pip python3-setuptools python3-kconfiglib \
     python3-jinja2 python3-jsonschema\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad \
 	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 fuse libpulse-mainloop-glib0 \
@@ -105,7 +105,7 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 ### Build WS (px4_ros_com && px4_msgs)
 ARG PX4_VERSION
 RUN mkdir -p ${WORKDIR}/src && \
-	cd ${WORKDIR}/src && pip3 install --user pyros-genmsg setuptools && \
+	cd ${WORKDIR}/src && pip3 install --user --break-system-packages pyros-genmsg && \
 	git clone -b release/${PX4_VERSION} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone --depth 1 https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build

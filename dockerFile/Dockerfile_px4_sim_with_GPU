@@ -171,7 +171,7 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 ### Build WS (px4_ros_com && px4_msgs)
 ARG PX4_VERSION
 RUN mkdir -p ${WORKDIR}/src && \
-	cd ${WORKDIR}/src && pip3 install --user \ 
+	cd ${WORKDIR}/src && pip3 install --user --break-system-packages \
 	pyros-genmsg setuptools numpy kconfiglib future jinja2 jsonschema && \
 	git clone -b release/${PX4_VERSION} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone --depth 1 https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
