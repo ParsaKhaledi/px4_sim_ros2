@@ -7,7 +7,7 @@ Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. P
 | Component | Version |
 |-----------|---------|
 | PX4-Autopilot | v1.17.0 |
-| px4_msgs | release/1.17 |
+| px4_msgs | [v1.17.0](https://github.com/PX4/px4_msgs/releases/tag/v1.17.0) (tag `v${PX4_VERSION}`) |
 | px4_ros_com | main (examples only) |
 | ROS 2 | Jazzy |
 | Gazebo | Harmonic (`gz-harmonic`) |

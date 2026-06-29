@@ -1,6 +1,5 @@
 ARG ROS_DISTRO=jazzy
 ARG PX4_VERSION=1.17.0
-ARG PX4_MSGS_RELEASE=1.17
 ARG XRCE_AGENT_VERSION=v2.4.3
 FROM nvidia/cuda:12.9.2-cudnn-devel-ubuntu24.04
 
@@ -170,11 +169,11 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build 1>/dev/null
 
 ### Build WS (px4_ros_com && px4_msgs)
-ARG PX4_MSGS_RELEASE
+ARG PX4_VERSION
 RUN mkdir -p ${WORKDIR}/src && \
 	cd ${WORKDIR}/src && pip3 install --user --break-system-packages \
 	pyros-genmsg setuptools numpy kconfiglib future jinja2 jsonschema && \
-	git clone -b release/${PX4_MSGS_RELEASE} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone --depth 1 -b v${PX4_VERSION} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone --depth 1 https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 

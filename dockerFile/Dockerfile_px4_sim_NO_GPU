@@ -1,7 +1,6 @@
 # Define the version ONCE here at the global level
 ARG ROS_DISTRO=jazzy
 ARG PX4_VERSION=1.17.0
-ARG PX4_MSGS_RELEASE=1.17
 ARG XRCE_AGENT_VERSION=v2.4.3
 FROM ros:${ROS_DISTRO}-ros-base
 
@@ -104,10 +103,10 @@ RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
 # RUN pip3 install -U pyros-genmsg setuptools
 
 ### Build WS (px4_ros_com && px4_msgs)
-ARG PX4_MSGS_RELEASE
+ARG PX4_VERSION
 RUN mkdir -p ${WORKDIR}/src && \
 	cd ${WORKDIR}/src && pip3 install --user --break-system-packages pyros-genmsg && \
-	git clone -b release/${PX4_MSGS_RELEASE} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
+	git clone --depth 1 -b v${PX4_VERSION} https://github.com/PX4/px4_msgs.git 1>/dev/null && \
 	git clone --depth 1 https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
