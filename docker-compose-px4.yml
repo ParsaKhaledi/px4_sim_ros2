@@ -30,7 +30,8 @@ services:
       environment:
         DISPLAY: ${DISPLAY}
         XAUTHORITY: ${XAUTH}
-        CameraType: ${CameraType}
+        CameraType: ${CameraType:-rgbd}
+        World: ${World:-default}
         XRCE_DDS_AGENT_IP: "10.20.10.7"
           
       volumes:
@@ -40,7 +41,7 @@ services:
         - ./HealthCheck/:/home/px4/volume/HealthCheck/
         - ./includes/gz/:/home/px4/volume/includes/gz/
         - ./includes/gz/startFiles/:/home/px4/volume/startFiles/
-        - ./Params:/home/px4/volume/Params/
+        - ./includes/gz/Params:/home/px4/volume/Params/
 
       # command: /bin/bash -c "sleep inf"
       # entrypoint: ["/bin/sh", "-c"]
@@ -81,7 +82,7 @@ services:
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
         - ./includes/gz/:/home/px4/volume/includes/gz/
         - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-        - ./Params:/home/px4/volume/Params
+        - ./includes/gz/Params:/home/px4/volume/Params
 
       # command: /bin/bash -c "sleep inf"
       # entrypoint: ["/bin/sh", "-c"]
@@ -91,6 +92,7 @@ services:
 
 
     Qground:
+      profiles: [gcs]
       image: "${registry}/px4_sim:${px4TAG:?error}"
       container_name: qground
       hostname: qground
@@ -199,6 +201,7 @@ services:
     #     source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
 
     Rtabmap:
+      profiles: [slam]
       image: "${registry}/px4_sim:${px4TAG:?error}"
       container_name: rtabmap
       hostname: rtabmap
@@ -222,14 +225,14 @@ services:
       environment:
         - DISPLAY=${DISPLAY}
         - XAUTHORITY=${XAUTH}
-        - CamerType=$CamerType
+        - CameraType=${CameraType}
 
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
         - ./includes/gz/:/home/px4/volume/includes/gz/
         - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-        - ./Params:/home/px4/volume/Params
+        - ./includes/gz/Params:/home/px4/volume/Params
 
       # command: /bin/bash -c "sleep inf"
 
@@ -237,6 +240,7 @@ services:
         . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
 
     NAV2:
+      profiles: [nav]
       image: "${registry}/px4_sim:${px4TAG:?error}"
       container_name: nav2
       hostname: nav2
@@ -269,6 +273,7 @@ services:
         
 
     Nav2_Rviz:
+      profiles: [nav]
       image: "${registry}/px4_sim:${px4TAG:?error}"
       container_name: nav2_rviz
       hostname: nav2_rivz
@@ -290,13 +295,12 @@ services:
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-        - ./Params:/home/px4/volume/Params
+        - ./includes/gz/Params:/home/px4/volume/Params
 
       # command: /bin/bash -c "sleep inf"
 
       command: /bin/bash -c "
-        ros2 launch nav2_bringup rviz_launch.py \
-        params_file:=/home/px4/volume/Params/nav2/nav2_rviz"
+        /home/px4/volume/startFiles/start_nav2_rviz.sh"
 
 
 networks:
