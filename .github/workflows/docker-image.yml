@@ -25,14 +25,19 @@ jobs:
           - variant: no-gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_NO_GPU
             tag_suffix: ""
-            cache_suffix: ""
+            cache_from: type=registry,ref=docker.io/alienkh/px4_sim:buildcache
+            cache_to: type=registry,ref=docker.io/alienkh/px4_sim:buildcache,mode=max
           - variant: gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_with_GPU
             tag_suffix: "_GPU"
-            cache_suffix: "_GPU"
+            cache_from: |
+              type=registry,ref=docker.io/alienkh/px4_sim:buildcache_GPU
+              type=gha,scope=px4-sim-gpu
+            cache_to: type=gha,scope=px4-sim-gpu,mode=max
     permissions:
       contents: read
       packages: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v4
@@ -67,8 +72,10 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}_${{ github.run_number }}${{ matrix.tag_suffix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}-latest${{ matrix.tag_suffix }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache${{ matrix.cache_suffix }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache${{ matrix.cache_suffix }},mode=max
+          cache-from: ${{ matrix.cache_from }}
+          cache-to: ${{ matrix.cache_to }}
+          provenance: false
+          sbom: false
 
   smoke_test:
     needs: build
