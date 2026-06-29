@@ -42,7 +42,7 @@ RUN apt update 1>/dev/null && \
 	vim udev git sudo unzip curl cmake make wget tmux build-essential\
 	gnupg2 lsb-release iputils-ping\
 	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 libpulse-mainloop-glib0 \
-	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \ 
+	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev \
 	fuse libx11-6 libgtk-3-dev  libglu1-mesa libopenjp2-7-dev \
 	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-base1.0-dev \
 	libgstreamer-plugins-base1.0-dev \
