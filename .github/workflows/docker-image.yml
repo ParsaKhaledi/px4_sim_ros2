@@ -7,6 +7,8 @@ on:
       - '.github/workflows/docker-image.yml'
       - 'scripts/smoke_test.sh'
     branches: [main, docker]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 env:
@@ -14,26 +16,24 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: alienkh/px4_sim
   PX4_VERSION: "1.17.0"
+  RELEASE_VERSION: "3.0.0"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - variant: no-gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_NO_GPU
             tag_suffix: ""
-            cache_from: type=registry,ref=docker.io/alienkh/px4_sim:buildcache
-            cache_to: type=registry,ref=docker.io/alienkh/px4_sim:buildcache,mode=max
+            cache_scope: px4-sim-no-gpu
           - variant: gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_with_GPU
             tag_suffix: "_GPU"
-            cache_from: |
-              type=registry,ref=docker.io/alienkh/px4_sim:buildcache_GPU
-              type=gha,scope=px4-sim-gpu
-            cache_to: type=gha,scope=px4-sim-gpu,mode=max
+            cache_scope: px4-sim-gpu
     permissions:
       contents: read
       packages: write
@@ -61,21 +61,24 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: nick-fields/retry@v3
         with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: ${{ github.event_name != 'pull_request' }}
-          build-args: |
-            PX4_VERSION=${{ env.PX4_VERSION }}
-            XRCE_AGENT_VERSION=v2.4.3
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}_${{ github.run_number }}${{ matrix.tag_suffix }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}-latest${{ matrix.tag_suffix }}
-          cache-from: ${{ matrix.cache_from }}
-          cache-to: ${{ matrix.cache_to }}
-          provenance: false
-          sbom: false
+          timeout_minutes: 180
+          max_attempts: 3
+          retry_wait_seconds: 90
+          command: |
+            docker buildx build \
+              --file "${{ matrix.dockerfile }}" \
+              --build-arg "PX4_VERSION=${{ env.PX4_VERSION }}" \
+              --build-arg "XRCE_AGENT_VERSION=v2.4.3" \
+              --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_VERSION }}${{ matrix.tag_suffix }}" \
+              --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_VERSION }}-latest${{ matrix.tag_suffix }}" \
+              --cache-from "type=gha,scope=${{ matrix.cache_scope }}" \
+              --cache-to "type=gha,scope=${{ matrix.cache_scope }},mode=max" \
+              --provenance=false \
+              --sbom=false \
+              $( [ "${{ github.event_name }}" != "pull_request" ] && echo --push || echo --output type=docker ) \
+              .
 
   smoke_test:
     needs: build
@@ -93,7 +96,7 @@ jobs:
 
       - name: Run headless SITL smoke test
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}_${{ github.run_number }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ env.RELEASE_VERSION }}-latest"
           docker pull "${IMAGE}"
           chmod +x scripts/smoke_test.sh
           SMOKE_TEST_TIMEOUT=600 ./scripts/smoke_test.sh "${IMAGE}"

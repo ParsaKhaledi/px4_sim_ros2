@@ -6,6 +6,7 @@ Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. P
 
 | Component | Version |
 |-----------|---------|
+| Stack release | v3.0.0 |
 | PX4-Autopilot | v1.17.0 |
 | px4_msgs | [v1.17.0](https://github.com/PX4/px4_msgs/releases/tag/v1.17.0) (tag `v${PX4_VERSION}`) |
 | px4_ros_com | main (examples only) |
@@ -35,12 +36,12 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `registry` | Image registry | `docker.io/alienkh` |
-| `px4TAG` | Image tag in `.env` | `1.17.0_01` |
+| `px4TAG` | Image tag in `.env` | `v3.0.0` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `World` | Gazebo world filename stem | `default` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
 
-CI publishes tags like `1.17.0_<run_number>` and `1.17.0-latest`. Update `px4TAG` in `.env` after pulling a new build.
+CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-latest_GPU`). Update `px4TAG` in `.env` after pulling a new build.
 
 ### Compose profiles
 
