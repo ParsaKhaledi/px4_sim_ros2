@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 
 env:
+  DOCKER_BUILDKIT: 1
   REGISTRY: docker.io
   IMAGE_NAME: alienkh/px4_sim
   PX4_VERSION: "1.17.0"
@@ -24,9 +25,11 @@ jobs:
           - variant: no-gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_NO_GPU
             tag_suffix: ""
+            cache_suffix: ""
           - variant: gpu
             dockerfile: dockerFile/Dockerfile_px4_sim_with_GPU
             tag_suffix: "_GPU"
+            cache_suffix: "_GPU"
     permissions:
       contents: read
       packages: write
@@ -44,7 +47,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
 
-      - name: Log in to Docker Hub
+      - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -64,6 +67,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}_${{ github.run_number }}${{ matrix.tag_suffix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}-latest${{ matrix.tag_suffix }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache${{ matrix.cache_suffix }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache${{ matrix.cache_suffix }},mode=max
 
   smoke_test:
     needs: build
@@ -72,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
+      - name: Log in to DockerHub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}

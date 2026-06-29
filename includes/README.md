@@ -43,7 +43,7 @@ Pushes to `main` or `docker` run the workflow (or use **Actions → Run workflow
    - NO-GPU: `dockerFile/Dockerfile_px4_sim_NO_GPU`
    - GPU: `dockerFile/Dockerfile_px4_sim_with_GPU` (tag suffix `_GPU`)
 
-2. **Tags pushed** — `1.17.0_<run_number>`, `1.17.0-latest` (and `_GPU` variants).
+2. **Tags pushed** — `1.17.0_<run_number>`, `1.17.0-latest` (and `_GPU` variants). Layer cache: `buildcache` / `buildcache_GPU` on Docker Hub (updated each build with `mode=max`).
 
 3. **Smoke test** — after NO-GPU push, runs [scripts/smoke_test.sh](../scripts/smoke_test.sh) (see [scripts/README.md](../scripts/README.md)) which:
    - Pulls the new image
