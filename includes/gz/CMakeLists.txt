@@ -1,6 +1,8 @@
 ############################################################################
 #
-#   Copyright (c) 2022-2023 PX4 Development Team. All rights reserved.
+# LEGACY: PX4 v1.15 custom gz_bridge CMakeLists overlay.
+# PX4 v1.17 discovers worlds from Tools/simulation/gz/worlds/*.sdf automatically
+# after gz_modifications.bash copies custom worlds; this file is not applied.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
