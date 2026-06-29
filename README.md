@@ -105,6 +105,8 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 
 Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
 
+Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
+
 ## Infrastructure
 
 ### Docker

@@ -45,7 +45,7 @@ Pushes to `main` or `docker` run the workflow (or use **Actions → Run workflow
 
 2. **Tags pushed** — `1.17.0_<run_number>`, `1.17.0-latest` (and `_GPU` variants).
 
-3. **Smoke test** — after NO-GPU push, runs [scripts/smoke_test.sh](../scripts/smoke_test.sh) which:
+3. **Smoke test** — after NO-GPU push, runs [scripts/smoke_test.sh](../scripts/smoke_test.sh) (see [scripts/README.md](../scripts/README.md)) which:
    - Pulls the new image
    - Mounts `includes/gz/` and `HealthCheck/` from this repo
    - Runs `gz_modifications.bash`, SITL, bridge, and XRCE headlessly
