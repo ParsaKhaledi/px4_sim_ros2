@@ -6,7 +6,7 @@ IMAGE_TAG="${2:-local}"
 
 docker build \
   --build-arg PX4_VERSION="${PX4_VERSION:-1.17.0}" \
-  --build-arg XRCE_AGENT_VERSION="${XRCE_AGENT_VERSION:-v2.4.2}" \
+  --build-arg XRCE_AGENT_VERSION="${XRCE_AGENT_VERSION:-v2.4.3}" \
   -t "alienkh/px4_sim:${IMAGE_TAG}" \
   -f "${DOCKERFILE}" \
   .

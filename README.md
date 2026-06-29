@@ -12,7 +12,7 @@ Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. P
 | ROS 2 | Jazzy |
 | Gazebo | Harmonic (`gz-harmonic`) |
 | DDS | CycloneDDS (`rmw_cyclonedds_cpp`) |
-| Micro-XRCE-DDS-Agent | v2.4.2 |
+| Micro-XRCE-DDS-Agent | v2.4.3 |
 
 ## Quick Start
 

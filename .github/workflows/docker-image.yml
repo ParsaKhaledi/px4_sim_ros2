@@ -60,7 +60,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             PX4_VERSION=${{ env.PX4_VERSION }}
-            XRCE_AGENT_VERSION=v2.4.2
+            XRCE_AGENT_VERSION=v2.4.3
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}_${{ github.run_number }}${{ matrix.tag_suffix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PX4_VERSION }}-latest${{ matrix.tag_suffix }}

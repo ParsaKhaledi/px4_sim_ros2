@@ -1,7 +1,7 @@
 # Define the version ONCE here at the global level
 ARG ROS_DISTRO=jazzy
 ARG PX4_VERSION=1.17.0
-ARG XRCE_AGENT_VERSION=v2.4.2
+ARG XRCE_AGENT_VERSION=v2.4.3
 FROM ros:${ROS_DISTRO}-ros-base
 
 LABEL maintainer="Parsa Khaledi <pa.aerospace@gmail.com>"
@@ -94,9 +94,9 @@ RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v${PX4_V
 
 ### Install Micro XRCE-DDS
 ARG XRCE_AGENT_VERSION
-RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git -b ${XRCE_AGENT_VERSION} --depth 1 && \
+RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git -b ${XRCE_AGENT_VERSION} && \
 	cd ${HOME}/Micro-XRCE-DDS-Agent &&\
-	mkdir build && cd build && cmake .. &&\
+	mkdir build && cd build && cmake .. -DUAGENT_P2P_PROFILE=OFF &&\
 	make 1>/dev/null && sudo make install 1>/dev/null && sudo ldconfig /usr/local/lib/ &&\
 	cd ${HOME} && rm -rf ${HOME}/Micro-XRCE-DDS-Agent/build 1>/dev/null
 	
