@@ -40,6 +40,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `World` | Gazebo world filename stem | `default` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
+| `FlightHeight` | Offboard takeoff height in metres (`mission` profile) | `2` |
 
 CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-latest_GPU`). Update `px4TAG` in `.env` after pulling a new build.
 
@@ -51,6 +52,7 @@ CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-
 | `gcs` | QGroundControl |
 | `slam` | RTAB-Map |
 | `nav` | Nav2 + RViz (use with `slam`) |
+| `mission` | Offboard (px4_imu_bridge + microxrce_offboard; arms and flies — use with `slam`, add `nav` for closed-loop autonomy) |
 
 ```bash
 # Simulation + ground station only
@@ -61,6 +63,9 @@ COMPOSE_PROFILES=gcs,slam,nav CameraType=rgbd World=default ./scripts/up.sh
 
 # Stereo camera in a custom world
 COMPOSE_PROFILES=gcs CameraType=stereo World=husarion_office ./scripts/up.sh
+
+# Closed-loop autonomous flight in the indoor apartment world
+COMPOSE_PROFILES=slam,nav,mission CameraType=rgbd World=apt_world FlightHeight=1.5 ./scripts/up.sh
 ```
 
 You can also set `CameraType` and `World` in `.env` instead of the command line.
@@ -90,7 +95,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 
 **Verify:** `docker logs px4_sim 2>&1 | grep "Selected Camera Type"`
 
-**Profile dependencies:** `nav` depends on `slam` (Nav2 waits for Rtabmap). Use `COMPOSE_PROFILES=slam,nav` or include both. Services without a profile (`PX4`, `StatePublisher`) always start.
+**Profile dependencies:** `nav` depends on `slam` (Nav2 waits for Rtabmap); `mission` also depends on `slam` (Offboard waits for Rtabmap, since it consumes `/rtabmap/odom`). Use `COMPOSE_PROFILES=slam,nav,mission` or include the profiles you need. Services without a profile (`PX4`, `StatePublisher`) always start.
 
 **Without `up.sh`:** `CameraType=rgbd World=default docker compose -f docker-compose-px4.yml --profile gcs up -d`
 
@@ -103,6 +108,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 | Qground | `qground` | QGroundControl (`gcs`) |
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
+| Offboard | `offboard` | PX4 IMU bridge + offboard flight control (`mission`) |
 
 Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
 
@@ -145,7 +151,15 @@ docker logs px4_sim 2>&1 | grep mavlink
 
 Bridge config: [includes/gz/config_gz_bridge.yaml](includes/gz/config_gz_bridge.yaml)
 
-CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
+CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`) but **not** activated by default (the ROS 2 default `rmw_fastrtps_cpp` is used). To opt in, uncomment the `RMW_IMPLEMENTATION: rmw_cyclonedds_cpp` line in every service's `environment:` block in [docker-compose-px4.yml](docker-compose-px4.yml) — it must be consistent across all services or nodes won't discover each other.
+
+### Offboard control and IMU source (`mission` profile)
+
+[includes/gz/px4_imu_bridge.py](includes/gz/px4_imu_bridge.py) subscribes to PX4's own uXRCE-DDS topics — `/fmu/out/sensor_combined` (gyro/accelerometer) and `/fmu/out/vehicle_attitude` (orientation) — converts PX4's FRD body / NED world convention to ROS's FLU body / ENU world convention, and republishes `sensor_msgs/Imu` on `/imu` (`frame_id: base_link`). This is what RTAB-Map's `imu_topic:=/imu` consumes for both `rgbd` and `stereo` camera types; the OakD model's own `imu/data` sensor is left defined but unused. [includes/gz/microxrce_offboard.py](includes/gz/microxrce_offboard.py) consumes RTAB-Map's `/rtabmap/odom` (VIO) and Nav2's `/cmd_vel` (`geometry_msgs/TwistStamped`), and drives PX4 offboard arm/takeoff/velocity control.
+
+### Time synchronization
+
+The whole stack runs on simulation time: every node (bridge, offboard, RTAB-Map, Nav2, RViz, robot_state_publisher) is launched with `use_sim_time:=true`, and PX4's own DDS time sync is disabled (`UXRCE_DDS_SYNCT 0` in [gz_modifications.bash](includes/gz/gz_modifications.bash)) so Gazebo's `/clock` is the single time source. This is PX4's documented "Gazebo-clock scenario" for perception-heavy sims where the simulation doesn't run at real-time factor 1.
 
 ## Health checks
 
@@ -159,7 +173,7 @@ The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. R
 
 The following are planned but not in scope for the current non-GPU release:
 
-- **GPU compose** — [docker-compose-px4-GPU.yml](docker-compose-px4-GPU.yml) needs YAML/env fixes and NVIDIA runtime configuration
+- **GPU compose** — [docker-compose-px4-GPU.yml](docker-compose-px4-GPU.yml) needs YAML/env fixes and NVIDIA runtime configuration. The GPU [Dockerfile](dockerFile/Dockerfile_px4_sim_with_GPU) builds and includes the same Python deps as the NO-GPU image, but the closed-loop offboard-flight stack (IMU bridge + offboard control + RTAB-Map/Nav2) is **not fully tested** on it — only the NO-GPU image has been validated end-to-end.
 - **Image slimming** — multi-stage builds and optional minimal image without Nav2/RTAB-Map/QGC
 - **Vagrant host** — [vagrant/](vagrant/) still targets ROS Humble on Ubuntu 22.04
 

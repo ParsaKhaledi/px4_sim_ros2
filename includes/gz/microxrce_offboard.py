@@ -3,11 +3,10 @@ import rclpy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
-from rclpy.clock import Clock
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from geometry_msgs.msg import Twist
 
-from geometry_msgs.msg import TransformStamped, Twist, PoseWithCovariance
+from geometry_msgs.msg import TransformStamped, Twist, TwistStamped, PoseWithCovariance
 from tf2_ros import TransformBroadcaster
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import TrajectorySetpoint
@@ -15,7 +14,6 @@ from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import VehicleOdometry
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import CameraInfo
 import time
 import argparse
 
@@ -45,7 +43,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-camera_info = "/camera/camera_info"
 
 class OffboardControll(Node):
 
@@ -75,7 +72,7 @@ class OffboardControll(Node):
                                                                   qos_profile1)
         
         self.subscriber_vio_odometry = self.create_subscription(Odometry,
-                                                                '/odom',
+                                                                '/rtabmap/odom',
                                                                 self.slam_odom_callback,
                                                                 qos_profile1)
         
@@ -84,15 +81,10 @@ class OffboardControll(Node):
         #                                                         self.slam_localization_odom_callback,
         #                                                         qos_profile1)
         
-        self.subscriber_cmd_vel = self.create_subscription(Twist,
+        self.subscriber_cmd_vel = self.create_subscription(TwistStamped,
                                                            '/cmd_vel',
                                                            self.cmd_vel_callback,
                                                            10)
-        
-        self.subscriber_camera_timestamp = self.create_subscription(CameraInfo,
-                                                                    camera_info,
-                                                                    self.timestamp_update,
-                                                                    qos_profile1)
         
         self.subscriber_vehicle_odometry = self.create_subscription(VehicleOdometry,
                                                                     '/fmu/out/vehicle_odometry',
@@ -135,7 +127,6 @@ class OffboardControll(Node):
         self.T_BpBv = np.transpose(self.T_BvBp)
         self.T_RpBp_zero = R.from_quat([0, 0, 0, 1]).as_matrix()
         self.T_RpRv = None
-        self.timestamp = None
         self.arm_state = 1
         self.take_off_ground = False
         self.takeOffHeight = -args.TakeoffHeight
@@ -144,7 +135,7 @@ class OffboardControll(Node):
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.OffboardControllEnable = args.OffboardControllEnable
         self.IS_ODOM_LOST = False
-        self.cmd_vel_timestamp = Clock().now()
+        self.cmd_vel_timestamp = self.get_clock().now()
         self.cmd_vel_msg = Twist()
 
     def slam_localization_odom_callback(self, msg):
@@ -181,7 +172,7 @@ class OffboardControll(Node):
             self.IS_ODOM_LOST = True
 
         # saving vio last timestamp
-        self.vio_time_stamp = int(Clock().now().nanoseconds / 1000)
+        self.vio_time_stamp = int(self.get_clock().now().nanoseconds / 1000)
 
         # print the comparision of slam and vehicle odomtery
         if self.take_off_ground:
@@ -209,17 +200,12 @@ class OffboardControll(Node):
     def cmd_vel_callback(self, msg):
 
         # getting and publishing the recived cmd_vel to navigate the quadcopter
-        self.cmd_vel_timestamp = Clock().now()
+        self.cmd_vel_timestamp = self.get_clock().now()
         if self.IS_ODOM_LOST:
             self.cmd_vel_msg = Twist()
             self.cmd_vel_msg.angular.z = 0.2
         else:
-            self.cmd_vel_msg = msg
-
-    def timestamp_update(self, msg):
-
-        # updating he timestamp 
-        self.timestamp = msg.header.stamp
+            self.cmd_vel_msg = msg.twist
 
     def vehicle_odometry_callback(self, msg):
 
@@ -277,12 +263,12 @@ class OffboardControll(Node):
             # publish the transformed cmd_vel to autopilot_rtps if recived cmd_vel recently
             if (abs((self.cmd_vel_timestamp.seconds_nanoseconds()[0]+ \
                 self.cmd_vel_timestamp.seconds_nanoseconds()[1]/10e8) - \
-                (Clock().now().seconds_nanoseconds()[0]+ \
-                Clock().now().seconds_nanoseconds()[1]/10e8)) < 0.5):
+                (self.get_clock().now().seconds_nanoseconds()[0]+ \
+                self.get_clock().now().seconds_nanoseconds()[1]/10e8)) < 0.5):
                 self.current_goal.position[0] = self.vehicle_odometry.position[0]
                 self.current_goal.position[1] = self.vehicle_odometry.position[1]
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(Clock().now().nanoseconds / 1000)
+                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=True
@@ -306,10 +292,10 @@ class OffboardControll(Node):
             # publish the position controll command to autopilot_rtps if not recived cmd_vel recently
             elif (abs((self.cmd_vel_timestamp.seconds_nanoseconds()[0]+ \
                   self.cmd_vel_timestamp.seconds_nanoseconds()[1]/10e8) - \
-                  (Clock().now().seconds_nanoseconds()[0]+ \
-                  Clock().now().seconds_nanoseconds()[1])/10e8) >= 0.5):
+                  (self.get_clock().now().seconds_nanoseconds()[0]+ \
+                  self.get_clock().now().seconds_nanoseconds()[1])/10e8) >= 0.5):
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(Clock().now().nanoseconds / 1000)
+                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=False
@@ -429,7 +415,7 @@ class OffboardControll(Node):
             vehicle_command.source_system = 1
             vehicle_command.source_component = 1
             vehicle_command.from_external = True
-            vehicle_command.timestamp = int(Clock().now().nanoseconds / 1000)
+            vehicle_command.timestamp = int(self.get_clock().now().nanoseconds / 1000)
             self.publisher_vehicle_command.publish(vehicle_command)
             print(time.time(),"  publishing arming command")
 
@@ -440,7 +426,7 @@ class OffboardControll(Node):
             print(time.time(),"  takeing off the ground.")
             if (self.takeOffHeight - z) < -0.1 and self.take_off_ground:
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(Clock().now().nanoseconds / 1000)
+                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=False
@@ -459,7 +445,7 @@ class OffboardControll(Node):
                     self.publisher_trajectory_setpoint.publish(trajectory_msg)
             elif (self.takeOffHeight - z) > 0.1 and self.take_off_ground:
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(Clock().now().nanoseconds / 1000)
+                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=False
@@ -493,7 +479,7 @@ class OffboardControll(Node):
             vehicle_command.target_system = 1
             vehicle_command.target_component = 1
             vehicle_command.from_external = True
-            vehicle_command.timestamp = int(Clock().now().nanoseconds / 1000)
+            vehicle_command.timestamp = int(self.get_clock().now().nanoseconds / 1000)
             self.publisher_vehicle_command.publish(vehicle_command)
 
     def publish_setpoints_before_chage_to_offborad(self):
@@ -502,7 +488,7 @@ class OffboardControll(Node):
         if self.OffboardControllEnable:
             for i in range(100):
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(Clock().now().nanoseconds / 1000)
+                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=True

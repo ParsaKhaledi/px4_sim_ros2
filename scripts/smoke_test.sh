@@ -24,6 +24,10 @@ docker run -d \
     MicroXRCEAgent udp4 -p 8888 & \
     /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh default & \
     /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
+    source /opt/ros/\${ROS_DISTRO}/setup.bash && \
+    source /home/px4/ws_px4/install/setup.bash && \
+    cd /home/px4/volume/includes/gz && \
+    python3 px4_imu_bridge.py & \
     sleep infinity
   "
 
@@ -34,8 +38,8 @@ trap cleanup EXIT
 
 elapsed=0
 while [ "${elapsed}" -lt "${TIMEOUT}" ]; do
-  if docker exec px4_smoke_test /home/px4/volume/HealthCheck/check_multi_topic_pub.bash 2 \
-      /clock /fmu/out/vehicle_odometry; then
+  if docker exec px4_smoke_test /home/px4/volume/HealthCheck/check_multi_topic_pub.bash 4 \
+      /clock /fmu/out/vehicle_odometry /fmu/out/sensor_combined /imu; then
     echo "Smoke test passed."
     exit 0
   fi

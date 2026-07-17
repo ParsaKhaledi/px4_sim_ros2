@@ -111,6 +111,7 @@ bt_navigator_navigate_to_pose_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: True
+    enable_stamped_cmd_vel: True
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
@@ -305,6 +306,7 @@ behavior_server:
     robot_base_frame: base_link
     transform_tolerance: 0.1
     use_sim_time: True
+    enable_stamped_cmd_vel: True
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.1
@@ -328,6 +330,7 @@ waypoint_follower:
 velocity_smoother:
   ros__parameters:
     use_sim_time: True
+    enable_stamped_cmd_vel: True
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"

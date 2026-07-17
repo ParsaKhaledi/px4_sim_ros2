@@ -6,6 +6,10 @@ WORKDIR=/home/px4
 # Set custom params:
 echo "param set-default COM_RC_LOSS_T 35.0" >> $WORKDIR/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/px4-rc.params
 echo "param set-default NAV_RCL_ACT 1" >> $WORKDIR/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/px4-rc.params
+# Gazebo-clock scenario (PX4 ROS 2 user guide): let Gazebo /clock be the single
+# time source for PX4 + ROS 2 instead of PX4's own agent-wall-clock sync, which
+# is only valid at real-time-factor ~= 1 and conflicts with use_sim_time=true.
+echo "param set-default UXRCE_DDS_SYNCT 0" >> $WORKDIR/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/px4-rc.params
 # Camera Modifications:
 echo "Selected Camera Type: $input"
 

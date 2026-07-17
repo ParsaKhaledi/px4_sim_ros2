@@ -26,6 +26,10 @@ ENV WORKDIR=${HOME}/ws_px4
 ENV USER=${USER_NAME}
 ENV PATH=${HOME}/.local/bin:${PATH}
 
+# CycloneDDS is installed below and available as an opt-in RMW; the default
+# stays rmw_fastrtps_cpp (ROS 2 default) unless this is uncommented.
+# ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
 WORKDIR ${WORKDIR}
 
 ### Install Gazebo Jetty Nav2 and rtabmap 
@@ -35,7 +39,7 @@ RUN apt update 1>/dev/null && \
 	iputils-ping\
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip python3-setuptools python3-kconfiglib \
-    python3-jinja2 python3-jsonschema\
+    python3-jinja2 python3-jsonschema python3-numpy python3-scipy\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad \
 	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 fuse libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
@@ -93,6 +97,8 @@ RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v${PX4_V
 	cd ${HOME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 1>/dev/null
 
 ### Install Micro XRCE-DDS
+# Pinned to v2.4.3: PX4 v1.17's bundled v2.x uXRCE-DDS client is incompatible
+# with v3.x agents (PX4 docs), so this is intentionally not bumped.
 ARG XRCE_AGENT_VERSION
 RUN cd ${HOME} && git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git -b ${XRCE_AGENT_VERSION} && \
 	cd ${HOME}/Micro-XRCE-DDS-Agent &&\
