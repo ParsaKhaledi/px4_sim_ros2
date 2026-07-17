@@ -108,8 +108,10 @@ class OffboardControll(Node):
                                                         '/fmu/in/vehicle_visual_odometry',
                                                         qos_profile2)
         
-        self.recovery_node_publisher = self.create_publisher(Twist,
-                                                             '/cmd_vel', 
+        # Must match subscriber type (TwistStamped); a Twist publisher on the
+        # same topic crashes node init with an incompatible-type RCLError.
+        self.recovery_node_publisher = self.create_publisher(TwistStamped,
+                                                             '/cmd_vel',
                                                              10)
 
         # define timer for publishing cmd_vel
