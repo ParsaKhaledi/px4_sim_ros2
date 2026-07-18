@@ -3,6 +3,7 @@ import rclpy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from geometry_msgs.msg import Twist
 
@@ -36,18 +37,21 @@ def parse_args():
                         help='Enabling offboard controll or just pass odometry')
     
     parser.add_argument("--TakeoffHeight", 
-                        default=1.5, 
+                        default=1.25, 
                         type=float, 
                         help='TakeOff flight height')
     
-    args = parser.parse_args()
+    # Allow --ros-args (e.g. use_sim_time) to pass through unused.
+    args, _ = parser.parse_known_args()
     return args
 
 
 class OffboardControll(Node):
 
     def __init__(self):
-        super().__init__('minimal_publisher')
+        super().__init__(
+            'minimal_publisher',
+            parameter_overrides=[Parameter('use_sim_time', Parameter.Type.BOOL, True)])
 
         args = parse_args()
 
@@ -81,7 +85,10 @@ class OffboardControll(Node):
         #                                                         self.slam_localization_odom_callback,
         #                                                         qos_profile1)
         
-        self.subscriber_cmd_vel = self.create_subscription(TwistStamped,
+        # Humble Nav2 publishes geometry_msgs/Twist on /cmd_vel.
+        # Jazzy+ can use TwistStamped when enable_stamped_cmd_vel is true;
+        # the local validation image is Humble, so subscribe to Twist here.
+        self.subscriber_cmd_vel = self.create_subscription(Twist,
                                                            '/cmd_vel',
                                                            self.cmd_vel_callback,
                                                            10)
@@ -108,9 +115,8 @@ class OffboardControll(Node):
                                                         '/fmu/in/vehicle_visual_odometry',
                                                         qos_profile2)
         
-        # Must match subscriber type (TwistStamped); a Twist publisher on the
-        # same topic crashes node init with an incompatible-type RCLError.
-        self.recovery_node_publisher = self.create_publisher(TwistStamped,
+        # Match /cmd_vel subscription type (Twist on Humble Nav2).
+        self.recovery_node_publisher = self.create_publisher(Twist,
                                                              '/cmd_vel',
                                                              10)
 
@@ -207,7 +213,7 @@ class OffboardControll(Node):
             self.cmd_vel_msg = Twist()
             self.cmd_vel_msg.angular.z = 0.2
         else:
-            self.cmd_vel_msg = msg.twist
+            self.cmd_vel_msg = msg
 
     def vehicle_odometry_callback(self, msg):
 
