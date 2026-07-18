@@ -3,6 +3,7 @@ import rclpy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from geometry_msgs.msg import Twist
 
@@ -36,18 +37,21 @@ def parse_args():
                         help='Enabling offboard controll or just pass odometry')
     
     parser.add_argument("--TakeoffHeight", 
-                        default=1.5, 
+                        default=1.0, 
                         type=float, 
                         help='TakeOff flight height')
     
-    args = parser.parse_args()
+    # Allow --ros-args (e.g. use_sim_time) to pass through unused.
+    args, _ = parser.parse_known_args()
     return args
 
 
 class OffboardControll(Node):
 
     def __init__(self):
-        super().__init__('minimal_publisher')
+        super().__init__(
+            'minimal_publisher',
+            parameter_overrides=[Parameter('use_sim_time', Parameter.Type.BOOL, True)])
 
         args = parse_args()
 
@@ -58,9 +62,12 @@ class OffboardControll(Node):
             depth=1
         )
 
+        # Must match PX4 uXRCE subscriber QoS (BEST_EFFORT + VOLATILE).
+        # TRANSIENT_LOCAL publishers can fail to deliver to PX4's VOLATILE
+        # readers and show up as offboard_control_signal_lost.
         qos_profile2 = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            durability=QoSDurabilityPolicy.VOLATILE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
@@ -81,7 +88,10 @@ class OffboardControll(Node):
         #                                                         self.slam_localization_odom_callback,
         #                                                         qos_profile1)
         
-        self.subscriber_cmd_vel = self.create_subscription(TwistStamped,
+        # Humble Nav2 publishes geometry_msgs/Twist on /cmd_vel.
+        # Jazzy+ can use TwistStamped when enable_stamped_cmd_vel is true;
+        # the local validation image is Humble, so subscribe to Twist here.
+        self.subscriber_cmd_vel = self.create_subscription(Twist,
                                                            '/cmd_vel',
                                                            self.cmd_vel_callback,
                                                            10)
@@ -108,9 +118,8 @@ class OffboardControll(Node):
                                                         '/fmu/in/vehicle_visual_odometry',
                                                         qos_profile2)
         
-        # Must match subscriber type (TwistStamped); a Twist publisher on the
-        # same topic crashes node init with an incompatible-type RCLError.
-        self.recovery_node_publisher = self.create_publisher(TwistStamped,
+        # Match /cmd_vel subscription type (Twist on Humble Nav2).
+        self.recovery_node_publisher = self.create_publisher(Twist,
                                                              '/cmd_vel',
                                                              10)
 
@@ -139,6 +148,53 @@ class OffboardControll(Node):
         self.IS_ODOM_LOST = False
         self.cmd_vel_timestamp = self.get_clock().now()
         self.cmd_vel_msg = Twist()
+        self._offboard_setpoint_counter = 0
+        self.current_goal = None
+        self.vehicle_odometry = None
+        self._last_takeoff_feedback = None
+        self._hover_xy = None  # freeze XY at arm/takeoff start for hold
+        self._hold_pose = None  # [x, y, z_ned] after takeoff complete
+        self._was_following = False  # true while actively following a cmd_vel trajectory
+
+        # VIO outlier rejection: reject any RTAB-Map sample implying a jump
+        # larger than these bounds since the last accepted good sample.
+        self._vio_last_good_pos = None
+        self._vio_last_good_quat = None
+        self._vio_max_jump_m = 0.15
+        self._vio_max_angle_deg = 12.0
+        self._vio_outlier_count = 0
+
+        # Safety failsafe: if vision has been lost/rejected continuously for
+        # too long, PX4 is flying blind on IMU+baro dead-reckoning only (no
+        # GPS since it's disabled indoors — see gz_modifications.bash). That
+        # free-drifts without bound and previously ended in a real crash
+        # after ~100s. Rather than keep commanding a stale hold setpoint
+        # against an unknown true position, command LAND once and stop.
+        self._vio_last_good_time = None
+        self._vio_failsafe_timeout_s = 2.0
+        self._vio_failsafe_triggered = False
+
+        # Mode engagement is a BOUNDED, single-shot affair: request OFFBOARD
+        # (and arm) only a few times right after takeoff starts, then never
+        # again. If we kept re-issuing VEHICLE_CMD_DO_SET_MODE(OFFBOARD) every
+        # second (as a previous version of this file did), any RC/pilot mode
+        # change (or PX4 failsafe) gets immediately fought and overridden by
+        # us, which is exactly why the vehicle kept climbing into the ceiling
+        # instead of respecting a mode switch. Once _mode_engage_done is True
+        # we must not touch VEHICLE_CMD_DO_SET_MODE again for this flight.
+        self._mode_engage_attempts = 0
+        self._mode_engage_max_attempts = 5
+        self._mode_engage_done = False
+        self._last_mode_engage_time = None
+        self._arm_attempts = 0
+        self._arm_max_attempts = 100
+        self._last_arm_time = None
+
+        # Ramp state for a smooth, hard-clamped climb (never commands an
+        # altitude setpoint beyond the requested TakeoffHeight).
+        self._takeoff_climb_rate = 0.3  # m/s, gentle indoor climb
+        self._takeoff_start_time = None
+        self._takeoff_start_alt = None
 
     def slam_localization_odom_callback(self, msg):
         self.pose_with_covariance = msg
@@ -151,10 +207,8 @@ class OffboardControll(Node):
         # update arm state
         self.arm_state = msg.arming_state
 
-        # arm or takeoff the drone and update the take_off condition
-        # based on take_off_complete variable
-        if self.arm_state == 1:
-            self.arm()
+        # Arming is driven by the offboard pre-stream timer (PX4 example order:
+        # stream setpoints → DO_SET_MODE(OFFBOARD) → arm), not from status alone.
         if (self.arm_state == 2) :
             if not self.takeOff_complete:
                 self.take_off_ground = True
@@ -167,14 +221,51 @@ class OffboardControll(Node):
             or msg.pose.pose.orientation.y != 0 \
             or msg.pose.pose.orientation.z != 0 \
             or msg.pose.pose.orientation.w != 0 :
-            self.vio_odometry = msg
-            self.IS_ODOM_LOST = False
+
+            # RTAB-Map can occasionally emit a spurious, physically-impossible
+            # pose (a bad frame-to-frame registration) that is NOT all-zero,
+            # so it slips past the "odom lost" check above. PX4's EKF trusts
+            # external vision heavily (EKF2_EVP_NOISE/EKF2_EVA_NOISE are
+            # small), so forwarding one bad sample can trigger a large,
+            # sudden position/attitude correction — this is what caused the
+            # vehicle to spin/drift and drop out of OFFBOARD while the
+            # reported altitude briefly showed double-digit garbage values.
+            # Reject samples that imply an impossible jump since the last
+            # good one and just hold the previous good pose instead.
+            p = msg.pose.pose.position
+            q_new = np.array([msg.pose.pose.orientation.x,
+                               msg.pose.pose.orientation.y,
+                               msg.pose.pose.orientation.z,
+                               msg.pose.pose.orientation.w], dtype=np.float64)
+            is_outlier = False
+            if self._vio_last_good_pos is not None:
+                jump_m = np.linalg.norm(
+                    np.array([p.x, p.y, p.z]) - self._vio_last_good_pos)
+                if jump_m > self._vio_max_jump_m:
+                    is_outlier = True
+                elif self._vio_last_good_quat is not None:
+                    rel = R.from_quat(q_new) * R.from_quat(self._vio_last_good_quat).inv()
+                    angle_deg = np.degrees(np.linalg.norm(rel.as_rotvec()))
+                    if angle_deg > self._vio_max_angle_deg:
+                        is_outlier = True
+
+            if is_outlier:
+                self._vio_outlier_count += 1
+                print(time.time(), "  VIO outlier rejected (bad RTAB-Map "
+                      "sample), holding last good pose. count=",
+                      self._vio_outlier_count)
+            else:
+                self.vio_odometry = msg
+                self.IS_ODOM_LOST = False
+                self._vio_last_good_pos = np.array([p.x, p.y, p.z])
+                self._vio_last_good_quat = q_new
+                self._vio_last_good_time = self.get_clock().now()
         else:
             # activating recovery mode if ODOM is lost 
             self.IS_ODOM_LOST = True
 
         # saving vio last timestamp
-        self.vio_time_stamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.vio_time_stamp = 0  # PX4 stamps on receive; ROS sim-time lags PX4 hrt (~COM_OF_LOSS_T)
 
         # print the comparision of slam and vehicle odomtery
         if self.take_off_ground:
@@ -207,7 +298,7 @@ class OffboardControll(Node):
             self.cmd_vel_msg = Twist()
             self.cmd_vel_msg.angular.z = 0.2
         else:
-            self.cmd_vel_msg = msg.twist
+            self.cmd_vel_msg = msg
 
     def vehicle_odometry_callback(self, msg):
 
@@ -232,18 +323,40 @@ class OffboardControll(Node):
             and not self.takeOff_complete: 
             self.current_goal = self.vehicle_odometry
 
-        # publish take of setpoint_trajectory msg
-        if self.take_off_ground and self.OffboardControllEnable and (self.current_goal is not None): 
-            if self.not_published_before:
-                print(time.time(),"  publishing offborad command before takeoff")
-                self.publish_setpoints_before_chage_to_offborad()
-                self.change_to_offboard()
-                self.not_published_before = False
-            self.takeOff(self.vehicle_odometry.position[2])
-
     def timer_callback(self):
 
+        # Vision-loss safety failsafe takes priority over everything else:
+        # once it fires we stop commanding OFFBOARD setpoints for good and
+        # let PX4's own LAND mode (baro + IMU, no vision needed) bring the
+        # vehicle down instead of free-drifting on dead-reckoning forever.
+        if self._check_vio_failsafe():
+            return
+
+        # Always keep an offboard heartbeat while mission control is enabled so
+        # PX4 does not latch offboard_control_signal_lost during takeoff.
+        if self.OffboardControllEnable and not self.takeOff_complete:
+            self._publish_takeoff_setpoint()
+            return
+
         if self.OffboardControllEnable and self.takeOff_complete:
+            # If the pilot/RC (or a PX4 failsafe) has taken the vehicle out of
+            # OFFBOARD, stop publishing setpoints entirely instead of quietly
+            # continuing to stream them — we already stopped re-requesting
+            # OFFBOARD mode (see _publish_takeoff_setpoint), and not publishing
+            # setpoints here avoids any confusion if the pilot switches back.
+            if self.nav_state != VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                return
+
+            # Prefer frozen takeoff hover pose; fall back to live odom if missing.
+            hold = self._hold_pose
+            if hold is None and self.vehicle_odometry is not None:
+                hold = [
+                    float(self.vehicle_odometry.position[0]),
+                    float(self.vehicle_odometry.position[1]),
+                    self.takeOffHeight,
+                ]
+                self._hold_pose = hold
+
             # transforming cmd_vel to NED frame
             self.linear_Bp = np.array([self.cmd_vel_msg.linear.x, 
                                        -self.cmd_vel_msg.linear.y, 
@@ -258,68 +371,79 @@ class OffboardControll(Node):
             self.angular_Rp = np.dot(self.T_RpBp_fusion, 
                                      np.transpose(self.angular_Bp))
 
-            # update cuurent_goal if drone was not in offboard controll mode
-            if self.nav_state != VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                self.current_goal = self.vehicle_odometry
+            # A "new trajectory" means Nav2 is actually commanding motion, not
+            # just recently publishing an idle/keep-alive zero Twist. Gate on
+            # both recency AND magnitude so an idle-but-recent cmd_vel does not
+            # knock us out of position-hold into a driftier velocity setpoint.
+            cmd_vel_age_s = abs(
+                (self.cmd_vel_timestamp.seconds_nanoseconds()[0] +
+                 self.cmd_vel_timestamp.seconds_nanoseconds()[1] / 1e9) -
+                (self.get_clock().now().seconds_nanoseconds()[0] +
+                 self.get_clock().now().seconds_nanoseconds()[1] / 1e9)
+            )
+            cmd_vel_is_moving = (
+                abs(self.cmd_vel_msg.linear.x) > 0.02 or
+                abs(self.cmd_vel_msg.linear.y) > 0.02 or
+                abs(self.cmd_vel_msg.linear.z) > 0.02 or
+                abs(self.cmd_vel_msg.angular.z) > 0.02
+            )
+            new_trajectory_active = (cmd_vel_age_s < 0.5) and cmd_vel_is_moving
 
-            # publish the transformed cmd_vel to autopilot_rtps if recived cmd_vel recently
-            if (abs((self.cmd_vel_timestamp.seconds_nanoseconds()[0]+ \
-                self.cmd_vel_timestamp.seconds_nanoseconds()[1]/10e8) - \
-                (self.get_clock().now().seconds_nanoseconds()[0]+ \
-                self.get_clock().now().seconds_nanoseconds()[1]/10e8)) < 0.5):
-                self.current_goal.position[0] = self.vehicle_odometry.position[0]
-                self.current_goal.position[1] = self.vehicle_odometry.position[1]
+            if new_trajectory_active:
+                # Follow the newly received trajectory via velocity control.
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
+                time_stamp = 0
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=True
                 self.publisher_offboard_control_mode.publish(offboard_msg)
-                # if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                if True:
-                    trajectory_msg = TrajectorySetpoint()
-                    trajectory_msg.timestamp = time_stamp
-                    trajectory_msg.position[0] = float('nan')
-                    trajectory_msg.position[1] = float('nan')
-                    trajectory_msg.position[2] = self.current_goal.position[2]
-                    # trajectory_msg.position[2] = self.takeOffHeight
-                    trajectory_msg.velocity[0] = self.linear_Rp[0]
-                    trajectory_msg.velocity[1] = self.linear_Rp[1]
-                    trajectory_msg.velocity[2] = float('nan')
-                    trajectory_msg.yaw = float('nan')
-                    trajectory_msg.yawspeed = self.angular_Rp[2]
-                    print(time.time(),"  publishing the recived cmd_vel into px4")
-                    self.publisher_trajectory_setpoint.publish(trajectory_msg)
+                trajectory_msg = TrajectorySetpoint()
+                trajectory_msg.timestamp = time_stamp
+                trajectory_msg.position[0] = float('nan')
+                trajectory_msg.position[1] = float('nan')
+                trajectory_msg.position[2] = hold[2] if hold else self.takeOffHeight
+                trajectory_msg.velocity[0] = self.linear_Rp[0]
+                trajectory_msg.velocity[1] = self.linear_Rp[1]
+                trajectory_msg.velocity[2] = float('nan')
+                trajectory_msg.yaw = float('nan')
+                trajectory_msg.yawspeed = self.angular_Rp[2]
+                print(time.time(),"  publishing the recived cmd_vel into px4")
+                self.publisher_trajectory_setpoint.publish(trajectory_msg)
+                self._was_following = True
 
-            # publish the position controll command to autopilot_rtps if not recived cmd_vel recently
-            elif (abs((self.cmd_vel_timestamp.seconds_nanoseconds()[0]+ \
-                  self.cmd_vel_timestamp.seconds_nanoseconds()[1]/10e8) - \
-                  (self.get_clock().now().seconds_nanoseconds()[0]+ \
-                  self.get_clock().now().seconds_nanoseconds()[1])/10e8) >= 0.5):
+            else:
+                # No active new trajectory: keep re-sending the SAME fixed 3D
+                # position setpoint (position=True, velocity=False) every
+                # tick, and never touch the flight mode. If we just finished
+                # following a trajectory, freeze the hold pose at the
+                # quadrotor's last actual position instead of snapping back
+                # to the original takeoff point.
+                if self._was_following and self.vehicle_odometry is not None:
+                    hold = [
+                        float(self.vehicle_odometry.position[0]),
+                        float(self.vehicle_odometry.position[1]),
+                        float(self.vehicle_odometry.position[2]),
+                    ]
+                    self._hold_pose = hold
+                    self._was_following = False
+
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
+                time_stamp = 0
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
                 offboard_msg.velocity=False
                 self.publisher_offboard_control_mode.publish(offboard_msg)
-                # if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                if True:
-                    trajectory_msg = TrajectorySetpoint()
-                    trajectory_msg.timestamp = time_stamp
-                    trajectory_msg.position[0] = self.current_goal.position[0]
-                    trajectory_msg.position[1] = self.current_goal.position[1]
-                    trajectory_msg.position[2] = self.current_goal.position[2]
-                    # trajectory_msg.position[2] = self.takeOffHeight
-                    trajectory_msg.velocity[0] = float('nan')
-                    trajectory_msg.velocity[1] = float('nan')
-                    trajectory_msg.velocity[2] = float('nan')
-                    trajectory_msg.yaw = float('nan')
-                    trajectory_msg.yawspeed = float('nan')
-                    print(time.time(),"  publishing pose hold mode message into px4")
-                    self.publisher_trajectory_setpoint.publish(trajectory_msg)
-            else:
-                print("What the Fuck!!!")
-
+                trajectory_msg = TrajectorySetpoint()
+                trajectory_msg.timestamp = time_stamp
+                trajectory_msg.position[0] = hold[0]
+                trajectory_msg.position[1] = hold[1]
+                trajectory_msg.position[2] = hold[2]
+                trajectory_msg.velocity[0] = float('nan')
+                trajectory_msg.velocity[1] = float('nan')
+                trajectory_msg.velocity[2] = float('nan')
+                trajectory_msg.yaw = float('nan')
+                trajectory_msg.yawspeed = float('nan')
+                self.publisher_trajectory_setpoint.publish(trajectory_msg)
     def callback_loop(self):
 
         # calculating odometry in NED frame and publish it to autopilot
@@ -417,58 +541,191 @@ class OffboardControll(Node):
             vehicle_command.source_system = 1
             vehicle_command.source_component = 1
             vehicle_command.from_external = True
-            vehicle_command.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+            vehicle_command.timestamp = 0  # PX4 stamps on receive
             self.publisher_vehicle_command.publish(vehicle_command)
             print(time.time(),"  publishing arming command")
 
+    def _check_vio_failsafe(self):
+        """Return True (and stop all OFFBOARD setpoint publishing for good)
+        once vision has been lost/rejected continuously for too long.
+
+        Without vision, PX4 has no absolute position aiding (GPS is
+        disabled indoors, see gz_modifications.bash) and free-drifts on
+        IMU+baro dead-reckoning alone. Continuing to command a stale
+        position hold against an increasingly wrong estimate is how a
+        previous run ended up climbing/tumbling and crashing after ~100s
+        of undetected vision loss. Landing uses PX4's own baro-referenced
+        altitude control, which stays safe without vision.
+        """
+        if self._vio_failsafe_triggered:
+            return True
+
+        if self.arm_state != 2:
+            return False
+
+        # Fall back to the takeoff start time if vision never came up at all
+        # (e.g. RTAB-Map never initialized), so a total vision blackout from
+        # the very start of the flight also gets caught, not just a loss
+        # partway through.
+        baseline_time = self._vio_last_good_time or self._takeoff_start_time
+        if baseline_time is None:
+            return False
+
+        elapsed_s = (self.get_clock().now() - baseline_time).nanoseconds / 1e9
+        if elapsed_s > self._vio_failsafe_timeout_s:
+            self._vio_failsafe_triggered = True
+            print(
+                time.time(),
+                f"  VIO lost for {elapsed_s:.1f}s (>{self._vio_failsafe_timeout_s:.1f}s "
+                "timeout) — commanding LAND as a safety failsafe and "
+                "halting all OFFBOARD setpoints"
+            )
+            self._command_land()
+            return True
+        return False
+
+    def _command_land(self):
+        vehicle_command = VehicleCommand()
+        vehicle_command.command = VehicleCommand.VEHICLE_CMD_NAV_LAND
+        vehicle_command.target_system = 1
+        vehicle_command.target_component = 1
+        vehicle_command.source_system = 1
+        vehicle_command.source_component = 1
+        vehicle_command.from_external = True
+        vehicle_command.timestamp = 0  # PX4 stamps on receive
+        self.publisher_vehicle_command.publish(vehicle_command)
+
+    def _publish_takeoff_setpoint(self):
+        """Stream OffboardControlMode + a ramped, hard-clamped takeoff setpoint."""
+        if self.vehicle_odometry is None:
+            return
+
+        if self.current_goal is None:
+            self.current_goal = self.vehicle_odometry
+
+        # Hold XY at first good estimate; climb to takeoff altitude (NED down).
+        if self._hover_xy is None and self.arm_state == 2:
+            self._hover_xy = (
+                float(self.vehicle_odometry.position[0]),
+                float(self.vehicle_odometry.position[1]),
+            )
+        hover_x = self._hover_xy[0] if self._hover_xy else float(self.vehicle_odometry.position[0])
+        hover_y = self._hover_xy[1] if self._hover_xy else float(self.vehicle_odometry.position[1])
+
+        target_alt = -self.takeOffHeight  # positive AGL target, e.g. 1.0m
+        z = float(self.vehicle_odometry.position[2])
+        alt_m = -z
+
+        # Ramp the altitude setpoint up gently instead of jumping straight to
+        # the target. min() HARD-CLAMPS the commanded altitude so it can never
+        # exceed target_alt, no matter what the ramp timer computes — this is
+        # the concrete fix for the vehicle climbing past the target into the
+        # ceiling.
+        if self.arm_state == 2:
+            if self._takeoff_start_time is None:
+                self._takeoff_start_time = self.get_clock().now()
+                self._takeoff_start_alt = max(alt_m, 0.0)
+            elapsed_s = (self.get_clock().now() - self._takeoff_start_time).nanoseconds / 1e9
+            ramp_alt = self._takeoff_start_alt + self._takeoff_climb_rate * elapsed_s
+            setpoint_alt = min(ramp_alt, target_alt)
+        else:
+            setpoint_alt = min(alt_m, target_alt)
+        setpoint_z = -setpoint_alt
+
+        # timestamp=0: uXRCE replaces with hrt_absolute_time() (see
+        # ucdr_deserialize_*). Non-zero ROS sim-time stamps lag PX4 and make
+        # COM_OF_LOSS_T treat OffboardControlMode as stale.
+        time_stamp = 0
+        offboard_msg = OffboardControlMode()
+        offboard_msg.timestamp = time_stamp
+        offboard_msg.position = True
+        offboard_msg.velocity = False
+        self.publisher_offboard_control_mode.publish(offboard_msg)
+
+        trajectory_msg = TrajectorySetpoint()
+        trajectory_msg.timestamp = time_stamp
+        trajectory_msg.position[0] = hover_x
+        trajectory_msg.position[1] = hover_y
+        trajectory_msg.position[2] = setpoint_z
+        trajectory_msg.velocity[0] = float('nan')
+        trajectory_msg.velocity[1] = float('nan')
+        trajectory_msg.velocity[2] = float('nan')
+        trajectory_msg.yaw = float('nan')
+        trajectory_msg.yawspeed = 0.0
+        self.publisher_trajectory_setpoint.publish(trajectory_msg)
+
+        self._offboard_setpoint_counter += 1
+
+        # BOUNDED, single-shot mode engagement. PX4/px4_ros_com example
+        # switches to OFFBOARD once after ~1s (>=10 setpoints) of streaming,
+        # then arms — it never re-issues DO_SET_MODE afterwards. We mirror
+        # that: try up to _mode_engage_max_attempts times (1s apart) if we
+        # are not yet in OFFBOARD, then STOP FOREVER so a pilot RC mode
+        # change (or PX4 failsafe) is not immediately fought and reverted.
+        if not self._mode_engage_done and self._offboard_setpoint_counter >= 11:
+            if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                self._mode_engage_done = True
+            else:
+                now = self.get_clock().now()
+                if (self._last_mode_engage_time is None or
+                        (now - self._last_mode_engage_time).nanoseconds > 1e9):
+                    self._last_mode_engage_time = now
+                    self._mode_engage_attempts += 1
+                    self.change_to_offboard()
+                    if self._mode_engage_attempts >= self._mode_engage_max_attempts:
+                        self._mode_engage_done = True
+                        print(time.time(), "  gave up requesting OFFBOARD mode after",
+                              self._mode_engage_attempts, "attempts; will not retry "
+                              "(so RC/pilot mode changes are respected)")
+
+        # Arming has no effect on flight mode, so bounded retries here don't
+        # fight a pilot's RC override — safe to keep retrying a bit longer.
+        if self.arm_state == 1 and self._arm_attempts < self._arm_max_attempts:
+            now = self.get_clock().now()
+            if (self._last_arm_time is None or
+                    (now - self._last_arm_time).nanoseconds > 1e9):
+                self._last_arm_time = now
+                self._arm_attempts += 1
+                self.arm()
+
+        # Periodic takeoff feedback (altitude AGL ≈ -z in NED).
+        now = self.get_clock().now()
+        if (self._last_takeoff_feedback is None or
+                (now - self._last_takeoff_feedback).nanoseconds > 5e8):
+            self._last_takeoff_feedback = now
+            print(
+                time.time(),
+                f"  takeoff feedback: alt={alt_m:.2f}m setpoint={setpoint_alt:.2f}m "
+                f"target={target_alt:.2f}m nav_state={self.nav_state} "
+                f"armed={self.arm_state} "
+                f"offboard={self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD}"
+            )
+
+        # Reach ~1m then freeze the hold pose and stop climbing logic. Read
+        # the quadrotor's ACTUAL last position (from vehicle_odometry) right
+        # now instead of snapping to the idealized (hover_x, hover_y,
+        # takeOffHeight) target — real x/y/z can be up to the 0.1 m
+        # completion tolerance away from that target, and holding the exact
+        # position it is already at avoids a small corrective "snap".
+        if self.arm_state == 2 and abs(target_alt - alt_m) <= 0.1:
+            self.take_off_ground = False
+            self.takeOff_complete = True
+            last_x = float(self.vehicle_odometry.position[0])
+            last_y = float(self.vehicle_odometry.position[1])
+            last_z = float(self.vehicle_odometry.position[2])
+            self._hold_pose = [last_x, last_y, last_z]
+            print(
+                time.time(),
+                f"  takeOff completed — holding at last position "
+                f"(x={last_x:.2f}, y={last_y:.2f}, z={last_z:.2f})"
+            )
+
     def takeOff(self, z):
 
-        # publishing takeoff commnad to autopilot based on vehicle_odometry pose massage
+        # Keep legacy entry point; timer owns the continuous stream now.
         if self.OffboardControllEnable:
             print(time.time(),"  takeing off the ground.")
-            if (self.takeOffHeight - z) < -0.1 and self.take_off_ground:
-                offboard_msg = OffboardControlMode()
-                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
-                offboard_msg.timestamp = time_stamp
-                offboard_msg.position=True
-                offboard_msg.velocity=False
-                self.publisher_offboard_control_mode.publish(offboard_msg)
-                if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                    trajectory_msg = TrajectorySetpoint()
-                    trajectory_msg.timestamp = time_stamp
-                    trajectory_msg.position[0] = self.current_goal.position[0]
-                    trajectory_msg.position[1] = self.current_goal.position[1]
-                    trajectory_msg.position[2] = self.takeOffHeight 
-                    trajectory_msg.velocity[0] = float('nan')
-                    trajectory_msg.velocity[1] = float('nan')
-                    trajectory_msg.velocity[2] = float('nan')
-                    trajectory_msg.yaw = float('nan')
-                    trajectory_msg.yawspeed = 0.0
-                    self.publisher_trajectory_setpoint.publish(trajectory_msg)
-            elif (self.takeOffHeight - z) > 0.1 and self.take_off_ground:
-                offboard_msg = OffboardControlMode()
-                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
-                offboard_msg.timestamp = time_stamp
-                offboard_msg.position=True
-                offboard_msg.velocity=False
-                self.publisher_offboard_control_mode.publish(offboard_msg)
-                if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                    trajectory_msg = TrajectorySetpoint()
-                    trajectory_msg.timestamp = time_stamp
-                    trajectory_msg.position[0] = self.current_goal.position[0]
-                    trajectory_msg.position[1] = self.current_goal.position[1]
-                    trajectory_msg.position[2] = self.takeOffHeight
-                    trajectory_msg.velocity[0] = float('nan')
-                    trajectory_msg.velocity[1] = float('nan')
-                    trajectory_msg.velocity[2] = float('nan')
-                    trajectory_msg.yaw = float('nan')
-                    trajectory_msg.yawspeed = 0.0
-                    self.publisher_trajectory_setpoint.publish(trajectory_msg)
-            else:
-                self.take_off_ground = False
-                self.takeOff_complete = True
-                self.current_goal = self.vehicle_odometry
-                print(time.time(),"  takeOff completed successfully!!")
+            self._publish_takeoff_setpoint()
 
     def change_to_offboard(self):
 
@@ -481,32 +738,36 @@ class OffboardControll(Node):
             vehicle_command.target_system = 1
             vehicle_command.target_component = 1
             vehicle_command.from_external = True
-            vehicle_command.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+            vehicle_command.timestamp = 0  # PX4 stamps on receive
             self.publisher_vehicle_command.publish(vehicle_command)
 
     def publish_setpoints_before_chage_to_offborad(self):
 
-        # publishing 100 massage of setpoint before actual setpoints
+        # PX4 needs a pre-stream of BOTH OffboardControlMode and TrajectorySetpoint
+        # before VEHICLE_CMD_DO_SET_MODE(OFFBOARD) will stick.
         if self.OffboardControllEnable:
             for i in range(100):
                 offboard_msg = OffboardControlMode()
-                time_stamp = int(self.get_clock().now().nanoseconds / 1000)
+                time_stamp = 0  # PX4 stamps on receive; ROS sim-time lags PX4 hrt (~COM_OF_LOSS_T)
                 offboard_msg.timestamp = time_stamp
                 offboard_msg.position=True
-                offboard_msg.velocity=True
+                offboard_msg.velocity=False
                 self.publisher_offboard_control_mode.publish(offboard_msg)
-                if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD:
-                    trajectory_msg = TrajectorySetpoint()
-                    trajectory_msg.timestamp = time_stamp
-                    trajectory_msg.position[0] = float('nan')
-                    trajectory_msg.position[1] = float('nan')
-                    trajectory_msg.position[2] = float('nan')
-                    trajectory_msg.velocity[0] = 0.0
-                    trajectory_msg.velocity[1] = 0.0
-                    trajectory_msg.velocity[2] = 0.0
-                    trajectory_msg.yaw = float('nan')
-                    trajectory_msg.yawspeed = 0.0
-                    self.publisher_trajectory_setpoint.publish(trajectory_msg)
+                trajectory_msg = TrajectorySetpoint()
+                trajectory_msg.timestamp = time_stamp
+                if self.current_goal is not None:
+                    trajectory_msg.position[0] = self.current_goal.position[0]
+                    trajectory_msg.position[1] = self.current_goal.position[1]
+                else:
+                    trajectory_msg.position[0] = 0.0
+                    trajectory_msg.position[1] = 0.0
+                trajectory_msg.position[2] = self.takeOffHeight
+                trajectory_msg.velocity[0] = float('nan')
+                trajectory_msg.velocity[1] = float('nan')
+                trajectory_msg.velocity[2] = float('nan')
+                trajectory_msg.yaw = float('nan')
+                trajectory_msg.yawspeed = 0.0
+                self.publisher_trajectory_setpoint.publish(trajectory_msg)
 
 if __name__ == "__main__":
 
