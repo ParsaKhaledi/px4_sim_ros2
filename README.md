@@ -40,7 +40,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `World` | Gazebo world filename stem | `default` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
-| `FlightHeight` | Offboard takeoff height in metres (`mission` profile) | `2` |
+| `FlightHeight` | Offboard takeoff height in metres (`mission` profile) | `1.25` |
 
 CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-latest_GPU`). Update `px4TAG` in `.env` after pulling a new build.
 
@@ -65,7 +65,7 @@ COMPOSE_PROFILES=gcs,slam,nav CameraType=rgbd World=default ./scripts/up.sh
 COMPOSE_PROFILES=gcs CameraType=stereo World=husarion_office ./scripts/up.sh
 
 # Closed-loop autonomous flight in the indoor apartment world
-COMPOSE_PROFILES=slam,nav,mission CameraType=rgbd World=apt_world FlightHeight=1.5 ./scripts/up.sh
+COMPOSE_PROFILES=gcs,slam,nav,mission CameraType=rgbd World=apt_world FlightHeight=1.25 ./scripts/up.sh
 ```
 
 You can also set `CameraType` and `World` in `.env` instead of the command line.
