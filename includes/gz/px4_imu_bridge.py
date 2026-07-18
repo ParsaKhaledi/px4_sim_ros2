@@ -9,6 +9,7 @@ import rclpy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu
 from px4_msgs.msg import SensorCombined, VehicleAttitude
@@ -24,7 +25,11 @@ AIRCRAFT_BASELINK_Q = R.from_quat([1.0, 0.0, 0.0, 0.0])
 class PX4ImuBridge(Node):
 
     def __init__(self):
-        super().__init__('px4_imu_bridge')
+        # Hard-require sim time so /imu stamps match Gazebo camera stamps.
+        # Without this, RTAB-Map cannot interpolate IMU (wall-clock vs sim-time).
+        super().__init__(
+            'px4_imu_bridge',
+            parameter_overrides=[Parameter('use_sim_time', Parameter.Type.BOOL, True)])
 
         self.publisher_imu = self.create_publisher(Imu, '/imu', qos_profile_sensor_data)
 
