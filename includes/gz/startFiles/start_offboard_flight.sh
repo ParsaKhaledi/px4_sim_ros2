@@ -11,7 +11,7 @@ source ${WORKDIR}/install/setup.bash
 # here), not in startFiles.
 cd ${HOME}/volume/includes/gz
 
-export FLIGHT_HEIGHT=${FLIGHT_HEIGHT:-2}
+export FLIGHT_HEIGHT=${FLIGHT_HEIGHT:-1.0}
 
 python3 px4_imu_bridge.py &
 

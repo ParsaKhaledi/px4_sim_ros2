@@ -234,6 +234,7 @@ services:
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./HealthCheck/:/home/px4/volume/HealthCheck/
         - ./includes/gz/:/home/px4/volume/includes/gz/
         - ./includes/gz/startFiles/:/home/px4/volume/startFiles
         - ./includes/gz/Params:/home/px4/volume/Params
@@ -273,8 +274,7 @@ services:
       # command: /bin/bash -c "sleep inf"
 
       command: /bin/bash -c "
-        ros2 launch nav2_bringup navigation_launch.py \
-        params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
+        /home/px4/volume/startFiles/start_nav2.sh"
         
 
     Nav2_Rviz:
@@ -300,6 +300,8 @@ services:
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+        - ./includes/gz/:/home/px4/volume/includes/gz/
+        - ./includes/gz/startFiles/:/home/px4/volume/startFiles
         - ./includes/gz/Params:/home/px4/volume/Params
 
       # command: /bin/bash -c "sleep inf"
@@ -325,7 +327,7 @@ services:
         px4:
           ipv4_address: "10.20.10.11"
       environment:
-        FLIGHT_HEIGHT: ${FlightHeight:-2}
+        FLIGHT_HEIGHT: ${FlightHeight:-1.0}
         # RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
       volumes:
         - ./includes/gz/:/home/px4/volume/includes/gz/
