@@ -25,6 +25,15 @@ export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_GZ="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# SIM_ORIGIN_* is the spawn coordinate. The script writes the matching
+# world origin into PX4's worlds and exports it as PX4_HOME_LAT/LON/ALT.
+# PX4 v1.17 gz uses those three variables as the world origin.
+if ! origin_env="$(python3 "${REPO_GZ}/scripts/sim_origin.py")"; then
+  echo "ERROR: sim_origin.py failed; GPS origin was not set" >&2
+  exit 1
+fi
+eval "${origin_env}"
+
 python3 "${REPO_GZ}/scripts/patch_x500_ground_truth.py" || \
   echo "WARN: could not patch x500_depth with the ground-truth plugin"
 

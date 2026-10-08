@@ -47,6 +47,10 @@ services:
         PREFLIGHT_CAMERA_TOPIC: ${PREFLIGHT_CAMERA_TOPIC:-/camera/rgb/image_raw}
         PREFLIGHT_IMU_TOPIC: ${PREFLIGHT_IMU_TOPIC:-/imu/data}
         PREFLIGHT_GT_TOPIC: ${PREFLIGHT_GT_TOPIC:-/ground_truth/odom}
+        # Spawn coordinate (Amirkabir aerospace dept). Not the world origin.
+        SIM_ORIGIN_LAT: ${SIM_ORIGIN_LAT:-35.7048378}
+        SIM_ORIGIN_LON: ${SIM_ORIGIN_LON:-51.4095049}
+        SIM_ORIGIN_ALT: ${SIM_ORIGIN_ALT:-1205}
           
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/

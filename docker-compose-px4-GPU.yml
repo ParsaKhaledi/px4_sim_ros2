@@ -28,6 +28,10 @@ services:
       USE_SIM_TIME: ${USE_SIM_TIME:-true}
       PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-0.8}
       PREFLIGHT_MAX_POSE_ERR_M: ${PREFLIGHT_MAX_POSE_ERR_M:-0.10}
+      # Spawn coordinate (Amirkabir aerospace dept). Not the world origin.
+      SIM_ORIGIN_LAT: ${SIM_ORIGIN_LAT:-35.7048378}
+      SIM_ORIGIN_LON: ${SIM_ORIGIN_LON:-51.4095049}
+      SIM_ORIGIN_ALT: ${SIM_ORIGIN_ALT:-1205}
         
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/
