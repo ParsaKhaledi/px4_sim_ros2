@@ -110,7 +110,7 @@ Simulation assets and startup scripts live under [includes/](includes/). See [in
 
 ## IMU source
 
-`IMU_SOURCE` selects the `sensor_msgs/Imu` publisher on `/imu`. RTAB-Map already subscribes to that topic. This stack does not publish static transforms for `camera_link`, the optical frames, or `imu_link`. The vision StatePublisher owns that tree, including the camera mount. Preflight still requires a TF path from the `/imu` `frame_id` to the camera optical frame.
+`IMU_SOURCE` selects the `sensor_msgs/Imu` publisher on `/imu`. RTAB-Map already subscribes to that topic. The camera and IMU frames stay the ones already in `x500_urdf.urdf`: `imu_link`, `camera_rgb_frame`, `stereo_left_camera_frame`, and the optical frames, all under `OakD-Lite/base_link`. This branch does not add another publisher for that tree. Preflight still requires a TF path from the `/imu` `frame_id` to the camera optical frame.
 
 | | `oak` (default) | `px4` |
 | --- | --- | --- |

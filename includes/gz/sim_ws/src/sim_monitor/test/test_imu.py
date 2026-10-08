@@ -1,4 +1,4 @@
-"""IMU frame conversion, stamps, and the absence of camera static TFs."""
+"""IMU frame conversion, stamps, and no extra camera static TFs."""
 
 import math
 import sys
@@ -143,11 +143,19 @@ def test_px4_topic_prefers_a_version_suffix():
 
 
 def test_no_camera_static_transforms_are_published():
+    """Keep the base URDF camera tree. This package must not add another publisher."""
     urdf = (REPO_GZ / "x500_tf_publisher" / "x500_urdf.urdf").read_text(encoding="utf-8")
+    for name in (
+        "OakD-Lite/base_link",
+        "imu_link",
+        "camera_rgb_frame",
+        "camera_rgb_optical_frame",
+        "stereo_left_camera_frame",
+        "stereo_left_camera_optical_frame",
+    ):
+        assert name in urdf
     helpers = (REPO_GZ / "startFiles" / "gz_start_sim_helpers.sh").read_text(encoding="utf-8")
     assert "camera_tf" not in helpers
-    for name in ("camera_link", "imu_link", "optical_frame", "OakD-Lite"):
-        assert name not in urdf
     assert not (PACKAGE / "sim_monitor" / "camera_tf.py").exists()
     assert not (PACKAGE / "sim_monitor" / "camera_extrinsics.py").exists()
     for path in (PACKAGE / "sim_monitor").glob("*.py"):
