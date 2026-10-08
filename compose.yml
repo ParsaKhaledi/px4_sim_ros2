@@ -29,6 +29,12 @@ x-ros-env: &ros-env
   CAM_X: ${CAM_X:-0.12}
   CAM_Y: ${CAM_Y:-0.03}
   CAM_Z: ${CAM_Z:-0.242}
+  # Empty unless a software-rendered flight sets them. The tuner then
+  # edits the copied model, not the Oak-D files in this repo.
+  GZ_CAMERA_UPDATE_RATE: ${GZ_CAMERA_UPDATE_RATE:-}
+  GZ_CAMERA_WIDTH: ${GZ_CAMERA_WIDTH:-}
+  GZ_CAMERA_HEIGHT: ${GZ_CAMERA_HEIGHT:-}
+  HEALTH_CAMERA_MIN_HZ: ${HEALTH_CAMERA_MIN_HZ:-}
   World: ${World:-default}
   PX4_GZ_MODEL: ${PX4_GZ_MODEL:-x500_depth}
   PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}

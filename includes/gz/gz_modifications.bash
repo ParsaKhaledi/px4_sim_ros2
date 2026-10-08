@@ -30,3 +30,14 @@ else
     echo "Invalid input, please try again."
     exit 1
 fi
+
+# Software-rendered CI flights pass GZ_CAMERA_UPDATE_RATE. Rewrite the copy
+# under the PX4 tree only. The Oak-D files in this repo stay unchanged.
+if [ -n "${GZ_CAMERA_UPDATE_RATE:-}" ] && [ -f "$WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite/model.sdf" ]; then
+    echo "Software camera overlay: ${GZ_CAMERA_UPDATE_RATE} Hz, ${GZ_CAMERA_WIDTH:-320}x${GZ_CAMERA_HEIGHT:-240}."
+    python3 "$WORKDIR/volume/includes/gz/tune_gz_cameras.py" \
+        --model "$WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite/model.sdf" \
+        --rate "${GZ_CAMERA_UPDATE_RATE}" \
+        --width "${GZ_CAMERA_WIDTH:-320}" \
+        --height "${GZ_CAMERA_HEIGHT:-240}"
+fi
