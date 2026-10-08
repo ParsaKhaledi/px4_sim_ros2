@@ -48,6 +48,8 @@ The Gazebo link is named `camera_link` because that is the child of `CameraJoint
 
 RTAB-Map's `frame_id` is `base_link`. The old stereo launch used `oak-d-base-frame`, which was never in the URDF.
 
+Stereo uses exact sync (`approx_sync:=false`). Gazebo gives both OV9282 sensors, and the `camera_info` published with each image, the simulation time of the step that rendered them. The baseline relay copies that stamp onto `/camera/stereo/right/camera_info_baseline`. The four stereo topics therefore match. The IMU is not in that set. `rtabmap_launch` remaps `imu` on its own and `wait_imu_to_init:=true` waits for the first sample before odometry starts. At 200 Hz the IMU does not land on the 30 Hz image stamps, so it is not put through `approx_sync`.
+
 Depth is aligned to color the way a real OAK-D publishes it: the depth sensor uses the color camera's pose, intrinsics, and `camera_rgb_optical_frame`. There is no separate depth frame.
 
 ## 3. What was wrong, and what the sim does now
@@ -131,7 +133,6 @@ CAM_Z=0.242
 
 ## 7. Still open
 
-- `approx_sync_max_interval:=0.001` is still in the stereo launch. At 30 Hz that window is shorter than a frame, so pairs can be dropped. It was left as it was on purpose.
 - Stereo and RGB-D are separate models. A running stack has one of them, selected by `CameraType`.
 - The GPU compose file was not given these environment lines. The active file is `docker-compose-px4.yml`.
 - This tree was not flown. `HealthCheck/check_vision_pipeline.py` is the check to run once Gazebo is up.

@@ -17,6 +17,8 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      python3 "${HOME}/volume/includes/gz/oakd_s2/stereo_info_relay.py" &
      RELAY_PID=$!
      trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
+     # Exact sync: both cameras and the relayed camera_info share one Gazebo stamp.
+     # IMU is a separate subscription (wait_imu_to_init), not part of that set.
      ros2 launch rtabmap_launch rtabmap.launch.py \
           args:="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10  --Kp/DetectorStrategy 10  \
           --Grid/MapFrameProjection true  --NormalsSegmentation false --Grid/MaxGroundHeight 1.0 \
@@ -25,7 +27,7 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
           left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
           right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
           imu_topic:=/imu  frame_id:=base_link  \
-          approx_sync:=true  wait_imu_to_init:=true  approx_sync_max_interval:=0.001  \
+          approx_sync:=false  wait_imu_to_init:=true  \
           use_sim_time:=true \
           qos:=2  rtabmapviz:=${RTABMAPVIZ}  rviz:=false
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then

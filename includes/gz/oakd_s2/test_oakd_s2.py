@@ -295,6 +295,17 @@ class HealthAndEvoTest(unittest.TestCase):
         text = "max 1.0\nrmse 0.25\nstd 0.1\n"
         self.assertAlmostEqual(EVAL.parse_evo_rmse(text), 0.25)
 
+    def test_stereo_launch_uses_exact_sync(self):
+        root = Path(__file__).resolve().parents[1] / "startFiles"
+        stereo = (root / "gz_start_rtabmap_stereo.sh").read_text(encoding="utf-8")
+        wrapper = (root / "gz_start_rtabmap.sh").read_text(encoding="utf-8")
+        stereo_branch = wrapper.split("elif", 1)[0]
+        for text in (stereo, stereo_branch):
+            self.assertIn("approx_sync:=false", text)
+            self.assertIn("wait_imu_to_init:=true", text)
+            self.assertNotIn("approx_sync_max_interval", text)
+            self.assertNotIn("approx_sync:=true", text)
+
 
 if __name__ == "__main__":
     unittest.main()
