@@ -139,8 +139,20 @@ class Drone:
         return self._node.get_clock().now().nanoseconds * 1e-9
 
     def _wait_future(self, future, timeout: float, label: str) -> None:
-        deadline = self._now_s() + timeout
+        """Wait on the node clock.
+
+        The first ``/clock`` sample can jump from 0 to the current sim time.
+        The budget starts at that first valid sample, so a clock that is
+        already past ``timeout`` does not expire the call immediately.
+        """
+        start: float | None = None
+        use_sim = bool(self._node.get_parameter('use_sim_time').value)
         while rclpy.ok() and not future.done():
             rclpy.spin_once(self._node, timeout_sec=0.05)
-            if self._now_s() >= deadline:
+            now = self._now_s()
+            if start is None:
+                if use_sim and now <= 0.0:
+                    continue
+                start = now
+            elif now - start >= timeout:
                 raise TimeoutError(f'timed out waiting for {label}')
