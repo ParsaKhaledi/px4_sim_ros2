@@ -222,6 +222,19 @@ def no_gpu_warning(profile: VisionProfile, gpu_present: bool | None = None) -> s
     )
 
 
+def rate_text(value: float) -> str:
+    """Whole-number rates print as ints. Other rates keep full precision.
+
+    ``10`` and ``10.0`` print as ``10``. A fractional rate uses ``.16g``,
+    the same text the SDF renderer used. The RTAB-Map log used ``str`` for
+    fractions; the two agree for every whole-number rate this tree renders.
+    """
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.16g}"
+
+
 def sub_hd_warning(profile: VisionProfile) -> str | None:
     """Warning when ``full`` or ``hw`` is running below HD stereo.
 

@@ -95,6 +95,8 @@ from hardware import (
     accel_stddev_m_s2,
     box_inertia,
     gyro_stddev_rad_s,
+    HousingSpec,
+    housing_spec,
 )
 from intrinsics import (
     _color_full,
@@ -124,5 +126,6 @@ from profiles import (
     _stereo_size,
     no_gpu_warning,
     profile_from_env,
+    rate_text,
     sub_hd_warning,
 )

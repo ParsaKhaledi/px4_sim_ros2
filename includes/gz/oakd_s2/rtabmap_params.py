@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import geometry as geo
+from profiles import rate_text
 
 
 INI_DIR = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profiles"
@@ -121,13 +122,6 @@ def launch_strings(profile_name: str, camera: str) -> tuple[Path, str, str]:
     return path, " ".join(args), " ".join(odom_args)
 
 
-def _rate_text(value: float) -> str:
-    """Whole-number rates print as ints."""
-    if float(value).is_integer():
-        return str(int(value))
-    return str(value)
-
-
 def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
     """Stderr lines: the profile summary, ini keys, then camera overrides."""
     path, params = load_profile_ini(profile.name)
@@ -137,8 +131,8 @@ def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
             f"vision profile={profile.name} camera={camera} "
             f"stereo={profile.stereo_width}x{profile.stereo_height} "
             f"color={profile.color_width}x{profile.color_height} "
-            f"camera_hz={_rate_text(profile.camera_hz)} "
-            f"imu_hz={_rate_text(profile.imu_hz)} ini={path}"
+            f"camera_hz={rate_text(profile.camera_hz)} "
+            f"imu_hz={rate_text(profile.imu_hz)} ini={path}"
         )
     ]
     # No GPU line here. This process runs in the Rtabmap container, which

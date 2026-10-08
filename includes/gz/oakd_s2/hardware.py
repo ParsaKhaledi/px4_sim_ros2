@@ -7,6 +7,7 @@ and the renderers read them so those descriptions cannot drift.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 
 # Housing from the OAK-D S2 datasheet: 97 x 29.5 x 22.9 mm, 91 g.
@@ -160,3 +161,34 @@ def box_inertia(
     iyy = factor * (size_x * size_x + size_z * size_z)
     izz = factor * (size_x * size_x + size_y * size_y)
     return ixx, iyy, izz
+
+
+@dataclass(frozen=True)
+class HousingSpec:
+    """Datasheet mass, solid-box inertia, and housing size in metres."""
+
+    mass_kg: float
+    ixx: float
+    iyy: float
+    izz: float
+    depth_m: float
+    width_m: float
+    height_m: float
+
+
+def housing_spec() -> HousingSpec:
+    """Mass, solid-box inertia, and size from the datasheet constants.
+
+    SDF and URDF both format this one box, so the inertia and the visual
+    size cannot drift apart.
+    """
+    ixx, iyy, izz = box_inertia(MASS_KG, HOUSING_DEPTH_M, HOUSING_WIDTH_M, HOUSING_HEIGHT_M)
+    return HousingSpec(
+        mass_kg=MASS_KG,
+        ixx=ixx,
+        iyy=iyy,
+        izz=izz,
+        depth_m=HOUSING_DEPTH_M,
+        width_m=HOUSING_WIDTH_M,
+        height_m=HOUSING_HEIGHT_M,
+    )
