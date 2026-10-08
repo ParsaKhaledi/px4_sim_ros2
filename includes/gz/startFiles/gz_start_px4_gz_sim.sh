@@ -40,8 +40,10 @@ eval "${origin_env}"
 
 python3 "${REPO_GZ}/scripts/patch_x500_ground_truth.py" || \
   echo "WARN: could not patch x500_depth with the ground-truth plugin"
-python3 "${REPO_GZ}/scripts/patch_x500_sensor_systems.py" "${WORLD}" || \
-  echo "WARN: could not move sensor systems onto x500_base"
+if ! python3 "${REPO_GZ}/scripts/patch_x500_sensor_systems.py" "${WORLD}"; then
+  echo "ERROR: launched world ${WORLD}.sdf was not found; sensor systems were not stripped" >&2
+  exit 1
+fi
 
 export GZ_SIM_RESOURCE_PATH="${REPO_GZ}/models:${GZ_SIM_RESOURCE_PATH:-}"
 

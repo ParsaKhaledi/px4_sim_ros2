@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import time
 
+import numpy as np
+
 from sim_monitor.imu_source import default_tf_pairs, optical_frame
 from sim_monitor.checks import (
     RateTracker,
@@ -25,6 +27,72 @@ from sim_monitor.checks import (
     summarize,
     with_rtf_hint,
 )
+
+
+RGB_CAMERA_TOPIC = "/camera/rgb/image_raw"
+STEREO_LEFT_CAMERA_TOPIC = "/camera/stereo/left/image_raw"
+# A pose this close to the origin, after a much larger step, is a map reset.
+_IDENTITY_M = 0.05
+_JUMP_M = 0.50
+
+
+def default_camera_topic(environ: dict[str, str] | None = None) -> str:
+    """Camera image topic. Stereo uses the left image when unset or still the RGB default."""
+    env = os.environ if environ is None else environ
+    chosen = env.get("PREFLIGHT_CAMERA_TOPIC", "").strip()
+    stereo = env.get("CameraType", "").strip().lower() == "stereo"
+    if stereo and chosen in {"", RGB_CAMERA_TOPIC}:
+        return STEREO_LEFT_CAMERA_TOPIC
+    return chosen or RGB_CAMERA_TOPIC
+
+
+def _norm(position: tuple[float, float, float] | None) -> float:
+    if position is None:
+        return 0.0
+    return float(np.linalg.norm(np.asarray(position, dtype=float)))
+
+
+def jumped_to_identity(previous: tuple[float, float, float] | None, current: tuple[float, float, float]) -> bool:
+    """True when odometry leaps back to the identity pose."""
+    if previous is None:
+        return False
+    step = float(np.linalg.norm(np.asarray(current, dtype=float) - np.asarray(previous, dtype=float)))
+    return _norm(current) <= _IDENTITY_M and step >= _JUMP_M
+
+
+class PoseOrigins:
+    """Origins for the at-rest pose check.
+
+    Ground truth is captured when RTAB-Map's origin is captured, not on the
+    first ground-truth sample. The vehicle is spawned 0.15 m up and drops
+    before RTAB-Map publishes, so the first ground-truth sample is not the
+    pose RTAB-Map started from. A lost tracker, or a large jump back to the
+    identity pose (a new map), recaptures both origins together.
+    """
+
+    def __init__(self) -> None:
+        self.gt_origin: tuple[float, float, float] | None = None
+        self.gt_position: tuple[float, float, float] | None = None
+        self.rtab_origin: tuple[float, float, float] | None = None
+        self.rtab_position: tuple[float, float, float] | None = None
+        self.rtab_lost: bool | None = None
+        self.pending_reset = False
+
+    def ground_truth(self, position: tuple[float, float, float]) -> None:
+        self.gt_position = position
+
+    def rtab(self, position: tuple[float, float, float]) -> None:
+        reset = self.rtab_origin is None or self.pending_reset or jumped_to_identity(self.rtab_position, position)
+        if reset:
+            self.rtab_origin = position
+            self.gt_origin = self.gt_position
+            self.pending_reset = False
+        self.rtab_position = position
+
+    def lost(self, lost: bool) -> None:
+        if lost and self.rtab_lost is not True:
+            self.pending_reset = True
+        self.rtab_lost = lost
 
 
 def _env_float(name: str, default: float) -> float:
@@ -58,7 +126,7 @@ def main() -> None:
             self.min_imu = minimum_rate_hz("imu")
             self.min_gt = _env_float("PREFLIGHT_MIN_GT_HZ", 20.0)
             self.clock_max_age = _env_float("PREFLIGHT_CLOCK_MAX_AGE_S", 1.0)
-            self.camera_topic = os.environ.get("PREFLIGHT_CAMERA_TOPIC", "/camera/rgb/image_raw")
+            self.camera_topic = default_camera_topic()
             self.imu_topic = os.environ.get("PREFLIGHT_IMU_TOPIC", "/imu")
             self.gt_topic = os.environ.get("PREFLIGHT_GT_TOPIC", "/ground_truth/odom")
             self.rtab_topic = os.environ.get("PREFLIGHT_RTABMAP_ODOM_TOPIC", "/rtabmap/odom")
@@ -75,11 +143,7 @@ def main() -> None:
             self.clock_sim = None
             self.previous_clock_sim = None
             self.clock_advanced = False
-            self.gt_origin = None
-            self.gt_position = None
-            self.rtab_origin = None
-            self.rtab_position = None
-            self.rtab_lost = None
+            self.origins = PoseOrigins()
             self.preflight_pass = None
             self.vision_flags = None
             self.status_topic = None
@@ -145,18 +209,12 @@ def main() -> None:
                 self.previous_clock_sim = self.clock_sim
                 self.clock_sim = sim
             elif topic == self.gt_topic:
-                position = _xyz(msg.pose.pose.position)
-                if self.gt_origin is None:
-                    self.gt_origin = position
-                self.gt_position = position
+                self.origins.ground_truth(_xyz(msg.pose.pose.position))
             elif topic == self.rtab_topic:
-                position = _xyz(msg.pose.pose.position)
-                if self.rtab_origin is None:
-                    self.rtab_origin = position
-                self.rtab_position = position
+                self.origins.rtab(_xyz(msg.pose.pose.position))
             elif topic == self.rtab_info_topic:
                 if hasattr(msg, "lost"):
-                    self.rtab_lost = bool(msg.lost)
+                    self.origins.lost(bool(msg.lost))
             elif topic == self.status_topic:
                 if hasattr(msg, "pre_flight_checks_pass"):
                     self.preflight_pass = bool(msg.pre_flight_checks_pass)
@@ -221,14 +279,16 @@ def main() -> None:
             return ok, line(ok, f"imu frame: {frame} -> {target}")
 
         def _rtabmap(self):
-            if self.rtab_lost is None:
+            if self.origins.rtab_lost is None:
                 return [(False, line(False, f"rtabmap tracking: {self.rtab_info_topic} has no 'lost' field yet"))]
-            tracking_ok = not self.rtab_lost
+            tracking_ok = not self.origins.rtab_lost
             lines = [(tracking_ok, line(tracking_ok, "rtabmap tracking: lost=false" if tracking_ok else "rtabmap tracking: lost=true"))]
-            if None in (self.gt_origin, self.gt_position, self.rtab_origin, self.rtab_position):
+            if None in (self.origins.gt_origin, self.origins.gt_position, self.origins.rtab_origin, self.origins.rtab_position):
                 lines.append((False, line(False, "rtabmap pose: ground truth or /rtabmap/odom missing")))
                 return lines
-            error = relative_position_error(self.rtab_position, self.rtab_origin, self.gt_position, self.gt_origin)
+            error = relative_position_error(
+                self.origins.rtab_position, self.origins.rtab_origin, self.origins.gt_position, self.origins.gt_origin,
+            )
             lines.append(check_max("rtabmap pose error relative to start", error, self.max_pose, "m"))
             return lines
 

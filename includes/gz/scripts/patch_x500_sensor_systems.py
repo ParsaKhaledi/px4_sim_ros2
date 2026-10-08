@@ -173,10 +173,11 @@ def main(argv: list[str] | None = None) -> int:
             stripped_world = True
     if not stripped_world:
         print(
-            f"world {world_name}.sdf not found; sensor systems were not stripped from a world. "
-            "This is expected outside the PX4 SITL container.",
+            f"ERROR: world {world_name}.sdf not found; sensor systems were not stripped. "
+            "gz_modifications must finish copying worlds before this step.",
             file=sys.stderr,
         )
+        return 1
     for path in candidate_server_configs():
         if path.is_file():
             strip_file(path)

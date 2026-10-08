@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from patch_x500_sensor_systems import (
     SENSOR_SYSTEMS,
     ensure_model_systems,
+    main,
     strip_sensor_systems,
 )
 
@@ -54,6 +55,14 @@ BASE_MODEL = """<sdf>
   </model>
 </sdf>
 """
+
+
+def test_missing_launched_world_is_an_error(monkeypatch, capsys):
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_base_models", lambda: [])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_worlds", lambda _name: [])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_server_configs", lambda: [])
+    assert main(["apt_world"]) == 1
+    assert "apt_world.sdf not found" in capsys.readouterr().err
 
 
 def test_repo_worlds_have_no_sensor_systems():

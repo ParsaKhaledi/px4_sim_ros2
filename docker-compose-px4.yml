@@ -77,7 +77,7 @@ services:
       #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
 
       command: /bin/bash -c "
-        . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
+        . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} || exit 1; \
         MicroXRCEAgent udp4 -p 8888 & \
         /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
         /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh

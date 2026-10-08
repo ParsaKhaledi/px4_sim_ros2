@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sim_monitor.preflight_check import PoseOrigins, default_camera_topic
 from sim_monitor.spawn_frame import DEFAULT_POSE, spawn_ground_pose
 from sim_monitor.checks import (
     RateTracker,
@@ -35,6 +36,47 @@ def test_spawn_pose_default():
     assert ground[3] == 0.0 and ground[4] == 0.0
     qx, qy, qz, qw = quat_from_rpy(roll, pitch, yaw)
     assert abs(qx * qx + qy * qy + qz * qz + qw * qw - 1.0) < 1e-9
+
+
+def test_pose_error_uses_ground_truth_when_rtabmap_starts():
+    origins = PoseOrigins()
+    origins.ground_truth((0.0, 0.0, 0.15))
+    origins.ground_truth((0.0, 0.0, 0.044))
+    origins.rtab((0.0, 0.0, 0.0))
+    error = relative_position_error(
+        origins.rtab_position, origins.rtab_origin, origins.gt_position, origins.gt_origin,
+    )
+    assert abs(error) < 1e-9
+    assert origins.gt_origin == (0.0, 0.0, 0.044)
+
+    origins.ground_truth((1.0, 0.0, 0.044))
+    origins.rtab((1.0, 0.0, 0.0))
+    origins.rtab((0.0, 0.0, 0.0))
+    error = relative_position_error(
+        origins.rtab_position, origins.rtab_origin, origins.gt_position, origins.gt_origin,
+    )
+    assert abs(error) < 1e-9
+    assert origins.gt_origin == (1.0, 0.0, 0.044)
+
+    origins.lost(True)
+    origins.ground_truth((2.0, 0.0, 0.05))
+    origins.rtab((0.0, 0.0, 0.0))
+    assert origins.gt_origin == (2.0, 0.0, 0.05)
+    assert origins.rtab_origin == (0.0, 0.0, 0.0)
+
+
+def test_stereo_camera_topic_replaces_the_rgb_default():
+    assert default_camera_topic({}) == "/camera/rgb/image_raw"
+    assert default_camera_topic({"CameraType": "rgbd"}) == "/camera/rgb/image_raw"
+    assert default_camera_topic({"CameraType": "stereo"}) == "/camera/stereo/left/image_raw"
+    assert default_camera_topic({
+        "CameraType": "stereo",
+        "PREFLIGHT_CAMERA_TOPIC": "/camera/rgb/image_raw",
+    }) == "/camera/stereo/left/image_raw"
+    assert default_camera_topic({
+        "CameraType": "stereo",
+        "PREFLIGHT_CAMERA_TOPIC": "/custom/image",
+    }) == "/custom/image"
 
 
 def test_relative_pose_error_at_rest():
