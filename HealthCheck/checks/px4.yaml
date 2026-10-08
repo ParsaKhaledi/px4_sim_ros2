@@ -1,0 +1,58 @@
+service: PX4
+log_name: px4
+window_s: 2.0
+discovery_s: 2.0
+processes:
+  - name: px4
+    pattern: bin/px4
+  - name: gz
+    pattern: "gz sim"
+  - name: microxrce
+    pattern: MicroXRCEAgent
+gz_rtf:
+  enabled: true
+topics:
+  - topic: /clock
+    min_rate_hz: 50
+    qos: sensor
+    group: core
+  - topic: /fmu/out/vehicle_odometry
+    min_rate_hz: 20
+    qos: sensor
+    group: core
+  - auto_detect:
+      - /fmu/out/vehicle_status
+      - /fmu/out/vehicle_status_v1
+    min_rate_hz: 1
+    qos: sensor
+    group: core
+    capture_fields: true
+  - topic: /camera/rgb/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/depth/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/stereo/left/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /camera/stereo/right/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /ground_truth/odom
+    min_rate_hz: 45
+    qos: sensor
+    group: ground_truth
+    skip_if_absent: true

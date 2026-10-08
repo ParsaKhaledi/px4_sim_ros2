@@ -15,6 +15,7 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 ARG USER_NAME=px4
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG QGC_URL=https://d176tv9ibo4jno.cloudfront.net/builds/master/QGroundControl-x86_64.AppImage
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV QT_X11_NO_MITSHM=1
@@ -35,13 +36,13 @@ RUN apt update 1>/dev/null && \
 	iputils-ping\
 	gnupg2 lsb-release \
 	xauth xorg openbox python3-argcomplete python3 python3-pip python3-setuptools python3-kconfiglib \
-    python3-jinja2 python3-jsonschema\
+	python3-jinja2 python3-jsonschema python3-yaml\
 	gcc-arm-none-eabi apt-utils gstreamer1.0-plugins-bad \
 	gstreamer1.0-libav gstreamer1.0-gl python3-gi python3-gst-1.0 fuse libpulse-mainloop-glib0 \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev && \
 	# Add Gazebo official repository
 	wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \
 	tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	# Install Gazebo Harmonic and Jazzy specific packages and Rtabmap
 	apt update && apt install -y --no-install-recommends \
@@ -81,13 +82,14 @@ USER ${USER_NAME}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/builds/master/QGroundControl-x86_64.AppImage &&\
-	mv QGroundControl-x86_64.AppImage QGroundControl.AppImage && \
+	cd ${HOME} && wget -O QGroundControl.AppImage "${QGC_URL}" &&\
 	chmod +x ./QGroundControl.AppImage 
 
 
 ### PX4 Setup
 ARG PX4_VERSION
+LABEL org.opencontainers.image.source="https://github.com/ParsaKhaledi/px4_sim_ros2" \
+      org.opencontainers.image.version="${PX4_VERSION}"
 RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v${PX4_VERSION} --recursive \
 	--progress --verbose 1>/dev/null && \
 	cd ${HOME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh 1>/dev/null

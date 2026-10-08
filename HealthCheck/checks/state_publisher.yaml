@@ -1,0 +1,16 @@
+service: StatePublisher
+log_name: state_publisher
+window_s: 2.0
+discovery_s: 1.0
+nodes:
+  - name: robot_state_publisher
+tf_frames:
+  - frame: camera_rgb_optical_frame
+  - frame: depth_camera_optical_frame
+  - frame: stereo_left_camera_optical_frame
+  - frame: stereo_right_camera_optical_frame
+topics:
+  - topic: /tf_static
+    min_rate_hz: 0
+    qos: transient_local
+    optional: true

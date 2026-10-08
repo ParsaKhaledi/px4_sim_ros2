@@ -1,0 +1,263 @@
+# Headless-capable PX4 SITL stack. GPU and CI files override this one.
+# Local GUI: docker compose -f docker-compose-px4.yml up
+# (that file includes compose.gui.yml). Headless CI uses compose.ci.yml.
+
+x-image: &px4-image ${PX4_IMAGE:-docker.io/alienkh/px4_sim:${px4TAG:-1.17.0_01}}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-health: &health
+  interval: 20s
+  timeout: 30s
+  retries: 8
+  start_period: 40s
+
+x-ros-env: &ros-env
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+  RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+  HEADLESS: ${HEADLESS:-0}
+  RTABMAPVIZ: ${RTABMAPVIZ:-true}
+  CameraType: ${CameraType:-rgbd}
+  World: ${World:-default}
+  PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}
+  DISPLAY: ${DISPLAY:-}
+  XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}
+
+x-sim-volumes: &sim-volumes
+  - /tmp/.X11-unix:/tmp/.X11-unix
+  - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  - /dev:/dev
+  - ./HealthCheck:/home/px4/volume/HealthCheck
+  - ./includes/gz:/home/px4/volume/includes/gz
+  - ./includes/gz/startFiles:/home/px4/volume/startFiles
+  - ./includes/gz/Params:/home/px4/volume/Params
+  - ./logs:/home/px4/volume/logs
+  - ./tests:/home/px4/volume/tests:ro
+  - ./ros2_ws:/home/px4/volume/ros2_ws:ro
+
+services:
+  PX4:
+    image: *px4-image
+    container_name: px4_sim
+    hostname: px4_sim
+    tty: true
+    privileged: true
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      <<: *health
+      start_period: 180s
+      test:
+        - CMD
+        - bash
+        - -lc
+        - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4
+    networks:
+      px4:
+        ipv4_address: 10.20.10.2
+    ports:
+      - "5760:5760"
+      - "14550:14550/udp"
+      - "14540:14540/udp"
+      - "14580:14580/udp"
+      - "18570:18570/udp"
+      - "8888:8888/udp"
+    environment:
+      <<: *ros-env
+    volumes: *sim-volumes
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        . /home/px4/volume/includes/gz/gz_modifications.bash "$${CameraType:-rgbd}"
+        MicroXRCEAgent udp4 -p 8888 &
+        /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh "$${World:-default}" &
+        exec /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
+
+  StatePublisher:
+    image: *px4-image
+    container_name: statePublisher
+    hostname: statePublisher
+    tty: true
+    privileged: true
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      PX4:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      test:
+        - CMD
+        - bash
+        - -lc
+        - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service StatePublisher
+    networks:
+      px4:
+        ipv4_address: 10.20.10.3
+    environment:
+      <<: *ros-env
+    volumes: *sim-volumes
+    command:
+      - bash
+      - -lc
+      - exec /home/px4/volume/startFiles/gz_start_state_publisher.sh
+
+  Qground:
+    profiles: [gcs]
+    image: *px4-image
+    container_name: qground
+    hostname: qground
+    tty: true
+    privileged: true
+    restart: on-failure
+    logging: *logging
+    depends_on:
+      PX4:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      start_period: 60s
+      test:
+        - CMD
+        - python3
+        - /home/px4/volume/HealthCheck/healthcheck.py
+        - --service
+        - Qground
+    networks:
+      px4:
+        ipv4_address: 10.20.10.4
+    environment:
+      <<: *ros-env
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./.qground/config:/home/px4/.config/QGroundControl
+      - ./.qground/cache:/home/px4/.cache/QGroundControl
+      - ./.qground/local:/home/px4/.local/share/QGroundControl
+      - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
+      - ./.qground/.config:/home/px4/.config
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./logs:/home/px4/volume/logs
+    command:
+      - bash
+      - -lc
+      - cd /home/px4 && exec ./QGroundControl.AppImage
+
+  Rtabmap:
+    profiles: [slam]
+    image: *px4-image
+    container_name: rtabmap
+    hostname: rtabmap
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      PX4:
+        condition: service_healthy
+      StatePublisher:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      start_period: 120s
+      test:
+        - CMD
+        - bash
+        - -lc
+        - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service Rtabmap
+    networks:
+      px4:
+        ipv4_address: 10.20.10.8
+    environment:
+      <<: *ros-env
+    volumes: *sim-volumes
+    command:
+      - bash
+      - -lc
+      - exec /home/px4/volume/startFiles/gz_start_rtabmap.sh "$${CameraType:-rgbd}"
+
+  NAV2:
+    profiles: [nav]
+    image: *px4-image
+    container_name: nav2
+    hostname: nav2
+    tty: true
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      PX4:
+        condition: service_healthy
+      Rtabmap:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      start_period: 90s
+      test:
+        - CMD
+        - bash
+        - -lc
+        - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service NAV2
+    networks:
+      px4:
+        ipv4_address: 10.20.10.9
+    environment:
+      <<: *ros-env
+    volumes: *sim-volumes
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        source /opt/ros/$${ROS_DISTRO}/setup.bash
+        if [ -f /home/px4/ws_px4/install/setup.bash ]; then
+          source /home/px4/ws_px4/install/setup.bash
+        fi
+        exec ros2 launch nav2_bringup navigation_launch.py params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml
+
+  Nav2_Rviz:
+    profiles: [nav]
+    image: *px4-image
+    container_name: nav2_rviz
+    hostname: nav2_rivz
+    tty: true
+    privileged: true
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      NAV2:
+        condition: service_healthy
+    healthcheck:
+      <<: *health
+      test:
+        - CMD
+        - python3
+        - /home/px4/volume/HealthCheck/healthcheck.py
+        - --service
+        - Nav2_Rviz
+    networks:
+      px4:
+        ipv4_address: 10.20.10.10
+    environment:
+      <<: *ros-env
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - ./includes/gz/startFiles:/home/px4/volume/startFiles
+      - ./includes/gz/Params:/home/px4/volume/Params
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./logs:/home/px4/volume/logs
+    command:
+      - bash
+      - -lc
+      - exec /home/px4/volume/startFiles/start_nav2_rviz.sh
+
+networks:
+  px4:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.20.10.0/24

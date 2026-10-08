@@ -1,0 +1,147 @@
+name: Build image
+
+on:
+  workflow_call:
+    inputs:
+      variant:
+        description: no-gpu or gpu
+        required: true
+        type: string
+      push:
+        description: Push the image to Docker Hub
+        required: false
+        type: boolean
+        default: false
+      run_smoke:
+        description: Run the headless smoke test against the image just built
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      image_ref:
+        description: Image reference that was tested
+        value: ${{ jobs.build.outputs.image_ref }}
+      image_digest:
+        description: Manifest digest from buildx metadata
+        value: ${{ jobs.build.outputs.image_digest }}
+    secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      image_digest: ${{ steps.meta.outputs.image_digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: ./.github/actions/setup-buildx-login
+        with:
+          push: ${{ inputs.push == true && 'true' || 'false' }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          sudo apt-get clean
+          docker buildx prune -f || true
+
+      - name: Build
+        id: meta
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source versions.env
+          set +a
+          short="${GITHUB_SHA::7}"
+          if [ "${{ inputs.variant }}" = "gpu" ]; then
+            dockerfile="dockerFile/Dockerfile_px4_sim_with_GPU"
+            cache_scope="px4-sim-gpu"
+            suffix="-gpu"
+            qgc="${QGC_URL_GPU}"
+            extra_args=(
+              --build-arg "CUDA_ARCH_BIN=${CUDA_ARCH_BIN}"
+              --build-arg "CUDA_ARCH_PTX=${CUDA_ARCH_PTX}"
+              --build-arg "WITH_CUDA_OPENCV=${WITH_CUDA_OPENCV}"
+              --build-arg "OPENCV_VERSION=${OPENCV_VERSION}"
+            )
+          else
+            dockerfile="dockerFile/Dockerfile_px4_sim_NO_GPU"
+            cache_scope="px4-sim-no-gpu"
+            suffix=""
+            qgc="${QGC_URL_NO_GPU}"
+            extra_args=()
+          fi
+          local_tag="px4_sim:ci-${GITHUB_SHA}${suffix}"
+          tags=(-t "${local_tag}")
+          publish_ref=""
+          if [ "${{ inputs.push }}" = "true" ]; then
+            publish_ref="${REGISTRY}/${IMAGE_NAME}:px4-${PX4_VERSION}${suffix}"
+            tags+=(-t "${publish_ref}" -t "${REGISTRY}/${IMAGE_NAME}:sha-${short}${suffix}")
+          fi
+          if [ "${{ inputs.push }}" = "true" ]; then
+            output_flags=(--push)
+          else
+            output_flags=(--load)
+          fi
+          docker buildx build \
+            --file "${dockerfile}" \
+            --build-arg "PX4_VERSION=${PX4_VERSION}" \
+            --build-arg "XRCE_AGENT_VERSION=${XRCE_AGENT_VERSION}" \
+            --build-arg "ROS_DISTRO=${ROS_DISTRO}" \
+            --build-arg "USER_UID=${USER_UID}" \
+            --build-arg "USER_GID=${USER_GID}" \
+            --build-arg "QGC_URL=${qgc}" \
+            "${extra_args[@]}" \
+            "${tags[@]}" \
+            "${output_flags[@]}" \
+            --cache-from "type=gha,scope=${cache_scope}" \
+            --cache-to "type=gha,scope=${cache_scope},mode=max" \
+            --metadata-file /tmp/build-metadata.json \
+            --provenance=false \
+            --sbom=false \
+            .
+          digest="$(python3 -c 'import json; print(json.load(open("/tmp/build-metadata.json")).get("containerimage.digest",""))')"
+          image_ref="${local_tag}"
+          if [ "${{ inputs.push }}" = "true" ] && [ -n "${digest}" ]; then
+            image_ref="${REGISTRY}/${IMAGE_NAME}@${digest}"
+            docker pull "${image_ref}"
+          fi
+          echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
+          echo "image_digest=${digest}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Image"
+            echo "- variant: ${{ inputs.variant }}"
+            echo "- ref: \`${image_ref}\`"
+            echo "- digest: \`${digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Image contents
+        run: ./scripts/image_assert.sh "${{ steps.meta.outputs.image_ref }}"
+
+      - name: Headless smoke
+        if: inputs.run_smoke
+        env:
+          PX4_IMAGE: ${{ steps.meta.outputs.image_ref }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          SMOKE_TEST_TIMEOUT: "900"
+        run: ./scripts/smoke_test.sh "${PX4_IMAGE}"
+
+      - name: Collect artifacts
+        if: always() && inputs.run_smoke
+        uses: ./.github/actions/collect-artifacts
+        with:
+          name: smoke-${{ inputs.variant }}-${{ github.sha }}

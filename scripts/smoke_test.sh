@@ -1,49 +1,42 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Headless compose smoke test. Camera rates are checked before the rest.
 set -euo pipefail
 
-IMAGE="${1:?Usage: $0 <image>}"
-TIMEOUT="${SMOKE_TEST_TIMEOUT:-300}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/load_env.sh"
+load_repo_env "${ROOT}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${REPO_ROOT}"
+if [ -n "${1:-}" ]; then
+  export PX4_IMAGE="$1"
+fi
 
-docker rm -f px4_smoke_test >/dev/null 2>&1 || true
-
-docker run -d \
-  --name px4_smoke_test \
-  --privileged \
-  -e CameraType=rgbd \
-  -e World=default \
-  -e QT_QPA_PLATFORM=offscreen \
-  -v "${REPO_ROOT}/HealthCheck:/home/px4/volume/HealthCheck" \
-  -v "${REPO_ROOT}/includes/gz:/home/px4/volume/includes/gz" \
-  -v "${REPO_ROOT}/includes/gz/startFiles:/home/px4/volume/startFiles" \
-  "${IMAGE}" \
-  /bin/bash -c "
-    . /home/px4/volume/includes/gz/gz_modifications.bash rgbd && \
-    MicroXRCEAgent udp4 -p 8888 & \
-    /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh default & \
-    /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
-    sleep infinity
-  "
+export HEADLESS=1
+export RTABMAPVIZ=false
+export DISPLAY=""
+export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-}"
 
 cleanup() {
-  docker rm -f px4_smoke_test >/dev/null 2>&1 || true
+  status=$?
+  "${ROOT}/scripts/compose_stack.sh" logs || true
+  "${ROOT}/scripts/health_report.sh" || true
+  if [ "${SMOKE_KEEP_UP:-0}" != "1" ]; then
+    "${ROOT}/scripts/compose_stack.sh" down || true
+  fi
+  exit "${status}"
 }
 trap cleanup EXIT
 
-elapsed=0
-while [ "${elapsed}" -lt "${TIMEOUT}" ]; do
-  if docker exec px4_smoke_test /home/px4/volume/HealthCheck/check_multi_topic_pub.bash 2 \
-      /clock /fmu/out/vehicle_odometry; then
-    echo "Smoke test passed."
-    exit 0
-  fi
-  sleep 10
-  elapsed=$((elapsed + 10))
-  echo "Waiting for PX4 topics... (${elapsed}s)"
-done
+"${ROOT}/scripts/compose_stack.sh" down || true
+"${ROOT}/scripts/compose_stack.sh" up
 
-echo "Smoke test failed: topics not healthy within ${TIMEOUT}s"
-docker logs px4_smoke_test 2>&1 | tail -80
-exit 1
+echo "Checking camera rates first."
+docker exec px4_sim bash -lc \
+  'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4 --group camera'
+
+echo "Checking the rest of the PX4 graph."
+docker exec px4_sim bash -lc \
+  'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4'
+
+echo "Smoke test passed."

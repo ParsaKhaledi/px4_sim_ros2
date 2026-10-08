@@ -1,0 +1,40 @@
+name: Nightly
+
+on:
+  schedule:
+    # 03:00 UTC. Hosted runners have no GPU; move runner to a self-hosted machine
+    # with working EGL before treating a red run as a flight regression.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      leg_length:
+        description: Forward leg length in meters
+        type: string
+        default: "1.0"
+      image:
+        description: Image reference. Empty uses PX4_IMAGE from .env.
+        type: string
+        default: ""
+      runner:
+        description: Runner label
+        type: string
+        default: ubuntu-latest
+      suite:
+        description: e2e or smoke
+        type: choice
+        options:
+          - e2e
+          - smoke
+        default: e2e
+
+permissions:
+  contents: read
+
+jobs:
+  flight:
+    uses: ./.github/workflows/_sim-test.yml
+    with:
+      suite: ${{ github.event.inputs.suite || 'e2e' }}
+      image: ${{ github.event.inputs.image || '' }}
+      leg_length: ${{ github.event.inputs.leg_length || '1.0' }}
+      runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}

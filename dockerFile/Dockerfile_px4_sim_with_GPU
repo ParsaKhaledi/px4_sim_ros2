@@ -11,9 +11,15 @@ ARG ROS_DISTRO
 ENV ROS_DISTRO=${ROS_DISTRO}
 
 ARG USER_NAME=px4
-ARG USER_UID=2000
-ARG USER_GID=2000
-ARG OPENCV_VERSION=4.11.0 # Define OpenCV version as an ARG
+ARG USER_UID=1000
+ARG USER_GID=1000
+# Keep the comment off the ARG line. Docker would otherwise bake it into the value.
+ARG OPENCV_VERSION=4.11.0
+ARG WITH_CUDA_OPENCV=0
+# Desktop defaults: 8.6 (RTX 30xx), 8.9 (RTX 40xx). PTX lets newer GPUs JIT.
+ARG CUDA_ARCH_BIN=8.6;8.9
+ARG CUDA_ARCH_PTX=8.9
+ARG QGC_URL=https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage
 
 
 ENV PATH="/usr/local/cuda/bin:${PATH}"
@@ -30,9 +36,8 @@ ENV WORKDIR=${HOME}/ws_px4
 
 ENV USER=${USER_NAME}
 ENV PATH=${HOME}/.local/bin:${PATH}
-
-WORKDIR ${WORKDIR}
-
+# Ubuntu 24.04 is Python 3.12. A python3.10 path never sees the CUDA bindings.
+ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages
 
 WORKDIR ${WORKDIR}
 
@@ -51,12 +56,15 @@ RUN apt update 1>/dev/null && \
     gfortran openexr libatlas-base-dev \
 	libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev \
 	xauth xorg openbox x11-utils \
-	python3 python3-argcomplete python3-pip python3-dev \
+	python3 python3-argcomplete python3-pip python3-dev python3-yaml \
 	libcanberra-gtk-module libeigen3-dev libgflags-dev libgoogle-glog-dev\
 	gcc-arm-none-eabi apt-utils  1>/dev/null
 	
-### Create User	
-RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
+### Create User
+# The CUDA base image already has uid 1000. Reuse that slot so bind mounts match the host.
+RUN if getent passwd "${USER_UID}" >/dev/null; then userdel -r "$(getent passwd "${USER_UID}" | cut -d: -f1)"; fi && \
+    if getent group "${USER_GID}" >/dev/null; then groupdel "$(getent group "${USER_GID}" | cut -d: -f1)"; fi && \
+    groupadd ${USER_NAME} --gid ${USER_GID} && \
     useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash && \
 	echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} && \
 	mkdir -p ${WORKDIR} && \
@@ -70,28 +78,32 @@ RUN groupadd ${USER_NAME} --gid ${USER_GID} && \
 # 	cd nice-dcv-2023.1-16388-ubuntu2204-x86_64 && \
 # 	apt install -y ./nice-dcv-server_2023.1.16388-1_amd64.ubuntu2204.deb 1>/dev/null
 
-RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
-    curl -L https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -o opencv-${OPENCV_VERSION}.zip && \
-    curl -L https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -o opencv_contrib-${OPENCV_VERSION}.zip && \
-    unzip opencv-${OPENCV_VERSION}.zip 1>/dev/null && unzip opencv_contrib-${OPENCV_VERSION}.zip 1>/dev/null && \
-	rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
-    cd opencv-${OPENCV_VERSION} && \
-    mkdir release && cd release && \
-    cmake -D CMAKE_BUILD_TYPE=Release \
+# rtabmap and cv_bridge link Ubuntu's libopencv. A second OpenCV in /usr/local
+# is an ABI trap, so the CUDA build is opt-in (WITH_CUDA_OPENCV=1).
+RUN if [ "${WITH_CUDA_OPENCV}" != "1" ]; then \
+      echo "Skipping CUDA OpenCV; ROS packages use the distro libopencv."; \
+    else \
+      mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
+      curl -L https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip -o opencv-${OPENCV_VERSION}.zip && \
+      curl -L https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip -o opencv_contrib-${OPENCV_VERSION}.zip && \
+      unzip opencv-${OPENCV_VERSION}.zip 1>/dev/null && unzip opencv_contrib-${OPENCV_VERSION}.zip 1>/dev/null && \
+      rm opencv-${OPENCV_VERSION}.zip opencv_contrib-${OPENCV_VERSION}.zip && \
+      cd opencv-${OPENCV_VERSION} && \
+      mkdir release && cd release && \
+      cmake -D CMAKE_BUILD_TYPE=Release \
         -D CMAKE_INSTALL_PREFIX=/usr/local \
-        -D WITH_CUDA=ON      \
-        -D WITH_CUDNN=ON     \
-        -D WITH_CUBLAS=ON    \
+        -D WITH_CUDA=ON \
+        -D WITH_CUDNN=ON \
+        -D WITH_CUBLAS=ON \
         -D OPENCV_DNN_CUDA=ON \
-        -D CUDA_ARCH_BIN=8.7 \
-        -D CUDA_ARCH_PTX=""  \
+        -D CUDA_ARCH_BIN="${CUDA_ARCH_BIN}" \
+        -D CUDA_ARCH_PTX="${CUDA_ARCH_PTX}" \
         -D OPENCV_GENERATE_PKGCONFIG=ON \
         -D WITH_GSTREAMER=ON \
-        -D WITH_LIBV4L=ON    \
+        -D WITH_LIBV4L=ON \
         -D ENABLE_FAST_MATH=1 \
-        -D CUDA_FAST_MATH=1  \
-        -D WITH_CUBLAS=ON    \
-        -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules\
+        -D CUDA_FAST_MATH=1 \
+        -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
         -D BUILD_EXAMPLES=OFF \
         -D BUILD_opencv_python3=ON \
         -D BUILD_opencv_python2=OFF \
@@ -99,13 +111,11 @@ RUN mkdir -p ${HOME}/OPENCV && cd ${HOME}/OPENCV && \
         -D BUILD_TESTS=OFF \
         -D BUILD_PERF_TESTS=OFF \
         -D CMAKE_INSTALL_PREFIX=/usr/local .. && \
-    make -j5 && \
-    sudo make install && \
-    echo 'export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH' >> ~/.bashrc && \
-    echo 'export PYTHONPATH=/usr/local/lib/python3.10/site-packages/:$PYTHONPATH' >> ~/.bashrc && \
-    source ~/.bashrc && \
-    sudo ldconfig && \
-    cd ${HOME}/ && rm -rf OPENCV # Clean up
+      make -j5 && \
+      sudo make install && \
+      sudo ldconfig && \
+      cd ${HOME}/ && rm -rf OPENCV; \
+    fi
 
 ### INSTALL ROS2 and Nav2
 RUN apt update 1>/dev/null && apt -y install locales --no-install-recommends && \
@@ -135,7 +145,7 @@ RUN apt install -y  --no-install-recommends  \
 
 ### Install GZ and some Reqs
 RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \ 
+	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | \
 	sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
 	apt update && apt install -y --no-install-recommends\
 	gz-harmonic ros-${ROS_DISTRO}-ros-gz 1>/dev/null
@@ -149,8 +159,7 @@ WORKDIR ${WORKDIR}
 
 ### Install Qground
 RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo apt remove modemmanager -y &&\
-	cd ${HOME} && wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage &&\
-	mv QGroundControl-x86_64.AppImage QGroundControl.AppImage && \
+	cd ${HOME} && wget -O QGroundControl.AppImage "${QGC_URL}" &&\
 	chmod +x ./QGroundControl.AppImage 
 
 ### PX4 Setup
@@ -159,6 +168,8 @@ RUN sudo usermod -a -G dialout root && sudo usermod -a -G dialout px4 && sudo ap
 
 ### PX4 Setup
 ARG PX4_VERSION
+LABEL org.opencontainers.image.source="https://github.com/ParsaKhaledi/px4_sim_ros2" \
+      org.opencontainers.image.version="${PX4_VERSION}"
 RUN cd ${HOME} && git clone https://github.com/PX4/PX4-Autopilot.git -b v${PX4_VERSION} --recursive \
 	--progress 1>/dev/null && \
 	cd ${HOME}/PX4-Autopilot && ./Tools/setup/ubuntu.sh --no-sim-tools 1>/dev/null
@@ -187,9 +198,8 @@ RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 RUN echo "set -g mouse on" >> ~/.tmux.conf 
 
 ### Write in ~/.bashrc
-# RUN sudo echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ${HOME}/.bashrc && \
-# 	sudo echo "source ${WORKDIR}/install/setup.bash" >> ${HOME}/.bashrc 
-	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
+	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc
 
 ### Finilize
 

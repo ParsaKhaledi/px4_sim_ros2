@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "dockerFile/**"
+      - "DockerBuild.sh"
+      - "compose.yml"
+      - "compose*.yml"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - "HealthCheck/**"
+      - "ros2_ws/**"
+      - "tests/**"
+      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
+      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "versions.env"
+      - ".env"
+      - ".env.example"
+      - ".hadolint.yaml"
+      - ".yamllint.yml"
+  push:
+    branches: [main, dev/px4-upgrade]
+    tags: ["v*"]
+    paths:
+      - "dockerFile/**"
+      - "DockerBuild.sh"
+      - "compose.yml"
+      - "compose*.yml"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - "HealthCheck/**"
+      - "ros2_ws/**"
+      - "tests/**"
+      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
+      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "versions.env"
+      - ".env"
+      - ".env.example"
+      - ".hadolint.yaml"
+      - ".yamllint.yml"
+  workflow_dispatch:
+    inputs:
+      run_smoke:
+        description: Run the headless Gazebo smoke test after the image build
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck yamllint python3-pytest python3-yaml
+          sudo curl -fsSL -o /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+          curl -fsSL -o /tmp/actionlint.tgz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin -xzf /tmp/actionlint.tgz actionlint
+
+      - name: Static checks
+        run: |
+          set -euo pipefail
+          hadolint dockerFile/Dockerfile_px4_sim_NO_GPU dockerFile/Dockerfile_px4_sim_with_GPU
+          shellcheck scripts/*.sh DockerBuild.sh
+          yamllint compose.yml compose.gpu.yml compose.gui.yml compose.ci.yml \
+            docker-compose-px4.yml docker-compose-px4-GPU.yml \
+            HealthCheck/checks .github/workflows .github/actions
+          actionlint
+          ./scripts/check_versions.sh
+          ./scripts/check_fuel_refs.sh | tee /tmp/fuel.txt
+          if grep -q "Warn-only" /tmp/fuel.txt; then
+            {
+              echo "### Fuel references"
+              echo "Warn-only. Existing worlds still reference fuel.gazebosim.org."
+              echo
+              echo '```'
+              head -n 20 /tmp/fuel.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          set -a
+          # shellcheck disable=SC1091
+          source versions.env
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          docker compose -f compose.yml config -q
+          docker compose -f compose.yml -f compose.gpu.yml config -q
+          docker compose -f compose.yml -f compose.gui.yml config -q
+          docker compose -f compose.yml -f compose.ci.yml config -q
+          docker compose -f compose.yml -f compose.gpu.yml -f compose.gui.yml config -q
+          docker compose -f compose.yml -f compose.ci.yml --profile slam --profile nav config -q
+          docker compose -f docker-compose-px4.yml --profile gcs --profile slam --profile nav config -q
+          docker compose -f docker-compose-px4-GPU.yml --profile gcs --profile slam --profile nav config -q
+          python3 -m pytest tests -q
+
+  colcon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: colcon build and test
+        run: |
+          set -euo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work ros:jazzy-ros-base bash -lc '
+            set -euo pipefail
+            apt-get update
+            apt-get install -y python3-colcon-common-extensions
+            mkdir -p ros2_ws/src
+            count=$(find ros2_ws/src -name package.xml | wc -l)
+            echo "package.xml files: ${count}"
+            if [ "${count}" -eq 0 ]; then
+              echo "No ROS packages yet. An empty colcon workspace is success."
+            fi
+            source /opt/ros/jazzy/setup.bash
+            cd ros2_ws
+            colcon build
+            colcon test
+            if ! colcon test-result --verbose; then
+              if [ "${count}" -eq 0 ]; then
+                echo "Empty workspace has no test results."
+              else
+                exit 1
+              fi
+            fi
+          '
+
+  build:
+    needs: lint
+    uses: ./.github/workflows/_build.yml
+    with:
+      variant: no-gpu
+      push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+      run_smoke: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke }}
+    secrets: inherit
+
+  build_gpu:
+    needs: lint
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    uses: ./.github/workflows/_build.yml
+    with:
+      variant: gpu
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      run_smoke: false
+    secrets: inherit

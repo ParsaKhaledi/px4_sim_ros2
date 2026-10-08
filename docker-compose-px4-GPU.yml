@@ -1,272 +1,68 @@
+# Single-file GPU entrypoint. Service bodies live in compose.yml.
+# Equivalent to: docker compose -f compose.yml -f compose.gpu.yml -f compose.gui.yml
+
+x-gpu-image: &gpu-image ${PX4_GPU_IMAGE:-docker.io/alienkh/px4_sim:${px4GPUTAG:-1.17.0_01_GPU_GPUEnabled}}
+
+x-gpu-env: &gpu-env
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+
+x-gpu-deploy: &gpu-deploy
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+
 services:
   PX4:
-    image: "${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: px4_sim
-    hostname: px4_sim
-    tty: true
-    privileged: true
-    restart: unless-stopped
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.2"
-    ports:
-      - "5760:5760"
-      # - "14550:14550/udp"
-      - "14550:14550/udp"
-      - "14540:14540/udp"
-      - "14580:14580/udp"
-      - "18570:18570/udp"
-
+    extends:
+      file: compose.yml
+      service: PX4
+    image: *gpu-image
     environment:
-      DISPLAY: ${DISPLAY}
-      XAUTHORITY: ${XAUTH}
-      CameraType: ${CameraType}
-        
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - /dev:/dev/
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-    # command: /bin/bash -c "sleep inf"
-    # entrypoint: ["/bin/sh", "-c"]
-
-    # command: /bin/bash -c "
-    #   . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-    #   /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${CameraType} ${World} &\
-    #   /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh & \
-    #   /home/px4/volume/startFiles/gz_start_state_publisher.sh "
-
-    command: /bin/bash -c "
-      /home/px4/volume/startFiles/gz_start_px4_gz_sim.sh ${World} &\
-      /home/px4/volume/startFiles/gz_start_ros2_gz_bridge.sh
-       "
-    # . /home/px4/volume/includes/gz/gz_modifications.bash ${CameraType} && \
-
-  StaticTransform:
-    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: st
-    hostname: st
-    tty: true
-    privileged: true
-    depends_on:
-      - PX4
-    restart: unless-stopped
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.10"
-
-    # environment:
-    #   DISPLAY: ${DISPLAY}
-    #   XAUTHORITY: ${XAUTH}
-        
-    volumes:
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-       - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-    # command: /bin/bash -c "sleep inf"
-    # entrypoint: ["/bin/sh", "-c"]
-
-    command: /bin/bash -c "
-      /home/px4/volume/startFiles/gz_start_state_publisher.sh"
-
-
+      <<: *gpu-env
+    deploy: *gpu-deploy
+  StatePublisher:
+    extends:
+      file: compose.yml
+      service: StatePublisher
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
   Qground:
-    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: qground
-    hostname: qground
-    privileged: true
-    tty: true
-    # depends_on:
-    #   - PX4
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.3"
-    
-    # restart: unless-stopped
+    extends:
+      file: compose.yml
+      service: Qground
+    image: *gpu-image
     environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - ./.qground/config/:/home/px4/.config/QGroundControl
-      - ./.qground/cache/:/home/px4/.cache/QGroundControl
-      - ./.qground/local/:/home/px4/.local/share/QGroundControl/
-      - ./.qground/Documents/QGroundControl/Telemetry:/home/px4/Documents/QGroundControl/Telemetry
-      - ./.qground/Documents/QGroundControl/:/home/px4/Documents/QGroundControl/
-      # - Add bind folders to save Qground Settings and map 
-
-    command: /bin/bash -c " cd /home/px4/ && ./QGroundControl.AppImage " 
-
-
-  # imu_filter:
-  #   image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-  #   privileged: true
-  #   # restart: unless-stopped
-  #   network_mode: "host"
-  #   # networks:
-  #   #   mins:
-  #   #     ipv4_address: "10.20.10.4"
-  #   depends_on:
-  #     # - roscore
-  #     - oak
-  #   # environment:
-  #   #   DISPLAY: ${DISPLAY}
-  #   #   "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     # - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #     # - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-  #     - /dev/:/dev/
-  #   command: /bin/bash -c "
-  #     rosrun imu_filter_madgwick imu_filter_node \
-  #     _use_mag:=false _use_magnetic_field_msg:=false _publish_tf:=false _world_frame:='enu' 
-  #      /imu/data_raw:=/stereo_inertial_publisher/imu \
-  #      /imu/data:=/imu/data "
-
-  # rqt:
-  #   image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-  #   container_name: rqt
-  #   hostname: rqt
-  #   tty: true
-  #   # network_mode: "host"
-  #   networks:
-  #     px4:
-  #       ipv4_address: "10.20.10.5"
-  #   # restart: unless-stopped
-  #   depends_on:
-  #     - PX4
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     "XAUTHORITY": ${XAUTH}
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #   command: /bin/bash -c "
-  #     source /home/px4/ws_px4/install/setup.bash && rqt"
-
-  uxrcedds:
-    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: uxrcedds
-    hostname: uxrcedds
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.6"
-    # restart: unless-stopped
-    environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-
-    command: /bin/bash -c "
-      source /home/px4/ws_px4/install/setup.bash && MicroXRCEAgent udp4 -p 8888"
-
+      <<: *gpu-env
   Rtabmap:
-    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: rtabmap
-    hostname: rtabmap
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.7"
-    # restart: unless-stopped
+    extends:
+      file: compose.yml
+      service: Rtabmap
+    image: *gpu-image
     environment:
-      - DISPLAY=${DISPLAY}
-      - XAUTHORITY=${XAUTH}
-      - CamerType=$CamerType
-
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-    command: /bin/bash -c "sleep inf"
-
-    # command: /bin/bash -c "
-    #  . /home/px4/volume/startFiles/gz_start_rtabmap.sh ${CameraType}"
-
+      <<: *gpu-env
   NAV2:
-    image: ${registeryGPU}/px4_sim:${px4GPUTAG:?error}"
-    container_name: nav2
-    hostname: nav2
-    # depends_on:
-    #   - PX4
-    tty: true
-    # network_mode: "host"
-    networks:
-      px4:
-        ipv4_address: "10.20.10.8"
-    # restart: unless-stopped
+    extends:
+      file: compose.yml
+      service: NAV2
+    image: *gpu-image
     environment:
-      DISPLAY: ${DISPLAY}
-      "XAUTHORITY": ${XAUTH}
-    volumes:
-      - /tmp/.X11-unix/:/tmp/.X11-unix/
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./includes/gz/:/home/px4/volume/includes/gz/
-      - ./includes/gz/startFiles/:/home/px4/volume/startFiles
-      - ./Params:/home/px4/volume/Params
-
-  #   command: /bin/bash -c "
-  #     ros2 launch nav2_bringup navigation_launch.py \
-  #     params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
-
-    command: /bin/bash -c "sleep inf"
-
-  # Nav2_Rviz:
-  #   image: "docker.io/alienkh/px4_sim:${px4TAG:?error}"
-  #   container_name: nav2_rviz
-  #   hostname: nav2_rivz
-  #   tty: true
-  #   privileged: true
-  #   restart: unless-stopped
-  #   # depends_on:
-  #   #   - nav2
-  #   # network_mode: "host"
-  #   networks:
-  #     px4:
-  #       ipv4_address: "10.20.10.9"
-
-  #   environment:
-  #     DISPLAY: ${DISPLAY}
-  #     XAUTHORITY: ${XAUTH}
-        
-  #   volumes:
-  #     - /tmp/.X11-unix/:/tmp/.X11-unix/
-  #     - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-  #     - ./Params:/home/px4/volume/Params
-
-  #   # command: /bin/bash -c "sleep inf"
-
-  #   command: /bin/bash -c "
-  #     ros2 launch nav2_bringup rviz_launch.py \
-  #     params_file:=/home/px4/volume/Params/nav2/nav2_rviz"
-
-
+      <<: *gpu-env
+  Nav2_Rviz:
+    extends:
+      file: compose.yml
+      service: Nav2_Rviz
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
 
 networks:
   px4:
     ipam:
       driver: default
       config:
-        - subnet: "10.20.10.0/24"
-      
-
-# volumes:
-#   cash:
-#   config:
+        - subnet: 10.20.10.0/24

@@ -11,7 +11,7 @@ MODEL="x500_depth"
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
-export PX4_GZ_MODEL_POSE="-3,-1.6,0,0,0,3.14"
+export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
 
 if [ "${WORLD}" = "default" ] || [ -z "${WORLD}" ]; then
     make px4_sitl "gz_${MODEL}"

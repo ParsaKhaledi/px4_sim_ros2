@@ -1,0 +1,40 @@
+# NVIDIA override. Image and device reservation only.
+
+x-gpu-image: &gpu-image ${PX4_GPU_IMAGE:-docker.io/alienkh/px4_sim:${px4GPUTAG:-1.17.0_01_GPU_GPUEnabled}}
+
+x-gpu-env: &gpu-env
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+
+services:
+  PX4:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  StatePublisher:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Qground:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Rtabmap:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  NAV2:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Nav2_Rviz:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env

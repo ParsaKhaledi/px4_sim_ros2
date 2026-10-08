@@ -1,0 +1,58 @@
+name: Simulation test
+
+on:
+  workflow_call:
+    inputs:
+      suite:
+        description: smoke or e2e
+        required: true
+        type: string
+      image:
+        description: Image to run. Empty uses PX4_IMAGE from .env.
+        required: false
+        type: string
+        default: ""
+      leg_length:
+        description: E2E forward leg length in meters
+        required: false
+        type: string
+        default: "0.3"
+      runner:
+        description: Runner label
+        required: false
+        type: string
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run suite
+        env:
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          E2E_LEG_LENGTH_M: ${{ inputs.leg_length }}
+          SMOKE_TEST_TIMEOUT: "900"
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.image }}" ]; then
+            export PX4_IMAGE="${{ inputs.image }}"
+          fi
+          if [ "${{ inputs.suite }}" = "e2e" ]; then
+            ./scripts/run_e2e.sh
+          else
+            ./scripts/smoke_test.sh
+          fi
+
+      - name: Collect artifacts
+        if: always()
+        uses: ./.github/actions/collect-artifacts
+        with:
+          name: ${{ inputs.suite }}-${{ github.sha }}
