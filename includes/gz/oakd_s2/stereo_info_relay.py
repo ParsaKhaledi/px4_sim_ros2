@@ -29,19 +29,23 @@ def main() -> int:
         "stereo_baseline_relay",
         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
     )
+    profile = geo.profile_from_env()
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
 
     def on_info(msg: CameraInfo) -> None:
-        # Incoming K is ignored. The pair is rectified to the left calibration.
-        msg.k = geo.rectified_k()
-        msg.p = geo.rectified_p(right=True)
+        # Incoming K is ignored. The pair is rectified to the left calibration
+        # at the active profile's resolution, so Tx uses the scaled fx.
+        msg.k = geo.rectified_k(profile)
+        msg.p = geo.rectified_p(right=True, profile=profile)
         msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
         msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
         publisher.publish(msg)
 
     node.create_subscription(CameraInfo, geo.RIGHT_INFO_IN, on_info, qos_profile_sensor_data)
+    fx = geo.stereo_intrinsics(profile)["fx"]
     node.get_logger().info(
-        f"baseline {geo.BASELINE_M:.3f} m: {geo.RIGHT_INFO_IN} -> {geo.RIGHT_INFO_OUT}"
+        f"profile {profile.name} baseline {geo.BASELINE_M:.3f} m fx {fx:.4f}: "
+        f"{geo.RIGHT_INFO_IN} -> {geo.RIGHT_INFO_OUT}"
     )
     try:
         rclpy.spin(node)

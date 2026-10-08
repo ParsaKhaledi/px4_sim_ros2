@@ -124,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         return msg
 
     mount = geo.mount_from_env()
+    profile = geo.profile_from_env()
+    stereo_k = geo.stereo_intrinsics(profile)
     if mode in ("stereo", "all"):
         check_image("stereo_left_image", "/camera/stereo/left/image_raw", geo.STEREO_LEFT_OPTICAL)
         check_image("stereo_right_image", "/camera/stereo/right/image_raw", geo.STEREO_RIGHT_OPTICAL)
@@ -131,13 +133,13 @@ def main(argv: list[str] | None = None) -> int:
             "stereo_left_info",
             "/camera/stereo/left/camera_info",
             geo.STEREO_LEFT_OPTICAL,
-            geo.LEFT_INTRINSICS["fx"],
+            stereo_k["fx"],
         )
         raw = check_fx(
             "stereo_right_info_raw",
             geo.RIGHT_INFO_IN,
             geo.STEREO_RIGHT_OPTICAL,
-            geo.LEFT_INTRINSICS["fx"],
+            stereo_k["fx"],
         )
         corrected = wait_for(CameraInfo, geo.RIGHT_INFO_OUT)
         if corrected is None or raw is None:
@@ -164,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode in ("rgbd", "all"):
         check_image("rgb_image", "/camera/rgb/image_raw", geo.RGB_OPTICAL)
         check_image("depth_image", "/camera/depth/image_raw", geo.RGB_OPTICAL)
-        color = geo.color_intrinsics()
+        color = geo.color_intrinsics(profile)
         rgb_info = check_fx("rgb_info", "/camera/rgb/camera_info", geo.RGB_OPTICAL, color["fx"])
         depth_info = check_fx("depth_info", "/camera/depth/camera_info", geo.RGB_OPTICAL, color["fx"])
         if rgb_info is None or depth_info is None:

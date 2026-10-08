@@ -96,12 +96,13 @@ subscribes to that topic and scores the run from `.env`. The defaults are:
 
 - `VISION_MAX_LOST_STREAK=3`: `lost` is not true for more than this many frames in a row
 - `VISION_MAX_RECOVERY_FRAMES=2`: after each loss, the first frame with `lost` false arrives within this many frames (`Odom/ResetCountdown 1` is what makes that possible). A loss that is still open at the end of the log fails this gate.
-- `VISION_MIN_MEDIAN_FEATURES=500`: median of `features`
-- `VISION_MIN_INLIERS=20`: `inliers` on frames that are not lost (`Vis/MinInliers`). Lost frames are in the distribution, and the streak and recovery gates cover them.
+- `VISION_MIN_MEDIAN_FEATURES`: median of `features`. Default 500. `VISION_PROFILE=cpu` uses 200 unless the variable is set.
+- `VISION_MIN_INLIERS`: `inliers` on frames that are not lost (`Vis/MinInliers`). Default 20. `VISION_PROFILE=cpu` uses 15 unless the variable is set. Lost frames are in the distribution, and the streak and recovery gates cover them.
+- `VISION_MIN_ODOM_HZ=7`: rate from `odom_info` header stamps (simulation time, which PX4's EKF sees). The summary also reports the wall-clock rate and `ratio` = wall Hz / sim Hz. That ratio is not gated.
 
-The last JSONL line is `event=summary`. Each of those four metrics has `value`,
-`threshold`, and `pass`, and the line has an overall `pass`. `--fail-on-loss`
-or `VISION_FAIL_ON_LOSS` exits 1 when `pass` is false. Change the numbers in
+The last JSONL line is `event=summary`. Each metric has `value`, `threshold`,
+and `pass`, and the line has an overall `pass`. `--fail-on-loss` or
+`VISION_FAIL_ON_LOSS` exits 1 when `pass` is false. Change the numbers in
 `.env` to retune CI without editing the script.
 
 Until the first `odom_info`, tracking falls back to `/rtabmap/info` inlier
@@ -126,9 +127,65 @@ ros2 param get /rtabmap/rtabmap Vis/MaxFeatures
 ```
 
 `ResetCountdown` should be `1`, `Grid/NormalsSegmentation` `false`,
-`Optimizer/GravitySigma` `0.1`, `Vis/MaxFeatures` `1000`. If `ros2 param get`
+`Optimizer/GravitySigma` `0.1`, `Vis/MaxFeatures` `1000` on `full` and `400`
+on `cpu`. If `ros2 param get`
 says the parameter was not declared, the log line
 `Update parameter "Odom/ResetCountdown"="1"` from the odometry node is the
 check instead. Values passed only in `odom_args` will not appear on the
 SLAM node, and grid keys passed only in `args` will not appear on the
 odometry node.
+
+## CPU profile
+
+`VISION_PROFILE=full` is the OAK-D S2 spec and the default. `VISION_PROFILE=cpu`
+is for Gazebo on llvmpipe (EGL headless, no GPU) with RTAB-Map in the same
+box. On an 8-core CPU-only machine the 30 Hz cameras rendered at about 10-11 Hz,
+0-2 Hz of that reached ROS after `ros_gz_bridge`, and the real-time factor
+fell to about 0.004 once RTAB-Map was added. The cpu profile cuts pixels and
+the odometry work so stereo odometry can hold 7-8 Hz in sim time.
+
+Set it in `.env` and recreate the PX4, StatePublisher, and Rtabmap containers.
+`CAM_RATE_HZ`, `CAM_STEREO_WIDTH`, `CAM_STEREO_HEIGHT`, `CAM_COLOR_WIDTH`,
+`CAM_COLOR_HEIGHT`, and `IMU_RATE_HZ` override one field and leave the rest
+of the profile. The mount (`CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, `CAM_Z`) is
+unchanged. `geometry.py` is still the only copy of the intrinsics: fx, fy,
+cx, and cy scale with the resolution ratio, so the field of view stays, and
+the right `P[3]` is `-fx_scaled * 0.075`. Both stereo cameras still share the
+left K. The checked-in SDF and URDF are the full profile. Container start
+re-renders them the same way it applies the mount.
+
+What the cpu numbers cost and save:
+
+| Setting | full | cpu | Effect |
+|---|---|---|---|
+| Stereo size | 640x400 | 320x200 | Quarter of the pixels. Render and bridge cost drop with the pixel count. |
+| Color and depth | 640x480 | 320x240 | Same, quarter of the pixels. Depth uses the color size. |
+| `CAM_RATE_HZ` | 30 | 10 | A third of the frames Gazebo has to render. |
+| `IMU_RATE_HZ` | 200 | 100 | Half the IMU samples. Noise bandwidth follows the rate. |
+| `Vis/MaxFeatures` | 1000 | 400 | Fewer features to extract and match. Default is 1000 (`Parameters.h`, "0 no limits"). |
+| `OdomF2M/MaxSize` | 2000 | 1000 | Smaller frame-to-map local map. Default is 2000. |
+| `Vis/CorGuessWinSize` | 40 | 20 | Matching window in pixels when a motion guess exists. Half the window matches half the resolution. Default on current master is 40. |
+| `Vis/MinInliers` | 20 | 15 | Accept a pose with fewer matches. Small CPU effect; the health floor follows it. |
+| `Kp/MaxFeatures` | 500 (default, unset) | 300 | Fewer words for the loop-closure vocabulary. Default is 500. |
+| `Stereo/MaxDisparity` | unset | 64, stereo only | Disparity search limit in pixels. Current master defaults to 128 (float); older headers default to 64 (int). Disparity is `fx * baseline / depth`, and fx scales with width, so 64 at half resolution is the same minimum depth as 128 at full resolution. |
+| `Grid/CellSize` | 0.05 (default, unset) | 0.1 | Four times fewer cells in the occupancy grid. **Nav2's costmap uses this grid, so the cells get coarser.** |
+| `Grid/RangeMax` | 5 (default) | 5 | Already the default ("Maximum range from sensor. 0=inf."). Pinned so a later default cannot grow the grid. No saving against today's full profile. |
+| `Rtabmap/DetectionRate` | 1 (default) | 1 | How often the SLAM node accepts an image, in Hz (`Parameters.h`). This is not the odometry rate. Stereo odometry is a separate node and is not capped by it. Pinned at the default. |
+
+Nothing from that list was dropped. Each name is a `RTABMAP_PARAM` in
+`corelib/include/rtabmap/core/Parameters.h` on current master, and the same
+names are in the 0.21-era header. They are passed inside `args:=` and
+`odom_args:=`. `Parameters::parseArguments` would silently ignore a key that
+is not in that map. `Odom/ResetCountdown 1`, `Odom/Strategy 0` (F2M),
+`Vis/FeatureType 10` and `Kp/DetectorStrategy 10` (ORB-OCTREE), and
+`Vis/EstimationType 1` (PnP) stay on both profiles. Stereo stays on exact
+sync. RGB-D stays on approximate sync. `wait_imu_to_init` stays.
+
+`HealthCheck/vision_rate_probe.py` counts the image topics, `/imu`, and
+`/rtabmap/odom` for N wall seconds and reads `/clock` against that window
+for the real-time factor. It prints one line and writes JSONL. It does not
+apply a threshold. The 7 Hz gate is `VISION_MIN_ODOM_HZ` on the health log,
+using sim time.
+
+The GPU compose file does not pass `VISION_PROFILE` or the `CAM_*` overrides
+(it also does not pass the mount). The no-GPU compose does.

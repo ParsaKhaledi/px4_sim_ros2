@@ -158,7 +158,7 @@ The simulated camera is a Luxonis OAK-D S2. Gazebo still loads it as `model://Oa
 
 `includes/gz/oakd_s2/geometry.py` is the only copy of the intrinsics, the 7.5 cm baseline, and the mount. Container start renders the SDF and the URDF from it, and patches the `x500_depth` include so Gazebo and TF use one pose. Defaults match PX4: `0.12 0.03 0.242` plus 17 degrees down. Set `CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, and `CAM_Z` in `.env`, then recreate the PX4 and StatePublisher containers.
 
-Stereo RTAB-Map reads `/camera/stereo/right/camera_info_baseline`. Both cameras render the left calibration, and that topic carries the same K with `P[3] = -fx * 0.075`. Both launches use `use_sim_time:=true`, `frame_id:=base_link`, and `imu_topic:=/imu`. Stereo uses exact sync. RGB-D stays on approximate sync because color and depth are two sensors. The viewer flag is the launch argument `rtabmap_viz`, driven by `RTABMAPVIZ` (default false). Parameter reasons and the odometry checks are in [docs/rtabmap_tuning.md](docs/rtabmap_tuning.md).
+Stereo RTAB-Map reads `/camera/stereo/right/camera_info_baseline`. Both cameras render the left calibration, and that topic carries the same K with `P[3] = -fx * 0.075`. Both launches use `use_sim_time:=true`, `frame_id:=base_link`, and `imu_topic:=/imu`. Stereo uses exact sync. RGB-D stays on approximate sync because color and depth are two sensors. The viewer flag is the launch argument `rtabmap_viz`, driven by `RTABMAPVIZ` (default false). `VISION_PROFILE=full` is that spec. `VISION_PROFILE=cpu` renders quarter-size frames at 10 Hz (IMU 100 Hz) and asks RTAB-Map for fewer features, so a CPU-only Gazebo can keep stereo odometry near 7-8 Hz. Parameter reasons and the odometry checks are in [docs/rtabmap_tuning.md](docs/rtabmap_tuning.md).
 
 Frame-by-frame explanation, including what used to disagree: [docs/frames.md](docs/frames.md). Generator details: [includes/gz/oakd_s2/README.md](includes/gz/oakd_s2/README.md).
 
@@ -169,13 +169,16 @@ python3 HealthCheck/rtabmap_health_log.py --output /tmp/rtabmap_health.jsonl
 # Topics, baseline Tx, IMU, and TF. Needs a running stack. Not run in CI yet.
 python3 HealthCheck/check_vision_pipeline.py --mode stereo --output /tmp/vision_check.jsonl
 
+# Camera, IMU, odom, and /clock real-time factor for 10 wall seconds. Needs a running stack.
+python3 HealthCheck/vision_rate_probe.py --seconds 10 --output /tmp/vision_rate.jsonl
+
 # Any two TUM files. -a only, so scale error is not hidden.
 python3 scripts/eval_slam_accuracy.py ground_truth.tum rtabmap.tum
 ```
 
 `SLAM_APE_RMS_MAX` and `SLAM_DRIFT_PER_M_MAX` are the gates for that last script. The checked-in defaults are starting values, not a number measured on a flight.
 
-`VISION_MAX_LOST_STREAK`, `VISION_MAX_RECOVERY_FRAMES`, `VISION_MIN_MEDIAN_FEATURES`, and `VISION_MIN_INLIERS` are the gates for the health log. It reads them from `.env` and writes each metric with its threshold and pass/fail on the summary line.
+`VISION_MAX_LOST_STREAK`, `VISION_MAX_RECOVERY_FRAMES`, `VISION_MIN_MEDIAN_FEATURES`, `VISION_MIN_INLIERS`, and `VISION_MIN_ODOM_HZ` are the gates for the health log. Feature and inlier floors follow the profile (cpu: 200 and 15) unless those two variables are set. The summary line has each metric, its threshold, and pass/fail, plus the wall-clock odometry rate next to the sim-time rate.
 
 ## Health checks
 

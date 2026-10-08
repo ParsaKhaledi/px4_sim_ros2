@@ -26,11 +26,25 @@ _restore_or_default() {
   fi
   eval "export ${var_name}=\${${var_name}:-${default_value}}"
 }
+_restore_if_caller_set() {
+  var_name=$1
+  eval "_set=\${_saved_${var_name}_set-}"
+  if [ -n "${_set}" ]; then
+    eval "export ${var_name}=\${_saved_${var_name}}"
+  fi
+}
 _keep_if_set CAM_PITCH_DEG
 _keep_if_set CAM_X
 _keep_if_set CAM_Y
 _keep_if_set CAM_Z
 _keep_if_set RTABMAPVIZ
+_keep_if_set VISION_PROFILE
+_keep_if_set CAM_RATE_HZ
+_keep_if_set CAM_STEREO_WIDTH
+_keep_if_set CAM_STEREO_HEIGHT
+_keep_if_set CAM_COLOR_WIDTH
+_keep_if_set CAM_COLOR_HEIGHT
+_keep_if_set IMU_RATE_HZ
 
 # shellcheck disable=SC1091
 source .env
@@ -40,6 +54,14 @@ _restore_or_default CAM_X 0.12
 _restore_or_default CAM_Y 0.03
 _restore_or_default CAM_Z 0.242
 _restore_or_default RTABMAPVIZ false
+_restore_or_default VISION_PROFILE full
+# Empty means "use the profile". Do not invent a number here.
+_restore_if_caller_set CAM_RATE_HZ
+_restore_if_caller_set CAM_STEREO_WIDTH
+_restore_if_caller_set CAM_STEREO_HEIGHT
+_restore_if_caller_set CAM_COLOR_WIDTH
+_restore_if_caller_set CAM_COLOR_HEIGHT
+_restore_if_caller_set IMU_RATE_HZ
 
 CameraType="${CameraType:-rgbd}"
 World="${World:-default}"

@@ -7,7 +7,7 @@ still supplies loop closures. It is also the tracking fallback until the first
 ``odom_info`` arrives, using the ``Odometry/Inliers/`` statistic. After that,
 info stats are not counted again, so the two topics are not mixed into one run.
 
-The summary line scores four gates. Thresholds come from the environment
+The summary line scores five gates. Thresholds come from the environment
 (``.env`` fills anything unset; the process environment wins):
 
 - ``VISION_MAX_LOST_STREAK`` (default 3): longest run of ``lost`` frames.
@@ -15,10 +15,14 @@ The summary line scores four gates. Thresholds come from the environment
   frames elapse from that loss until the first frame that is not lost. The
   metric is the worst run. A run that never reaches a non-lost frame fails
   even when it is shorter than the cap.
-- ``VISION_MIN_MEDIAN_FEATURES`` (default 500): median of ``features``.
-- ``VISION_MIN_INLIERS`` (default 20): floor on frames that are not lost.
-  Lost frames stay in the inlier distribution, and the streak and recovery
-  gates already cover them.
+- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 500.
+  ``VISION_PROFILE=cpu`` uses 200 unless the variable is set.
+- ``VISION_MIN_INLIERS``: floor on frames that are not lost. Default 20.
+  ``VISION_PROFILE=cpu`` uses 15 unless the variable is set. Lost frames stay
+  in the distribution, and the streak and recovery gates already cover them.
+- ``VISION_MIN_ODOM_HZ`` (default 7): odometry rate from ``odom_info`` header
+  stamps, which are simulation time (what PX4's EKF sees). The wall-clock
+  rate and ``wall_hz / sim_hz`` are reported beside it and are not gated.
 
 ``--fail-on-loss`` or ``VISION_FAIL_ON_LOSS`` exits 1 when any gate fails.
 Without that, the process exits 0 after Ctrl-C so it can sit beside a manual
@@ -31,6 +35,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,8 +54,11 @@ DEFAULT_MAX_LOST_STREAK = 3
 DEFAULT_MAX_RECOVERY_FRAMES = 2
 DEFAULT_MIN_MEDIAN_FEATURES = 500
 DEFAULT_MIN_INLIERS = 20
+CPU_MIN_MEDIAN_FEATURES = 200
+CPU_MIN_INLIERS = 15
+DEFAULT_MIN_ODOM_HZ = 7
 
-METRIC_NAMES = ("lost_streak", "recovery_frames", "median_features", "inliers")
+METRIC_NAMES = ("lost_streak", "recovery_frames", "median_features", "inliers", "odom_hz")
 
 
 @dataclass(frozen=True)
@@ -59,6 +67,7 @@ class VisionThresholds:
     max_recovery_frames: int = DEFAULT_MAX_RECOVERY_FRAMES
     min_median_features: float = DEFAULT_MIN_MEDIAN_FEATURES
     min_inliers: float = DEFAULT_MIN_INLIERS
+    min_odom_hz: float = DEFAULT_MIN_ODOM_HZ
 
 
 def stamp_seconds(stamp) -> float:
@@ -111,12 +120,28 @@ def _env_float(name: str, default: float) -> float:
     return float(raw)
 
 
+def profile_name_from_env() -> str:
+    raw = os.environ.get("VISION_PROFILE", "full")
+    name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
+    if name in ("full", "cpu"):
+        return name
+    raise ValueError(f"VISION_PROFILE must be full or cpu, got {raw}")
+
+
 def thresholds_from_env() -> VisionThresholds:
+    """Explicit ``VISION_MIN_*`` values win over the profile defaults."""
+    if profile_name_from_env() == "cpu":
+        feature_default = CPU_MIN_MEDIAN_FEATURES
+        inlier_default = CPU_MIN_INLIERS
+    else:
+        feature_default = DEFAULT_MIN_MEDIAN_FEATURES
+        inlier_default = DEFAULT_MIN_INLIERS
     return VisionThresholds(
         max_lost_streak=int(_env_float("VISION_MAX_LOST_STREAK", DEFAULT_MAX_LOST_STREAK)),
         max_recovery_frames=int(_env_float("VISION_MAX_RECOVERY_FRAMES", DEFAULT_MAX_RECOVERY_FRAMES)),
-        min_median_features=_env_float("VISION_MIN_MEDIAN_FEATURES", DEFAULT_MIN_MEDIAN_FEATURES),
-        min_inliers=_env_float("VISION_MIN_INLIERS", DEFAULT_MIN_INLIERS),
+        min_median_features=_env_float("VISION_MIN_MEDIAN_FEATURES", feature_default),
+        min_inliers=_env_float("VISION_MIN_INLIERS", inlier_default),
+        min_odom_hz=_env_float("VISION_MIN_ODOM_HZ", DEFAULT_MIN_ODOM_HZ),
     )
 
 
@@ -160,6 +185,16 @@ def median(values: list[float]):
     if len(ordered) % 2:
         return ordered[mid]
     return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def interval_rate(times: list[float]):
+    """Hz from the first sample to the last. None when the span is not positive."""
+    if len(times) < 2:
+        return None
+    span = float(times[-1]) - float(times[0])
+    if span <= 0.0:
+        return None
+    return (len(times) - 1) / span
 
 
 def lost_runs(lost_flags: list[bool]) -> tuple[int, list[int], int]:
@@ -231,10 +266,36 @@ def score_samples(samples: list[dict], thresholds: VisionThresholds) -> dict:
             "threshold": json_number(thresholds.min_inliers),
             "pass": inliers_pass,
         },
+        "odom_hz": odom_hz_metric(samples, thresholds.min_odom_hz),
     }
     return {
         "metrics": metrics,
         "pass": all(metrics[name]["pass"] for name in METRIC_NAMES),
+    }
+
+
+def odom_hz_metric(samples: list[dict], min_hz: float) -> dict:
+    """Sim-time rate of ``/rtabmap/odom_info``, plus the wall-clock rate.
+
+    ``ratio`` is ``wall_hz / sim_hz``, which is how many seconds of simulation
+    time this topic advanced per wall second. The gate uses only the sim-time
+    rate. Info-topic fallback samples are not included.
+    """
+    odom = [sample for sample in samples if sample.get("source") == "odom_info"]
+    sim_hz = interval_rate([sample["stamp"] for sample in odom if sample.get("stamp") is not None])
+    wall_times = [sample.get("wall_s") for sample in odom]
+    wall_hz = None
+    if wall_times and all(stamp is not None for stamp in wall_times):
+        wall_hz = interval_rate([float(stamp) for stamp in wall_times])
+    ratio = None
+    if sim_hz not in (None, 0.0) and wall_hz is not None:
+        ratio = wall_hz / sim_hz
+    return {
+        "value": json_number(sim_hz),
+        "threshold": json_number(min_hz),
+        "pass": sim_hz is not None and sim_hz >= min_hz,
+        "wall_hz": json_number(wall_hz),
+        "ratio": json_number(ratio),
     }
 
 
@@ -248,6 +309,7 @@ class TrackingLog:
                 max_recovery_frames=thresholds.max_recovery_frames,
                 min_median_features=thresholds.min_median_features,
                 min_inliers=min_inliers,
+                min_odom_hz=thresholds.min_odom_hz,
             )
         self.thresholds = thresholds
         self.min_inliers = float(thresholds.min_inliers)
@@ -260,10 +322,12 @@ class TrackingLog:
         self.odom_info_seen = False
         self.samples: list[dict] = []
 
-    def observe_odom(self, stamp, wall, lost, features, inliers) -> list:
+    def observe_odom(self, stamp, wall, lost, features, inliers, wall_s=None) -> list:
         """Record one ``/rtabmap/odom_info`` sample.
 
         ``lost``, ``features``, and ``inliers`` are the OdomInfo fields.
+        ``stamp`` is the header stamp (simulation time). ``wall_s`` is a
+        monotonic wall clock, used only to report the wall-clock rate.
         Later ``/rtabmap/info`` stats do not add another tracking sample.
         """
         self.odom_info_seen = True
@@ -277,6 +341,8 @@ class TrackingLog:
             0,
             0,
             "odom_info.inliers" if inliers is not None else None,
+            source="odom_info",
+            wall_s=wall_s,
         )
 
     def update(self, stamp, wall, ref_id, loop_closure_id, proximity_id, stats) -> list:
@@ -307,9 +373,18 @@ class TrackingLog:
         loop_closure_id,
         proximity_id,
         inliers_key,
+        source="info",
+        wall_s=None,
     ) -> list:
         self.samples.append(
-            {"lost": bool(lost_now), "features": features, "inliers": None if inliers is None else float(inliers)}
+            {
+                "lost": bool(lost_now),
+                "features": features,
+                "inliers": None if inliers is None else float(inliers),
+                "stamp": None if stamp is None else float(stamp),
+                "wall_s": None if wall_s is None else float(wall_s),
+                "source": source,
+            }
         )
         self.last_stamp = stamp
         events = [
@@ -441,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
             bool(msg.lost),
             int(msg.features),
             int(msg.inliers),
+            wall_s=time.monotonic(),
         )
         for event in events:
             write_jsonl(output, event)

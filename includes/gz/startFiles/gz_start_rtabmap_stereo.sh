@@ -25,9 +25,13 @@ trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 
 # rtabmap.launch.py (ROS 2) names the viewer rtabmap_viz. rtabmapviz is not
 # a declared argument. Odom/ResetCountdown 0 never restarts a lost odometry.
+# VISION_PROFILE=cpu selects the lighter set in rtabmap_profile.sh.
+# shellcheck disable=SC1091
+source "${HOME}/volume/startFiles/rtabmap_profile.sh"
+rtabmap_profile_args stereo
 ros2 launch rtabmap_launch rtabmap.launch.py \
-     args:="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Vis/MaxFeatures 1000 --Vis/MinInliers 20 --Grid/MapFrameProjection true --Grid/NormalsSegmentation false --Grid/MaxGroundHeight 1.0 --Grid/MaxObstacleHeight 2.0 --RGBD/StartAtOrigin true" \
-     odom_args:="--Odom/Strategy 0 --Odom/ResetCountdown 1 --OdomF2M/MaxSize 2000 --Vis/CorGuessWinSize 40 --Vis/EstimationType 1" \
+     args:="${RTAB_ARGS}" \
+     odom_args:="${RTAB_ODOM}" \
      stereo:=true  \
      left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
      right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \

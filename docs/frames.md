@@ -48,7 +48,7 @@ The Gazebo link is named `camera_link` because that is the child of `CameraJoint
 
 RTAB-Map's `frame_id` is `base_link`. The old stereo launch used `oak-d-base-frame`, which was never in the URDF.
 
-Stereo uses exact sync (`approx_sync:=false`). Gazebo gives both OV9282 sensors, and the `camera_info` published with each image, the simulation time of the step that rendered them. The baseline relay copies that stamp onto `/camera/stereo/right/camera_info_baseline`. The four stereo topics therefore match. The IMU is not in that set. `rtabmap_launch` remaps `imu` on its own and `wait_imu_to_init:=true` waits for the first sample before odometry starts. At 200 Hz the IMU does not land on the 30 Hz image stamps, so it is not put through `approx_sync`.
+Stereo uses exact sync (`approx_sync:=false`). Gazebo gives both OV9282 sensors, and the `camera_info` published with each image, the simulation time of the step that rendered them. The baseline relay copies that stamp onto `/camera/stereo/right/camera_info_baseline`. The four stereo topics therefore match. The IMU is not in that set. `rtabmap_launch` remaps `imu` on its own and `wait_imu_to_init:=true` waits for the first sample before odometry starts. At 200 Hz the IMU does not land on the 30 Hz image stamps, so it is not put through `approx_sync`. `VISION_PROFILE=cpu` lowers those to 100 Hz and 10 Hz; the stamps still do not match, and the IMU stays out of the synchronizer.
 
 Depth is aligned to color the way a real OAK-D publishes it: the depth sensor uses the color camera's pose, intrinsics, and `camera_rgb_optical_frame`. There is no separate depth frame.
 

@@ -60,6 +60,12 @@ def _lens(intrinsics: dict, tx: float) -> str:
         </lens>"""
 
 
+def rate_text(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return fmt(value)
+
+
 def _camera_sensor(
     name: str,
     xyz,
@@ -71,6 +77,7 @@ def _camera_sensor(
     near: float,
     far: float,
     tx: float,
+    update_rate: float,
 ) -> str:
     pose = geo.pose_text(xyz[0], xyz[1], xyz[2], 0.0, 0.0, 0.0)
     hfov = geo.hfov_from_intrinsics(intrinsics)
@@ -79,7 +86,7 @@ def _camera_sensor(
         <gz_frame_id>{optical_frame}</gz_frame_id>
         <topic>{topic}</topic>
         <always_on>true</always_on>
-        <update_rate>{geo.CAMERA_HZ}</update_rate>
+        <update_rate>{rate_text(update_rate)}</update_rate>
         <visualize>true</visualize>
         <camera name="{name}">
           <horizontal_fov>{fmt(hfov)}</horizontal_fov>
@@ -111,7 +118,7 @@ def _camera_sensor(
       </sensor>"""
 
 
-def _depth_sensor(xyz, intrinsics: dict, optical_frame: str) -> str:
+def _depth_sensor(xyz, intrinsics: dict, optical_frame: str, update_rate: float) -> str:
     """Depth image registered to the color camera.
 
     Same pose, same intrinsics, same optical frame. That is what the real
@@ -125,7 +132,7 @@ def _depth_sensor(xyz, intrinsics: dict, optical_frame: str) -> str:
         <gz_frame_id>{optical_frame}</gz_frame_id>
         <topic>/camera/depth/image_raw</topic>
         <always_on>true</always_on>
-        <update_rate>{geo.CAMERA_HZ}</update_rate>
+        <update_rate>{rate_text(update_rate)}</update_rate>
         <visualize>true</visualize>
         <camera name="rgb_aligned_depth">
           <horizontal_fov>{fmt(hfov)}</horizontal_fov>
@@ -159,10 +166,10 @@ def _axis_noise(stddev: float, bias: float) -> str:
             </noise>"""
 
 
-def _imu_sensor(xyz) -> str:
+def _imu_sensor(xyz, imu_hz: float) -> str:
     pose = geo.pose_text(xyz[0], xyz[1], xyz[2], 0.0, 0.0, 0.0)
-    gyro = _axis_noise(geo.gyro_stddev_rad_s(), 1.0e-4)
-    accel = _axis_noise(geo.accel_stddev_m_s2(), 1.0e-3)
+    gyro = _axis_noise(geo.gyro_stddev_rad_s(imu_hz), 1.0e-4)
+    accel = _axis_noise(geo.accel_stddev_m_s2(imu_hz), 1.0e-3)
     axes = "\n".join(f"          <{axis}>\n{gyro}\n          </{axis}>" for axis in "xyz")
     linear = "\n".join(f"          <{axis}>\n{accel}\n          </{axis}>" for axis in "xyz")
     # Without this element, gz-sim8 stores the spawn rotation as the IMU
@@ -176,7 +183,7 @@ def _imu_sensor(xyz) -> str:
         <gz_frame_id>{geo.IMU_FRAME}</gz_frame_id>
         <topic>{geo.IMU_TOPIC}</topic>
         <always_on>true</always_on>
-        <update_rate>{geo.IMU_HZ}</update_rate>
+        <update_rate>{rate_text(imu_hz)}</update_rate>
         <imu>
           <orientation_reference_frame>
             <localization>ENU</localization>
@@ -235,16 +242,23 @@ def _housing(mount: geo.Mount) -> tuple[str, str, str]:
     return inertial, visual, header
 
 
-def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
+def render_sdf(
+    variant: str,
+    mount: geo.Mount | None = None,
+    profile: geo.VisionProfile | None = None,
+) -> str:
     if variant not in ("stereo", "rgbd"):
         raise ValueError(variant)
     mount = mount or geo.Mount()
+    # Callers that omit the profile get the full OAK-D spec. Container start
+    # passes profile_from_env() so VISION_PROFILE and the CAM_* overrides apply.
+    profile = geo.FULL_PROFILE if profile is None else profile
     layouts = geo.sensor_layouts()
     inertial, visual, header = _housing(mount)
-    imu = _imu_sensor(layouts["imu"])
+    imu = _imu_sensor(layouts["imu"], profile.imu_hz)
     if variant == "stereo":
         # One K for the pair. The right camera's own calibration is not used.
-        shared = geo.LEFT_INTRINSICS
+        shared = geo.stereo_intrinsics(profile)
         right_tx = geo.stereo_tx(shared["fx"])
         sensors = "\n".join(
             [
@@ -259,6 +273,7 @@ def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
                     0.2,
                     30.0,
                     0.0,
+                    profile.camera_hz,
                 ),
                 _camera_sensor(
                     "OV9282_right",
@@ -271,12 +286,13 @@ def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
                     0.2,
                     30.0,
                     right_tx,
+                    profile.camera_hz,
                 ),
                 imu,
             ]
         )
     else:
-        color = geo.color_intrinsics()
+        color = geo.color_intrinsics(profile)
         sensors = "\n".join(
             [
                 _camera_sensor(
@@ -290,8 +306,9 @@ def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
                     0.08,
                     50.0,
                     0.0,
+                    profile.camera_hz,
                 ),
-                _depth_sensor(layouts["rgb"], color, geo.RGB_OPTICAL),
+                _depth_sensor(layouts["rgb"], color, geo.RGB_OPTICAL, profile.camera_hz),
                 imu,
             ]
         )
@@ -458,13 +475,20 @@ def patch_x500_depth_file(path: Path, mount: geo.Mount | None = None) -> str:
     return (mount or geo.Mount()).pose_text()
 
 
-def write_models(mount: geo.Mount | None = None, urdf_only: bool = False) -> None:
+def write_models(
+    mount: geo.Mount | None = None,
+    urdf_only: bool = False,
+    profile: geo.VisionProfile | None = None,
+) -> None:
     mount = mount or geo.mount_from_env()
+    profile = geo.profile_from_env() if profile is None else profile
+    # The URDF carries the mount and the frame tree. Image size and rate live
+    # in the SDF, which Gazebo renders. Both are written from this one call.
     URDF_PATH.write_text(render_urdf(mount), encoding="utf-8")
     if urdf_only:
         return
-    STEREO_SDF.write_text(render_sdf("stereo", mount), encoding="utf-8")
-    RGBD_SDF.write_text(render_sdf("rgbd", mount), encoding="utf-8")
+    STEREO_SDF.write_text(render_sdf("stereo", mount, profile), encoding="utf-8")
+    RGBD_SDF.write_text(render_sdf("rgbd", mount, profile), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -473,13 +497,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--patch-x500", type=Path, default=None)
     args = parser.parse_args(argv)
     mount = geo.mount_from_env()
+    profile = geo.profile_from_env()
     if args.patch_x500:
         pose = patch_x500_depth_file(args.patch_x500, mount)
         print(f"x500_depth camera pose set to {pose}")
         return 0
-    write_models(mount, urdf_only=args.urdf_only)
+    write_models(mount, urdf_only=args.urdf_only, profile=profile)
     what = "URDF" if args.urdf_only else "stereo SDF, RGB-D SDF, and URDF"
-    print(f"Wrote {what} for mount {mount.pose_text()}")
+    print(
+        f"Wrote {what} for mount {mount.pose_text()} "
+        f"profile {profile.name} stereo {profile.stereo_width}x{profile.stereo_height} "
+        f"@{rate_text(profile.camera_hz)} Hz"
+    )
     return 0
 
 

@@ -80,6 +80,16 @@ COLOR_VFOV_DEG = 54.0
 CAMERA_HZ = 30
 IMU_HZ = 200
 
+# VISION_PROFILE=cpu. Half the stereo pixels on each axis (640x400 -> 320x200),
+# half the color frame (640x480 -> 320x240), and slower sensors. Field of view
+# stays put because fx, fy, cx, and cy scale with the resolution.
+CPU_STEREO_WIDTH = 320
+CPU_STEREO_HEIGHT = 200
+CPU_COLOR_WIDTH = 320
+CPU_COLOR_HEIGHT = 240
+CPU_CAMERA_HZ = 10
+CPU_IMU_HZ = 100
+
 # Ogre's image noise pass is in normalized intensity. 0.007 is about two
 # counts on an 8-bit image, enough to not be a perfect render.
 IMAGE_NOISE_STDDEV = 0.007
@@ -110,25 +120,125 @@ RIGHT_INFO_OUT = "/camera/stereo/right/camera_info_baseline"
 IMU_TOPIC = "/imu"
 
 
-def gyro_stddev_rad_s() -> float:
-    bandwidth_hz = IMU_HZ / 2.0
+def gyro_stddev_rad_s(imu_hz: float | None = None) -> float:
+    bandwidth_hz = (IMU_HZ if imu_hz is None else float(imu_hz)) / 2.0
     return math.radians(GYRO_DENSITY_DPS_SQRT_HZ * math.sqrt(bandwidth_hz))
 
 
-def accel_stddev_m_s2() -> float:
-    bandwidth_hz = IMU_HZ / 2.0
+def accel_stddev_m_s2(imu_hz: float | None = None) -> float:
+    bandwidth_hz = (IMU_HZ if imu_hz is None else float(imu_hz)) / 2.0
     return ACCEL_DENSITY_G_SQRT_HZ * GRAVITY_M_S2 * math.sqrt(bandwidth_hz)
 
 
-def rectified_k() -> list[float]:
+@dataclass(frozen=True)
+class VisionProfile:
+    """Image size and sensor rate. ``full`` is the OAK-D S2 spec.
+
+    Optional ``CAM_*`` and ``IMU_RATE_HZ`` overrides replace individual fields
+    after the profile is chosen. Intrinsics are scaled from the full-resolution
+    calibration so the field of view does not change.
+    """
+
+    name: str
+    stereo_width: int
+    stereo_height: int
+    color_width: int
+    color_height: int
+    camera_hz: float
+    imu_hz: float
+
+
+FULL_PROFILE = VisionProfile(
+    "full",
+    LEFT_INTRINSICS["width"],
+    LEFT_INTRINSICS["height"],
+    COLOR_WIDTH,
+    COLOR_HEIGHT,
+    CAMERA_HZ,
+    IMU_HZ,
+)
+CPU_PROFILE = VisionProfile(
+    "cpu",
+    CPU_STEREO_WIDTH,
+    CPU_STEREO_HEIGHT,
+    CPU_COLOR_WIDTH,
+    CPU_COLOR_HEIGHT,
+    CPU_CAMERA_HZ,
+    CPU_IMU_HZ,
+)
+
+
+def _env_int(env: dict, name: str, default: int) -> int:
+    raw = env.get(name)
+    if raw is None or str(raw).strip() == "":
+        return int(default)
+    value = int(float(raw))
+    if value <= 0:
+        raise ValueError(f"{name} must be positive, got {raw}")
+    return value
+
+
+def profile_from_env(env: dict | None = None) -> VisionProfile:
+    """``VISION_PROFILE`` selects ``full`` or ``cpu``. Per-field overrides win."""
+    source = os.environ if env is None else env
+    raw = source.get("VISION_PROFILE", "full")
+    name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
+    if name == "full":
+        base = FULL_PROFILE
+    elif name == "cpu":
+        base = CPU_PROFILE
+    else:
+        raise ValueError(f"VISION_PROFILE must be full or cpu, got {raw}")
+    camera_hz = _env_float(source, "CAM_RATE_HZ", base.camera_hz)
+    imu_hz = _env_float(source, "IMU_RATE_HZ", base.imu_hz)
+    if camera_hz <= 0.0 or imu_hz <= 0.0:
+        raise ValueError(f"sensor rates must be positive, got camera {camera_hz} imu {imu_hz}")
+    return VisionProfile(
+        name=name,
+        stereo_width=_env_int(source, "CAM_STEREO_WIDTH", base.stereo_width),
+        stereo_height=_env_int(source, "CAM_STEREO_HEIGHT", base.stereo_height),
+        color_width=_env_int(source, "CAM_COLOR_WIDTH", base.color_width),
+        color_height=_env_int(source, "CAM_COLOR_HEIGHT", base.color_height),
+        camera_hz=camera_hz,
+        imu_hz=imu_hz,
+    )
+
+
+def scale_intrinsics(src: dict, width: int, height: int) -> dict:
+    """Scale a pinhole to a new resolution. Horizontal and vertical FOV stay."""
+    if width <= 0 or height <= 0:
+        raise ValueError(f"resolution must be positive, got {width}x{height}")
+    sx = float(width) / float(src["width"])
+    sy = float(height) / float(src["height"])
+    return {
+        "width": int(width),
+        "height": int(height),
+        "fx": float(src["fx"]) * sx,
+        "fy": float(src["fy"]) * sy,
+        "cx": float(src["cx"]) * sx,
+        "cy": float(src["cy"]) * sy,
+    }
+
+
+def stereo_intrinsics(profile: VisionProfile | None = None) -> dict:
+    """Left calibration at this profile's stereo resolution. Both cameras share it."""
+    chosen = FULL_PROFILE if profile is None else profile
+    return scale_intrinsics(LEFT_INTRINSICS, chosen.stereo_width, chosen.stereo_height)
+
+
+def rectified_k(profile: VisionProfile | None = None) -> list[float]:
     """3x3 K shared by both stereo cameras. Row-major, from the left calibration."""
-    src = LEFT_INTRINSICS
+    src = stereo_intrinsics(profile)
     return [src["fx"], 0.0, src["cx"], 0.0, src["fy"], src["cy"], 0.0, 0.0, 1.0]
 
 
-def rectified_p(right: bool, baseline_m: float = BASELINE_M) -> list[float]:
+def rectified_p(
+    right: bool,
+    baseline_m: float = BASELINE_M,
+    profile: VisionProfile | None = None,
+) -> list[float]:
     """3x4 projection. Same K on both cameras. Only the right camera has Tx."""
-    src = LEFT_INTRINSICS
+    src = stereo_intrinsics(profile)
     tx = stereo_tx(src["fx"], baseline_m) if right else 0.0
     return [
         src["fx"], 0.0, src["cx"], tx,
@@ -187,7 +297,7 @@ def vfov_from_intrinsics(intrinsics: dict) -> float:
     return 2.0 * math.atan(half_height / intrinsics["fy"])
 
 
-def color_intrinsics() -> dict:
+def _color_full() -> dict:
     """Square-pixel pinhole from the AF datasheet HFOV at 640x480.
 
     The datasheet also lists VFOV 54 deg and DFOV 78 deg. Those three angles
@@ -205,6 +315,12 @@ def color_intrinsics() -> dict:
         "cx": COLOR_WIDTH / 2.0,
         "cy": COLOR_HEIGHT / 2.0,
     }
+
+
+def color_intrinsics(profile: VisionProfile | None = None) -> dict:
+    """Color pinhole at the profile resolution. FOV matches the 640x480 spec."""
+    chosen = FULL_PROFILE if profile is None else profile
+    return scale_intrinsics(_color_full(), chosen.color_width, chosen.color_height)
 
 
 def diagonal_fov_deg(hfov_deg: float, vfov_deg: float) -> float:
