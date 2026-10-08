@@ -1,5 +1,6 @@
 """Metric tests on synthetic trajectories."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -124,4 +125,12 @@ def test_resample_pairs_different_rates(tmp_path):
     assert document["trajectories"]["rtabmap"]["available"]
     assert (tmp_path / "out" / "metrics.json").is_file()
     assert (tmp_path / "out" / "metrics.csv").is_file()
-    assert (tmp_path / "out" / "trajectories_xy.png").is_file()
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        saved = json.loads((tmp_path / "out" / "metrics.json").read_text(encoding="utf-8"))
+        assert saved["plots_skipped"] == "matplotlib is not installed"
+        assert document["plots_skipped"] == "matplotlib is not installed"
+    else:
+        assert (tmp_path / "out" / "trajectories_xy.png").is_file()
+        assert (tmp_path / "out" / "ate_unaligned.png").is_file()

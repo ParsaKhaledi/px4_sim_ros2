@@ -162,6 +162,15 @@ def _json_ready(value):
     return value
 
 
+def _plots_skipped() -> str | None:
+    """Reason plots were not written, or None when matplotlib can draw them."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        return "matplotlib is not installed"
+    return None
+
+
 def write_report(directory: Path, streams: dict[str, list[PoseSample]],
                  distances: tuple[float, ...] = (1.0, 5.0)) -> dict:
     """Write TUM files, metrics.json, metrics.csv, and plots."""
@@ -172,6 +181,7 @@ def write_report(directory: Path, streams: dict[str, list[PoseSample]],
             write_tum(directory / f"{name}.tum", samples)
     document = evaluate(streams, distances)
     document["plots"] = write_plots(directory, streams)
+    document["plots_skipped"] = _plots_skipped()
     (directory / "metrics.json").write_text(
         json.dumps(_json_ready(document), indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
