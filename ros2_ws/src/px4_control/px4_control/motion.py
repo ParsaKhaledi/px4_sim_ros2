@@ -259,6 +259,35 @@ class MotionExecutive:
         self._hold_since = None
         return self._begin_land()
 
+    def abort_brake_hold_land(self, time_s: float, snap: Snapshot, message: str) -> int:
+        """Fail the active goal, brake to a stop, then land from that hold.
+
+        This includes a takeoff in progress. A land that is already running
+        is left alone.
+        """
+        if self.phase == Phase.LAND and self._active is not None and not self._status[self._active].done:
+            return self._active
+        if (
+            self.phase == Phase.BRAKE
+            and self._after_brake == Phase.LAND
+            and self._active is not None
+            and not self._status[self._active].done
+        ):
+            return self._active
+        self._seed_if_needed(snap, time_s)
+        if self._active is not None and not self._status[self._active].done:
+            status = self._status[self._active]
+            status.done = True
+            status.success = False
+            status.message = message
+            self._active = None
+        self._holding = False
+        self._hold_since = None
+        goal = self._begin_land()
+        self._begin_brake(time_s, Phase.LAND)
+        self._active = goal
+        return goal
+
     def _begin_land(self) -> int:
         assert self._p is not None
         ground = self._ground_d if self._ground_d is not None else float(self._p[2])

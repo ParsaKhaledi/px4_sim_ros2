@@ -69,7 +69,14 @@ drone.move_forward(0.3)
 drone.land()
 ```
 
-The same mission is `ros2 run px4_control out_and_back`.
+The same mission is `ros2 run px4_control out_and_back`. It takes `CameraType` (`stereo` or `rgbd`), from `--camera-type` or the environment, the same name `scripts/up.sh` passes to Gazebo and RTAB-Map:
+
+```bash
+CameraType=rgbd ros2 run px4_control out_and_back
+CameraType=stereo ros2 run px4_control out_and_back
+```
+
+A downward `/fmu/out/distance_sensor` is checked against EKF2 height above the ground sample (local `z` relative to the last landed `z`, not `dist_bottom`). The range is multiplied by the body-down cosine. If the absolute gap stays above `lidar_height_tolerance_m` (default 0.3 m) for more than `lidar_height_duration_s` (default 0.5 s), the active goal fails, the setpoint brakes to a stop, and the vehicle then lands. The log line starts with `lidar height abort`. With no `distance_sensor` the guard does nothing and logs `no distance_sensor; lidar height guard disabled` once. This branch does not set `EKF2_EV_POS_Z`; the camera frame offset is fixed in the URDF.
 
 `turn` is positive counter-clockwise in ROS, which is a negative NED yaw rate. `turn(180)` reverses heading by turning counter-clockwise, not by taking whichever short path `wrap_pi` would pick. `move_forward` is a body-frame `GoTo` along the current heading. `goto(x, y, z, yaw=None, frame='enu'|'body')` is the general call. In the ENU frame, `yaw` is an absolute ENU heading in radians and is converted to NED (`pi/2 - yaw`). In the body frame it is a relative counter-clockwise angle.
 

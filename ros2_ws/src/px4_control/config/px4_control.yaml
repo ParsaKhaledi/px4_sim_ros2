@@ -33,3 +33,6 @@ px4_control:
     # 0 disables the end-to-end height abort. Set E2E_HEIGHT_TOLERANCE_M to enable it.
     e2e_height_tolerance_m: 0.0
     ground_truth_odom_topic: /ground_truth/odom
+    # Downward distance_sensor versus EKF2 height above ground.
+    lidar_height_tolerance_m: 0.3
+    lidar_height_duration_s: 0.5

@@ -374,3 +374,30 @@ def test_abort_and_land_preempts_takeoff():
     again = executive.abort_and_land(0.25, air, 'again')
     assert again == land_id
     assert executive.poll(land_id).done is False
+
+
+def test_lidar_abort_brakes_to_a_hold_then_lands():
+    executive = MotionExecutive(_limits())
+    ground = _snap(np.zeros(3), landed=True)
+    executive.update(0.0, ground)
+    air = _snap(np.array([0.2, 0.0, -1.5]), velocity=[0.6, 0.0, -0.4])
+    takeoff_id = executive.request_takeoff(0.0, air, 2.0)
+    executive.update(0.05, air)
+    assert executive.phase == Phase.TAKEOFF
+    land_id = executive.abort_brake_hold_land(0.1, air, 'lidar height gap')
+    assert executive.phase == Phase.BRAKE
+    assert executive.poll(takeoff_id).success is False
+    assert executive.poll(takeoff_id).message == 'lidar height gap'
+    state = air
+    time_s = 0.1
+    for _ in range(80):
+        time_s += 0.05
+        setpoint = executive.update(time_s, state)
+        state = Snapshot(setpoint.position.copy(), setpoint.velocity.copy(), setpoint.yaw, setpoint.yaw_rate, False)
+        if executive.phase == Phase.LAND:
+            break
+    assert executive.phase == Phase.LAND
+    landing = executive.update(time_s + 0.05, state)
+    assert float(landing.velocity[2]) >= 0.40
+    assert executive.poll(land_id).done is False
+    assert executive.abort_brake_hold_land(time_s + 0.1, state, 'again') == land_id

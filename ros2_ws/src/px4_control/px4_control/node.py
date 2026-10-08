@@ -24,6 +24,12 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, DurabilityPo
 from std_srvs.srv import Trigger
 
 from px4_control.e2e_height import HeightGuard, height_abort_log
+from px4_control.lidar_height import (
+    DISTANCE_SENSOR_ACTIVE_LOG,
+    LidarHeightGuard,
+    lidar_height_log,
+    tilt_compensated_height,
+)
 from px4_control.arming import (
     ack_failure_text,
     combine_failure,
@@ -61,6 +67,7 @@ from px4_control_interfaces.action import GoTo, Hold, Land, Takeoff
 from px4_control_interfaces.msg import VehicleState
 from px4_control_interfaces.srv import Arm, SetMode
 from px4_msgs.msg import (
+    DistanceSensor,
     EstimatorStatusFlags,
     FailsafeFlags,
     OffboardControlMode,
@@ -154,6 +161,15 @@ class Px4ControlNode(Node):
         self._e2e_disarm_started = False
         tolerance_m = float(self.get_parameter('e2e_height_tolerance_m').value)
         self._height_guard = HeightGuard(tolerance_m) if tolerance_m > 0.0 else None
+        self._lidar_guard = LidarHeightGuard(
+            float(self.get_parameter('lidar_height_tolerance_m').value),
+            float(self.get_parameter('lidar_height_duration_s').value),
+        )
+        self._distance_m: float | None = None
+        self._non_downward_range = False
+        self._lidar_orientation_logged = False
+        self._body_down_cosine = 1.0
+        self._ekf_ground_d: float | None = None
         self._topics = load_px4_topics()
         self._param_report: str | None = None
         self._expected_params = expected_sim_params(
@@ -172,6 +188,7 @@ class Px4ControlNode(Node):
         self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
         self._subscribe_px4(EstimatorStatusFlags, self._topics['estimator_status_flags'], self._on_estimator, qos)
         self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
+        self._subscribe_px4(DistanceSensor, self._topics['distance_sensor'], self._on_distance, qos)
         self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
 
@@ -260,6 +277,8 @@ class Px4ControlNode(Node):
             'goto_timeout_s': 120.0,
             'e2e_height_tolerance_m': float(os.environ.get('E2E_HEIGHT_TOLERANCE_M', '0') or 0),
             'ground_truth_odom_topic': '/ground_truth/odom',
+            'lidar_height_tolerance_m': 0.3,
+            'lidar_height_duration_s': 0.5,
         }
         for name, value in defaults.items():
             if not self.has_parameter(name):
@@ -328,6 +347,23 @@ class Px4ControlNode(Node):
         with self._lock:
             self._landed = bool(msg.landed)
 
+    def _on_distance(self, msg: DistanceSensor) -> None:
+        if int(msg.orientation) != int(DistanceSensor.ROTATION_DOWNWARD_FACING):
+            with self._lock:
+                self._non_downward_range = True
+            return
+        distance = float(msg.current_distance)
+        minimum = float(msg.min_distance)
+        maximum = float(msg.max_distance)
+        if not math.isfinite(distance) or distance < minimum or (maximum > minimum and distance > maximum):
+            return
+        announce = False
+        with self._lock:
+            announce = self._distance_m is None
+            self._distance_m = distance
+        if announce:
+            self.get_logger().info(DISTANCE_SENSOR_ACTIVE_LOG)
+
     def _on_ack(self, msg: VehicleCommandAck) -> None:
         with self._lock:
             self._last_ack = msg
@@ -344,6 +380,9 @@ class Px4ControlNode(Node):
             self._vel = velocity
             self._yaw = yaw_ned_from_rotation(rotation)
             self._yaw_rate = yaw_rate
+            self._body_down_cosine = float(rotation[2, 2])
+            if self._landed:
+                self._ekf_ground_d = float(self._pos[2])
 
     def _on_cmd_vel(self, msg: Twist) -> None:
         with self._lock:
@@ -461,7 +500,8 @@ class Px4ControlNode(Node):
                     self._motion.note_vision_regained()
             setpoint = self._motion.update(now, snap)
             height_log = self._check_e2e_height(now, snap, setpoint)
-            if height_log is not None:
+            lidar_log = self._check_lidar(now, snap)
+            if height_log is not None or lidar_log is not None:
                 setpoint = self._motion.update(now, snap)
             disarm_now = (
                 self._height_land
@@ -474,6 +514,11 @@ class Px4ControlNode(Node):
             phase = self._motion.phase
         if height_log is not None:
             self.get_logger().error(height_log)
+        if lidar_log is not None:
+            if lidar_log.startswith('lidar height abort:'):
+                self.get_logger().error(lidar_log)
+            else:
+                self.get_logger().warning(lidar_log)
         if disarm_now:
             threading.Thread(
                 target=self._do_arm,
@@ -506,6 +551,37 @@ class Px4ControlNode(Node):
         self._height_land = True
         gap = self._height_guard.fault_to_abort_s
         return height_abort_log(reason, 0.0 if gap is None else gap)
+
+    def _ekf_height_above_ground(self) -> float | None:
+        """EKF2 local height above the last landed sample. ``dist_bottom`` is not used."""
+        if self._pos is None:
+            return None
+        down = float(self._pos[2])
+        if self._ekf_ground_d is None:
+            return -down
+        return self._ekf_ground_d - down
+
+    def _check_lidar(self, now: float, snap: Snapshot | None) -> str | None:
+        """Brake, hold, and land when the downward range disagrees with EKF2 height."""
+        if self._distance_m is None:
+            if self._non_downward_range:
+                if self._lidar_orientation_logged:
+                    return None
+                self._lidar_orientation_logged = True
+                return 'distance_sensor is not downward-facing; lidar height guard disabled'
+            return self._lidar_guard.absence(now, False)
+        if not self._armed or snap is None:
+            return None
+        lidar_height = tilt_compensated_height(self._distance_m, self._body_down_cosine)
+        ekf_height = self._ekf_height_above_ground()
+        if lidar_height is None or ekf_height is None:
+            return None
+        reason = self._lidar_guard.observe(now, lidar_height, ekf_height)
+        if reason is None:
+            return None
+        self._motion.abort_brake_hold_land(now, snap, reason)
+        self._height_land = True
+        return lidar_height_log(reason)
 
     def _publish_offboard(self, setpoint) -> None:
         stamp = self._now_us()

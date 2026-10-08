@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 
+from px4_control.camera_type import parse_camera_type
 from px4_control.drone import Drone
 
 
@@ -24,12 +26,18 @@ def run(drone: Drone) -> None:
 
 
 def main() -> None:
+    try:
+        camera = parse_camera_type(sys.argv[1:], os.environ)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        raise SystemExit(2) from exc
     rclpy.init()
     use_sim = os.environ.get('USE_SIM_TIME', 'true').lower() not in ('0', 'false', 'no')
     node = Node(
         'out_and_back',
         parameter_overrides=[Parameter('use_sim_time', Parameter.Type.BOOL, use_sim)],
     )
+    node.get_logger().info(f'out_and_back CameraType={camera}')
     try:
         run(Drone(node))
     finally:

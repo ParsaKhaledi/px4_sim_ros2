@@ -19,6 +19,7 @@ vehicle_command_ack: /fmu/out/vehicle_command_ack
 failsafe_flags: /fmu/out/failsafe_flags
 estimator_status_flags: /fmu/out/estimator_status_flags
 vehicle_land_detected: /fmu/out/vehicle_land_detected
+distance_sensor: /fmu/out/distance_sensor
 vehicle_gps_position: /fmu/out/vehicle_gps_position
 offboard_control_mode: /fmu/in/offboard_control_mode
 trajectory_setpoint: /fmu/in/trajectory_setpoint

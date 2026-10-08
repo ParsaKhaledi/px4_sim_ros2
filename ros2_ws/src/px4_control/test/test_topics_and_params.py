@@ -17,6 +17,7 @@ def test_topic_config_uses_v1_only_where_px4_msgs_does():
     assert topics['failsafe_flags'] == '/fmu/out/failsafe_flags'
     assert topics['estimator_status_flags'] == '/fmu/out/estimator_status_flags'
     assert topics['vehicle_land_detected'] == '/fmu/out/vehicle_land_detected'
+    assert topics['distance_sensor'] == '/fmu/out/distance_sensor'
     assert topics['vehicle_visual_odometry'] == '/fmu/in/vehicle_visual_odometry'
     assert subscription_names(topics['vehicle_status']) == [
         '/fmu/out/vehicle_status_v1',
@@ -34,6 +35,7 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     assert expected['EKF2_RNG_CTRL'] == 1.0
     assert expected['GF_MAX_VER_DIST'] == 3.0
     assert expected['GF_ACTION'] == 5.0
+    assert 'EKF2_EV_POS_Z' not in expected
     assert expected['EKF2_GPS_CTRL'] == 0.0
     assert 'EKF2_GPS_P_NOISE' not in expected
     assert 'EKF2_GPS_V_NOISE' not in expected
