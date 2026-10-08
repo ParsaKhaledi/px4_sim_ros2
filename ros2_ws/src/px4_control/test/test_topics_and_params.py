@@ -1,4 +1,5 @@
 import socket
+import struct
 import threading
 
 from px4_control.mavlink_params import param_request_read, parse_frames, read_params
@@ -51,9 +52,12 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
 
 def test_param_request_round_trip(tmp_path):
     del tmp_path
-    packet = bytes.fromhex(
-        'fe1902ffbe160000304164000700454b46325f45565f4354524c00000000065c84'
-    )
+    # Bytewise INT32 11, the encoding PX4 uses when PARAM_ENCODE_BYTEWISE is set.
+    payload = struct.pack('<fHH', struct.unpack('<f', struct.pack('<i', 11))[0], 100, 7)
+    payload += b'EKF2_EV_CTRL' + bytes(4) + bytes((6,))
+    header = bytes((len(payload), 2, 255, 190, 22))
+    # CRC is not checked by the parser. A v1 frame is enough to lock the layout.
+    packet = bytes((0xFE,)) + header + payload + b'\x00\x00'
     parsed = parse_frames(packet)
     assert parsed[0].name == 'EKF2_EV_CTRL'
     assert parsed[0].value == 11.0

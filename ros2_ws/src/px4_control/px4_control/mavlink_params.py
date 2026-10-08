@@ -82,14 +82,21 @@ class ParamValue:
 
 
 def _parse_param_value(payload: bytes) -> ParamValue | None:
-    if len(payload) < 25:
+    # MAVLink 2 omits trailing zeros. PX4 sets PARAM_ENCODE_BYTEWISE, so an
+    # integer parameter is the int32 bit pattern, not a converted float.
+    if len(payload) < 4:
         return None
-    value, count, index = struct.unpack_from('<fHH', payload, 0)
-    raw = payload[8:24]
-    kind = payload[24]
-    del count, index, kind
-    name = raw.split(b'\x00', 1)[0].decode('ascii', errors='replace')
-    return ParamValue(name, float(value))
+    padded = payload + bytes(max(0, 25 - len(payload)))
+    raw_bits = padded[0:4]
+    kind = padded[24]
+    name = padded[8:24].split(b'\x00', 1)[0].decode('ascii', errors='replace')
+    if not name:
+        return None
+    if kind == _INT32:
+        value = float(struct.unpack('<i', raw_bits)[0])
+    else:
+        value = float(struct.unpack('<f', raw_bits)[0])
+    return ParamValue(name, value)
 
 
 def parse_frames(blob: bytes) -> list[ParamValue]:
