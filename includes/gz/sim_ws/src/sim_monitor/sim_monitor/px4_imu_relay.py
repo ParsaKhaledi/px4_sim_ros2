@@ -71,6 +71,7 @@ def trim_rate_window(stamps_ns: list[int], now_ns: int, window_ns: int = RATE_WI
 
 def main() -> None:
     import rclpy
+    from rclpy.clock import Clock, ClockType
     from rclpy.node import Node
     from rclpy.parameter import Parameter
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -121,7 +122,10 @@ def main() -> None:
             self._have_sample = False
             self._rate_stamps: list[int] = []
             self._last_rate_log_ns = None
-            self.create_timer(1.0, self._discover)
+            # Wall clock. A sim-time timer slows with RTF and stops if /clock stalls.
+            self.create_timer(
+                1.0, self._discover, clock=Clock(clock_type=ClockType.STEADY_TIME),
+            )
             self._discover()
             self.get_logger().info(
                 f"relaying PX4 IMU to /imu (frame_id base_link, stamp {self._mode})"

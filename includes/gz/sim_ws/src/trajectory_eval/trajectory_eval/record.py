@@ -10,6 +10,7 @@ from trajectory_eval.metrics import PoseSample
 
 def record_live(args) -> dict[str, list[PoseSample]]:
     import rclpy
+    from rclpy.clock import Clock, ClockType
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
     from rosidl_runtime_py.utilities import get_message
@@ -29,7 +30,10 @@ def record_live(args) -> dict[str, list[PoseSample]]:
             self.gps_raw: list[tuple[float, float, float, float]] = []
             self._subscribed: set[str] = set()
             self.start_time = None
-            self.create_timer(1.0, self._discover)
+            # Wall clock. A sim-time timer slows with RTF and stops if /clock stalls.
+            self.create_timer(
+                1.0, self._discover, clock=Clock(clock_type=ClockType.STEADY_TIME),
+            )
             self._discover()
 
         def _now(self) -> float:

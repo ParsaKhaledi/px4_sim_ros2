@@ -95,7 +95,8 @@ def test_only_one_imu_publisher_per_mode():
 
 def test_px4_rate_minimum_and_optical_frame():
     assert expected_imu_hz({"IMU_SOURCE": "oak", "IMU_RATE_HZ": "200"}) == 200.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 80.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 25.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 40.0
     assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
     assert "camera_rgb_frame" in default_tf_pairs({"CameraType": "rgbd"})
     assert "stereo_left_camera_frame" in default_tf_pairs({"CameraType": "stereo"})

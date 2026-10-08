@@ -181,6 +181,7 @@ def main() -> None:
     from rclpy.node import Node
     from rclpy.parameter import Parameter
     from rclpy.qos import qos_profile_sensor_data
+    from rclpy.clock import Clock, ClockType
     from rclpy.time import Time
     from rosidl_runtime_py.utilities import get_message
     from std_srvs.srv import Trigger
@@ -230,7 +231,10 @@ def main() -> None:
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
             self.create_service(Trigger, "/sim/preflight_check", self._handle)
-            self.create_timer(1.0, self._discover)
+            # Wall clock. A sim-time timer slows with RTF and stops if /clock stalls.
+            self.create_timer(
+                1.0, self._discover, clock=Clock(clock_type=ClockType.STEADY_TIME),
+            )
             self._discover()
             self.get_logger().info("serving /sim/preflight_check")
 

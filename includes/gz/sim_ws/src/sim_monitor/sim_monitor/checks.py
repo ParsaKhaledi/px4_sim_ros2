@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 
@@ -116,10 +118,10 @@ def _env_float(environ: dict[str, str], name: str) -> float | None:
 
 
 def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> float:
-    """Camera or IMU rate from CAM_RATE_HZ / IMU_RATE_HZ or VISION_PROFILE.
+    """Camera rate from ``CAM_RATE_HZ`` or ``VISION_PROFILE``, or the IMU rate.
 
-    ``full`` is 30 Hz cameras and 200 Hz IMU. ``cpu`` is 10 Hz cameras and
-    100 Hz IMU. With no profile the full rates are used.
+    ``full`` is 30 Hz cameras. ``cpu`` is 10 Hz cameras. With no profile the
+    camera rate is 30 Hz. The IMU rate is :func:`expected_imu_hz`.
     """
     env = os.environ if environ is None else environ
     if kind == "camera":
@@ -131,40 +133,120 @@ def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> floa
         return 30.0
     if kind != "imu":
         raise ValueError(f"unknown sensor kind {kind!r}")
+    return expected_imu_hz(env)
+
+
+def _imu_source(env: dict[str, str]) -> str:
+    raw = env.get("IMU_SOURCE", "oak").strip().lower()
+    return "oak" if raw in {"", "oak"} else raw
+
+
+def _load_geometry():
+    """Import ``geometry`` from the path, or from ``includes/gz/oakd_s2``.
+
+    That file arrives with the vision-profile work. A missing module returns
+    None so this branch still resolves the IMU rate from the model.
+    """
+    try:
+        import geometry
+        return geometry
+    except ImportError:
+        pass
+    oakd = Path(__file__).resolve().parents[4] / "oakd_s2"
+    if not (oakd / "geometry.py").is_file():
+        return None
+    entry = str(oakd)
+    if entry not in sys.path:
+        sys.path.insert(0, entry)
+    try:
+        import geometry
+    except ImportError:
+        return None
+    return geometry
+
+
+def _profile_imu_hz(env: dict[str, str]) -> float | None:
+    """``geometry.profile_from_env().imu_hz`` when that module can be imported."""
+    geometry = _load_geometry()
+    if geometry is None:
+        return None
+    try:
+        profile = geometry.profile_from_env(env)
+    except (TypeError, ValueError):
+        return None
+    imu_hz = getattr(profile, "imu_hz", None)
+    if imu_hz is None:
+        return None
+    return float(imu_hz)
+
+
+_IMU_UPDATE_RATE = re.compile(
+    r"<sensor\b[^>]*\btype=[\"']imu[\"'][^>]*>.*?<update_rate>\s*([0-9.]+)\s*</update_rate>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _oak_model_imu_hz(env: dict[str, str]) -> float | None:
+    """IMU ``update_rate`` from the Oak-D model this stack bridges."""
+    camera = env.get("CameraType", "rgbd").strip().lower()
+    name = "OakD-Lite-stereo" if camera == "stereo" else "OakD-Lite-rgbd"
+    path = Path(__file__).resolve().parents[4] / "models" / name / "model.sdf"
+    if not path.is_file():
+        return None
+    match = _IMU_UPDATE_RATE.search(path.read_text(encoding="utf-8"))
+    if match is None:
+        return None
+    return float(match.group(1))
+
+
+def _resolve_imu_hz(env: dict[str, str]) -> tuple[float, str]:
+    """Expected IMU rate and which rule supplied it.
+
+    Precedence: ``IMU_RATE_HZ``, the vision profile ``imu_hz`` when
+    ``geometry`` imports, the bridged model's SDF ``update_rate``, then
+    50 Hz for oak or 80 Hz for px4.
+    """
     override = _env_float(env, "IMU_RATE_HZ")
     if override is not None:
-        return override
-    if env.get("VISION_PROFILE", "").strip().lower() == "cpu":
-        return 100.0
-    return 200.0
+        return override, "rate"
+    profile = _profile_imu_hz(env)
+    if profile is not None:
+        return profile, "profile"
+    if _imu_source(env) != "px4":
+        model = _oak_model_imu_hz(env)
+        if model is not None:
+            return model, "model"
+        return 50.0, "fallback"
+    return 80.0, "fallback"
 
 
 def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
-    """Oak IMU rate from ``IMU_RATE_HZ`` or ``VISION_PROFILE``.
+    """Expected IMU rate in Hz. The preflight minimum is half of this.
 
-    ``px4`` does not use this. Its preflight minimum is 80 Hz in sim time.
+    A vision-profile rate is the exception: that ``imu_hz`` is the minimum,
+    so a full profile of 200 Hz rejects a 100 Hz sim-time stream.
     """
     env = os.environ if environ is None else environ
-    return expected_sensor_hz("imu", env)
+    return _resolve_imu_hz(env)[0]
 
 
 def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
-    """Preflight minimum.
+    """Preflight minimum. ``PREFLIGHT_MIN_*_HZ`` wins, else half the expected rate.
 
-    An explicit ``PREFLIGHT_MIN_*_HZ`` wins. Otherwise the camera minimum and
-    the oak IMU minimum are half the expected rate. ``IMU_SOURCE=px4`` uses
-    80 Hz in sim time. XRCE copies ``sensor_combined`` at most once per 10 ms,
-    so 100 Hz is a ceiling and ordinary jitter would fail a 100 Hz gate.
+    The vision profile's ``imu_hz`` is used whole. Half of 200 Hz is 100 Hz,
+    and a 100 Hz sim-time IMU must fail that profile. Model and fallback
+    rates are halved, so the oak minimum is never a fixed 50 Hz.
     """
     env = os.environ if environ is None else environ
     name = "PREFLIGHT_MIN_CAMERA_HZ" if kind == "camera" else "PREFLIGHT_MIN_IMU_HZ"
     override = _env_float(env, name)
     if override is not None:
         return override
-    if kind == "imu" and env.get("IMU_SOURCE", "").strip().lower() == "px4":
-        return 80.0
     if kind == "imu":
-        return 0.5 * expected_imu_hz(env)
+        hz, source = _resolve_imu_hz(env)
+        if source == "profile":
+            return hz
+        return 0.5 * hz
     return 0.5 * expected_sensor_hz(kind, env)
 
 
