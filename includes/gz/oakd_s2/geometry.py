@@ -18,6 +18,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from env import env_float as _env_float
+from env import env_int as _env_int
+
 
 # Housing from the OAK-D S2 datasheet: 97 x 29.5 x 22.9 mm, 91 g.
 # https://docs.luxonis.com/hardware/products/OAK-D%20S2
@@ -233,25 +236,6 @@ PROFILES = {
     CPU_PROFILE.name: CPU_PROFILE,
     HW_PROFILE.name: HW_PROFILE,
 }
-
-
-def _env_int(env: dict, name: str, default: int) -> int:
-    """Positive int from ``env``. Empty uses ``default``. ``"320.7"`` becomes 320."""
-    raw = env.get(name)
-    if raw is None or str(raw).strip() == "":
-        return int(default)
-    value = int(float(raw))
-    if value <= 0:
-        raise ValueError(f"{name} must be positive, got {raw}")
-    return value
-
-
-def _env_float(env: dict, name: str, default: float) -> float:
-    """Float from ``env``. Empty or missing uses ``default``."""
-    raw = env.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    return float(raw)
 
 
 def _resolution_text(width: int, height: int) -> str:
