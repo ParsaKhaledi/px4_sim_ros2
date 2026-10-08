@@ -159,6 +159,27 @@ def test_takeoff_climbs_smoothly_and_hold_waits():
     assert (index - start) * 0.05 >= 0.5
 
 
+def test_land_keeps_descending_until_the_detector_says_landed():
+    executive = MotionExecutive(_limits(settle_time=0.1))
+    ground = _snap(np.zeros(3), landed=True)
+    executive.update(0.0, ground)
+    air = _snap(np.array([0.0, 0.0, -2.0]), landed=False)
+    executive.update(0.05, air)
+    land_id = executive.request_land(0.05, air)
+    state = air
+    setpoint = None
+    for index in range(1, 250):
+        setpoint = executive.update(0.05 + index * 0.05, state)
+        assert not executive.poll(land_id).done
+        state = Snapshot(setpoint.position.copy(), np.zeros(3), setpoint.yaw, 0.0, False)
+    assert setpoint is not None
+    assert float(setpoint.position[2]) > 0.2
+    landed = Snapshot(np.array([state.position_ned[0], state.position_ned[1], 0.02]), np.zeros(3), state.yaw_ned, 0.0, True)
+    executive.update(20.0, landed)
+    assert executive.poll(land_id).success
+    assert executive.poll(land_id).message == 'landed'
+
+
 def test_vision_loss_holds_and_does_not_keep_yawing():
     executive = MotionExecutive(_limits())
     snap = _snap(np.array([0.0, 0.0, -2.0]), yaw=0.0)

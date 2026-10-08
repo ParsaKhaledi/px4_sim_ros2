@@ -106,8 +106,12 @@ def prearm_block_reason(status: object | None, flags: object | None) -> str | No
 
 
 def ack_failure_text(result: int | None) -> str | None:
-    """Human-readable command ack, or ``None`` while the command can still succeed."""
-    if result is None or result in (ACK_ACCEPTED, ACK_IN_PROGRESS):
+    """Human-readable command ack, or ``None`` while the command can still succeed.
+
+    ``TEMPORARILY_REJECTED`` is a retry, not a final answer. PX4 uses it
+    when disarm arrives before the land detector has latched.
+    """
+    if result is None or result in (ACK_ACCEPTED, ACK_IN_PROGRESS, ACK_TEMPORARILY_REJECTED):
         return None
     name = _ACK_NAMES.get(int(result), 'UNKNOWN')
     return f'vehicle_command_ack result {int(result)} ({name})'

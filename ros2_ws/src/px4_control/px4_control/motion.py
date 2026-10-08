@@ -228,7 +228,10 @@ class MotionExecutive:
         self._seed_if_needed(snap, time_s)
         assert self._p is not None
         ground = self._ground_d if self._ground_d is not None else float(self._p[2])
-        self._target = np.array([self._p[0], self._p[1], ground], dtype=float)
+        # Half a metre below the recorded ground. A setpoint on the surface
+        # leaves hover thrust applied, so the land detector never sets
+        # landed and disarm is rejected.
+        self._target = np.array([self._p[0], self._p[1], ground + 0.5], dtype=float)
         self._yaw_goal = self._yaw
         self._keep_yaw = True
         self.needs_disarm = False
@@ -414,7 +417,7 @@ class MotionExecutive:
                 cap = min(cap, max(0.0, extra))
         return cap
 
-    def _tick_path(self, time_s: float, dt: float, snap: Snapshot | None, vertical: bool) -> None:
+    def _tick_path(self, time_s: float, dt: float, snap: Snapshot | None, vertical: bool, complete: bool = True) -> None:
         assert self._p is not None
         error_xy = self._target[:2] - self._p[:2]
         direction = error_xy
@@ -430,7 +433,7 @@ class MotionExecutive:
         pos_err = float(np.linalg.norm(snap.position_ned - self._target))
         yaw_err = 0.0 if self._yaw_goal is None else abs(wrap_pi(self._yaw_goal - snap.yaw_ned))
         slow = float(np.linalg.norm(snap.velocity_ned)) < self.limits.speed_eps
-        if self._settle.update(time_s, pos_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow, self.limits.settle_time):
+        if complete and self._settle.update(time_s, pos_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow, self.limits.settle_time):
             self._p = self._target.copy()
             self._finish(True, 'settled')
 
@@ -441,9 +444,9 @@ class MotionExecutive:
             self.needs_disarm = True
             self._finish(True, 'landed')
             return
-        self._tick_path(time_s, dt, snap, vertical=True)
-        if self.phase == Phase.HOLD:
-            self.needs_disarm = True
+        if self._ground_d is not None and self._p is not None:
+            self._target = np.array([float(self._p[0]), float(self._p[1]), self._ground_d + 0.5], dtype=float)
+        self._tick_path(time_s, dt, snap, vertical=True, complete=False)
 
     def _tick_yaw(self, time_s: float, dt: float, snap: Snapshot | None) -> None:
         assert self._p is not None and self._yaw_goal is not None

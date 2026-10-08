@@ -33,6 +33,8 @@ After takeoff the vehicle holds position. It then accepts a `GoTo` goal or `/cmd
 
 `GoTo` and `move_forward` stream a trapezoidal position, velocity, and acceleration. They do not step the position setpoint. `turn` ramps yaw with XY locked. The default yaw rate is 30 deg/s (`max_yaw_rate_deg_s`, env `PX4_MAX_YAW_RATE_DEG_S`). An action succeeds only after the vehicle has stayed inside the settle tolerance (0.20 m, 8 deg) for 0.4 s.
 
+`land` descends to half a metre below the altitude recorded at takeoff, and it does not succeed when the setpoint merely reaches the ground. Success waits for `vehicle_land_detected.landed`. A position hold on the surface keeps hover thrust on, and PX4 then answers disarm with `TEMPORARILY_REJECTED` ("not landed"). That ack is retried until the detector latches or the disarm budget runs out.
+
 Timeouts in `config/px4_control.yaml` are on the node clock. With `use_sim_time` the action waiter allows up to 10× that budget in wall time (at least 120 s, at most 900 s) so a real-time factor around 0.3–0.6 can finish. The `Drone` client timeouts are wall-clock and already generous.
 
 ## Topics, services, actions

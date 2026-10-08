@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from px4_control.arming import prearm_block_reason, sim_preflight_decision
+from px4_control.arming import ACK_TEMPORARILY_REJECTED, ack_failure_text, prearm_block_reason, sim_preflight_decision
 from px4_control.mode_switch import OffboardStreamGate, parse_mode
 from px4_control.params_loader import normalize_estimation_mode
 from px4_control.topics import select_live_topic, topic_candidates
@@ -58,6 +58,11 @@ def test_estimation_mode_names():
     assert normalize_estimation_mode('GPS') == 'gps'
     with pytest.raises(ValueError):
         normalize_estimation_mode('vio')
+
+
+def test_temporary_reject_is_not_a_final_ack():
+    assert ack_failure_text(ACK_TEMPORARILY_REJECTED) is None
+    assert ack_failure_text(2) is not None
 
 
 def test_prearm_reports_the_flag_and_ignores_healthy_vehicles():
