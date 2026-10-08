@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
 """Log RTAB-Map tracking health as JSONL.
 
-Subscribes to ``/rtabmap/info`` (rtabmap_msgs/Info). Each map update is one
-line. Tracking loss is counted from the ``Odometry/Inliers/`` statistic that
-RTAB-Map copies into that message: a run of updates below Vis/MinInliers
-(default 20) is one loss, and the next good update closes it with a duration.
-Loop closures are the message's ``loop_closure_id``.
+Prefers ``/rtabmap/odom_info`` (``rtabmap_msgs/OdomInfo``). Each message is one
+processed frame: ``lost``, ``features``, and ``inliers``. ``/rtabmap/info``
+still supplies loop closures. It is also the tracking fallback until the first
+``odom_info`` arrives, using the ``Odometry/Inliers/`` statistic. After that,
+info stats are not counted again, so the two topics are not mixed into one run.
 
-``--fail-on-loss`` (or VISION_FAIL_ON_LOSS=true) exits 1 if any loss was seen,
-which is what a headless flight check wants. Without the flag the process
-exits 0 after Ctrl-C so it can sit beside a manual run.
+The summary line scores four gates. Thresholds come from the environment
+(``.env`` fills anything unset; the process environment wins):
+
+- ``VISION_MAX_LOST_STREAK`` (default 3): longest run of ``lost`` frames.
+- ``VISION_MAX_RECOVERY_FRAMES`` (default 2): for each lost run, how many
+  frames elapse from that loss until the first frame that is not lost. The
+  metric is the worst run. A run that never reaches a non-lost frame fails
+  even when it is shorter than the cap.
+- ``VISION_MIN_MEDIAN_FEATURES`` (default 500): median of ``features``.
+- ``VISION_MIN_INLIERS`` (default 20): floor on frames that are not lost.
+  Lost frames stay in the inlier distribution, and the streak and recovery
+  gates already cover them.
+
+``--fail-on-loss`` or ``VISION_FAIL_ON_LOSS`` exits 1 when any gate fails.
+Without that, the process exits 0 after Ctrl-C so it can sit beside a manual
+run. The summary is still written either way.
 """
 
 from __future__ import annotations
@@ -18,7 +31,9 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 # RTAB-Map copies odometry registration into /rtabmap/info under this key
@@ -29,6 +44,21 @@ INLIER_KEYS = (
     "Vis/Inliers",
     "Kp/CurrentFrame/inliers",
 )
+
+DEFAULT_MAX_LOST_STREAK = 3
+DEFAULT_MAX_RECOVERY_FRAMES = 2
+DEFAULT_MIN_MEDIAN_FEATURES = 500
+DEFAULT_MIN_INLIERS = 20
+
+METRIC_NAMES = ("lost_streak", "recovery_frames", "median_features", "inliers")
+
+
+@dataclass(frozen=True)
+class VisionThresholds:
+    max_lost_streak: int = DEFAULT_MAX_LOST_STREAK
+    max_recovery_frames: int = DEFAULT_MAX_RECOVERY_FRAMES
+    min_median_features: float = DEFAULT_MIN_MEDIAN_FEATURES
+    min_inliers: float = DEFAULT_MIN_INLIERS
 
 
 def stamp_seconds(stamp) -> float:
@@ -41,6 +71,59 @@ def wall_now() -> str:
 
 def stats_dict(keys, values) -> dict:
     return {str(key): float(value) for key, value in zip(keys, values)}
+
+
+def json_number(value):
+    if value is None:
+        return None
+    number = float(value)
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def load_env_file(path: Path) -> None:
+    """Fill unset variables from a .env file. Existing environment wins."""
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export ") :].strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+def load_repo_env() -> None:
+    candidates = [Path.cwd() / ".env", Path(__file__).resolve().parents[1] / ".env"]
+    for path in candidates:
+        load_env_file(path)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return float(default)
+    return float(raw)
+
+
+def thresholds_from_env() -> VisionThresholds:
+    return VisionThresholds(
+        max_lost_streak=int(_env_float("VISION_MAX_LOST_STREAK", DEFAULT_MAX_LOST_STREAK)),
+        max_recovery_frames=int(_env_float("VISION_MAX_RECOVERY_FRAMES", DEFAULT_MAX_RECOVERY_FRAMES)),
+        min_median_features=_env_float("VISION_MIN_MEDIAN_FEATURES", DEFAULT_MIN_MEDIAN_FEATURES),
+        min_inliers=_env_float("VISION_MIN_INLIERS", DEFAULT_MIN_INLIERS),
+    )
+
+
+def fail_on_loss_enabled(flag: bool) -> bool:
+    if flag:
+        return True
+    return os.environ.get("VISION_FAIL_ON_LOSS", "").lower() in ("1", "true", "yes")
 
 
 def pick_inliers(stats: dict):
@@ -69,19 +152,165 @@ def lost_from_stats(stats: dict, inliers, min_inliers: float):
     return inliers < min_inliers
 
 
+def median(values: list[float]):
+    if not values:
+        return None
+    ordered = sorted(float(value) for value in values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def lost_runs(lost_flags: list[bool]) -> tuple[int, list[int], int]:
+    """Longest lost streak, each closed episode length, and a still-open tail.
+
+    An episode length is the number of consecutive lost frames from the loss
+    until the next frame that is not lost. That next frame ends the episode
+    and is not included in the count.
+    """
+    longest = 0
+    current = 0
+    episodes: list[int] = []
+    for lost in lost_flags:
+        if lost:
+            current += 1
+            longest = max(longest, current)
+        elif current:
+            episodes.append(current)
+            current = 0
+    return longest, episodes, current
+
+
+def score_samples(samples: list[dict], thresholds: VisionThresholds) -> dict:
+    flags = [bool(sample["lost"]) for sample in samples]
+    streak, episodes, open_frames = lost_runs(flags)
+    recovery_value = max(episodes + ([open_frames] if open_frames else [0]))
+    recovery_pass = open_frames == 0 and recovery_value <= thresholds.max_recovery_frames
+
+    feature_values = [sample["features"] for sample in samples if sample["features"] is not None]
+    feature_median = median(feature_values)
+    features_pass = feature_median is not None and feature_median >= thresholds.min_median_features
+
+    inlier_values = [sample["inliers"] for sample in samples if sample["inliers"] is not None]
+    tracked_inliers = [
+        sample["inliers"]
+        for sample in samples
+        if not sample["lost"] and sample["inliers"] is not None
+    ]
+    inlier_median = median(inlier_values)
+    inliers_pass = bool(tracked_inliers) and all(value >= thresholds.min_inliers for value in tracked_inliers)
+    distribution = {
+        "min": json_number(min(inlier_values) if inlier_values else None),
+        "median": json_number(inlier_median),
+        "max": json_number(max(inlier_values) if inlier_values else None),
+        "count": len(inlier_values),
+        "below_threshold": sum(1 for value in inlier_values if value < thresholds.min_inliers),
+    }
+
+    metrics = {
+        "lost_streak": {
+            "value": streak,
+            "threshold": thresholds.max_lost_streak,
+            "pass": streak <= thresholds.max_lost_streak,
+        },
+        "recovery_frames": {
+            "value": recovery_value,
+            "threshold": thresholds.max_recovery_frames,
+            "pass": recovery_pass,
+            "episodes": episodes,
+            "open_frames": open_frames,
+        },
+        "median_features": {
+            "value": json_number(feature_median),
+            "threshold": json_number(thresholds.min_median_features),
+            "pass": features_pass,
+        },
+        "inliers": {
+            "value": distribution,
+            "threshold": json_number(thresholds.min_inliers),
+            "pass": inliers_pass,
+        },
+    }
+    return {
+        "metrics": metrics,
+        "pass": all(metrics[name]["pass"] for name in METRIC_NAMES),
+    }
+
+
 class TrackingLog:
-    def __init__(self, min_inliers: float = 20.0):
-        self.min_inliers = min_inliers
+    def __init__(self, min_inliers: float = DEFAULT_MIN_INLIERS, thresholds: VisionThresholds | None = None):
+        if thresholds is None:
+            thresholds = VisionThresholds(min_inliers=min_inliers)
+        elif min_inliers != DEFAULT_MIN_INLIERS:
+            thresholds = VisionThresholds(
+                max_lost_streak=thresholds.max_lost_streak,
+                max_recovery_frames=thresholds.max_recovery_frames,
+                min_median_features=thresholds.min_median_features,
+                min_inliers=min_inliers,
+            )
+        self.thresholds = thresholds
+        self.min_inliers = float(thresholds.min_inliers)
         self.loss_count = 0
         self.lost = False
         self.loss_started = None
         self.seen_loops = set()
         self.loop_count = 0
         self.last_stamp = None
+        self.odom_info_seen = False
+        self.samples: list[dict] = []
+
+    def observe_odom(self, stamp, wall, lost, features, inliers) -> list:
+        """Record one ``/rtabmap/odom_info`` sample.
+
+        ``lost``, ``features``, and ``inliers`` are the OdomInfo fields.
+        Later ``/rtabmap/info`` stats do not add another tracking sample.
+        """
+        self.odom_info_seen = True
+        return self._record(
+            stamp,
+            wall,
+            bool(lost),
+            None if features is None else float(features),
+            None if inliers is None else float(inliers),
+            0,
+            0,
+            0,
+            "odom_info.inliers" if inliers is not None else None,
+        )
 
     def update(self, stamp, wall, ref_id, loop_closure_id, proximity_id, stats) -> list:
+        if self.odom_info_seen:
+            return self._loop_events(stamp, wall, ref_id, loop_closure_id, proximity_id)
         key, inliers = pick_inliers(stats)
         lost_now = lost_from_stats(stats, inliers, self.min_inliers)
+        return self._record(
+            stamp,
+            wall,
+            lost_now,
+            None,
+            inliers,
+            ref_id,
+            loop_closure_id,
+            proximity_id,
+            key,
+        )
+
+    def _record(
+        self,
+        stamp,
+        wall,
+        lost_now,
+        features,
+        inliers,
+        ref_id,
+        loop_closure_id,
+        proximity_id,
+        inliers_key,
+    ) -> list:
+        self.samples.append(
+            {"lost": bool(lost_now), "features": features, "inliers": None if inliers is None else float(inliers)}
+        )
         self.last_stamp = stamp
         events = [
             {
@@ -90,7 +319,7 @@ class TrackingLog:
                 "event": "frame",
                 "ref_id": ref_id,
                 "inliers": inliers,
-                "inliers_key": key,
+                "inliers_key": inliers_key,
                 "loop_closure_id": int(loop_closure_id),
                 "proximity_detection_id": int(proximity_id),
                 "tracking": "lost" if lost_now else "ok",
@@ -111,20 +340,24 @@ class TrackingLog:
             )
         elif not lost_now and self.lost:
             events.append(self._loss_end(stamp, wall, open_ended=False))
-        if loop_closure_id and (ref_id, int(loop_closure_id)) not in self.seen_loops:
-            self.seen_loops.add((ref_id, int(loop_closure_id)))
-            self.loop_count += 1
-            events.append(
-                {
-                    "stamp": stamp,
-                    "wall_time": wall,
-                    "event": "loop_closure",
-                    "loop_closure_id": int(loop_closure_id),
-                    "ref_id": ref_id,
-                    "loop_count": self.loop_count,
-                }
-            )
+        events.extend(self._loop_events(stamp, wall, ref_id, loop_closure_id, proximity_id))
         return events
+
+    def _loop_events(self, stamp, wall, ref_id, loop_closure_id, proximity_id) -> list:
+        if not loop_closure_id or (ref_id, int(loop_closure_id)) in self.seen_loops:
+            return []
+        self.seen_loops.add((ref_id, int(loop_closure_id)))
+        self.loop_count += 1
+        return [
+            {
+                "stamp": stamp,
+                "wall_time": wall,
+                "event": "loop_closure",
+                "loop_closure_id": int(loop_closure_id),
+                "ref_id": ref_id,
+                "loop_count": self.loop_count,
+            }
+        ]
 
     def _loss_end(self, stamp, wall, open_ended: bool) -> dict:
         duration = None if self.loss_started is None else float(stamp) - float(self.loss_started)
@@ -146,6 +379,7 @@ class TrackingLog:
         return [self._loss_end(stamp, wall, open_ended=True)]
 
     def summary(self, wall) -> dict:
+        scored = score_samples(self.samples, self.thresholds)
         return {
             "stamp": self.last_stamp,
             "wall_time": wall,
@@ -153,6 +387,8 @@ class TrackingLog:
             "loss_count": self.loss_count,
             "loop_count": self.loop_count,
             "tracking": "lost" if self.lost else "ok",
+            "metrics": scored["metrics"],
+            "pass": scored["pass"],
         }
 
 
@@ -162,27 +398,52 @@ def write_jsonl(handle, event: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Log /rtabmap/info tracking health as JSONL.")
+    load_repo_env()
+    parser = argparse.ArgumentParser(description="Log RTAB-Map odometry health as JSONL.")
     parser.add_argument("--output", default="rtabmap_health.jsonl")
-    parser.add_argument("--min-inliers", type=float, default=float(os.environ.get("VISION_MIN_INLIERS", "20")))
+    parser.add_argument(
+        "--min-inliers",
+        type=float,
+        default=None,
+        help="Override VISION_MIN_INLIERS. Tracked frames below this fail the inlier gate.",
+    )
     parser.add_argument("--fail-on-loss", action="store_true")
     args = parser.parse_args(argv)
-    fail_on_loss = args.fail_on_loss or os.environ.get("VISION_FAIL_ON_LOSS", "").lower() in ("1", "true", "yes")
+    thresholds = thresholds_from_env()
+    if args.min_inliers is not None:
+        thresholds = VisionThresholds(
+            max_lost_streak=thresholds.max_lost_streak,
+            max_recovery_frames=thresholds.max_recovery_frames,
+            min_median_features=thresholds.min_median_features,
+            min_inliers=args.min_inliers,
+        )
+    fail = fail_on_loss_enabled(args.fail_on_loss)
 
     import rclpy
     from rclpy.node import Node
     from rclpy.parameter import Parameter
-    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-    from rtabmap_msgs.msg import Info
+    from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+    from rtabmap_msgs.msg import Info, OdomInfo
 
     rclpy.init()
     node = Node(
         "rtabmap_health_log",
         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
     )
-    tracker = TrackingLog(args.min_inliers)
-    qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
+    tracker = TrackingLog(thresholds=thresholds)
+    info_qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
     output = open(args.output, "a", encoding="utf-8")
+
+    def on_odom(msg: OdomInfo) -> None:
+        events = tracker.observe_odom(
+            stamp_seconds(msg.header.stamp),
+            wall_now(),
+            bool(msg.lost),
+            int(msg.features),
+            int(msg.inliers),
+        )
+        for event in events:
+            write_jsonl(output, event)
 
     def on_info(msg: Info) -> None:
         stats = stats_dict(msg.stats_keys, msg.stats_values)
@@ -197,8 +458,11 @@ def main(argv: list[str] | None = None) -> int:
         for event in events:
             write_jsonl(output, event)
 
-    node.create_subscription(Info, "/rtabmap/info", on_info, qos)
-    node.get_logger().info(f"logging /rtabmap/info to {args.output}")
+    # qos:=2 on the launch is best effort. A reliable subscriber would miss it.
+    node.create_subscription(OdomInfo, "/rtabmap/odom_info", on_odom, qos_profile_sensor_data)
+    node.create_subscription(Info, "/rtabmap/info", on_info, info_qos)
+    node.get_logger().info(f"logging /rtabmap/odom_info and /rtabmap/info to {args.output}")
+    summary = None
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -206,12 +470,13 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         for event in tracker.finish(wall_now()):
             write_jsonl(output, event)
-        write_jsonl(output, tracker.summary(wall_now()))
+        summary = tracker.summary(wall_now())
+        write_jsonl(output, summary)
         output.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
-    if fail_on_loss and tracker.loss_count:
+    if fail and summary is not None and not summary["pass"]:
         return 1
     return 0
 

@@ -163,7 +163,7 @@ Stereo RTAB-Map reads `/camera/stereo/right/camera_info_baseline`. Both cameras 
 Frame-by-frame explanation, including what used to disagree: [docs/frames.md](docs/frames.md). Generator details: [includes/gz/oakd_s2/README.md](includes/gz/oakd_s2/README.md).
 
 ```bash
-# Tracking loss, inliers, and loop closures as JSONL. --fail-on-loss exits 1 after a loss.
+# Odometry gates as JSONL. --fail-on-loss exits 1 when a VISION_* threshold is breached.
 python3 HealthCheck/rtabmap_health_log.py --output /tmp/rtabmap_health.jsonl
 
 # Topics, baseline Tx, IMU, and TF. Needs a running stack. Not run in CI yet.
@@ -174,6 +174,8 @@ python3 scripts/eval_slam_accuracy.py ground_truth.tum rtabmap.tum
 ```
 
 `SLAM_APE_RMS_MAX` and `SLAM_DRIFT_PER_M_MAX` are the gates for that last script. The checked-in defaults are starting values, not a number measured on a flight.
+
+`VISION_MAX_LOST_STREAK`, `VISION_MAX_RECOVERY_FRAMES`, `VISION_MIN_MEDIAN_FEATURES`, and `VISION_MIN_INLIERS` are the gates for the health log. It reads them from `.env` and writes each metric with its threshold and pass/fail on the summary line.
 
 ## Health checks
 

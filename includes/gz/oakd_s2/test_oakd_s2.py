@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import os
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,8 @@ import render_oakd as render  # noqa: E402
 def load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
+    # dataclasses resolve the class module through sys.modules during exec.
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -365,6 +368,187 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertIn("--Vis/DepthAsMask true", rgbd)
         self.assertIn("wait_imu_to_init:=true", rgbd)
         self.assertNotIn("--Grid/3D", rgbd)
+
+    def _feed_odom(self, log, rows):
+        """rows are synthetic OdomInfo samples: (lost, features, inliers)."""
+        for index, (lost, features, inliers) in enumerate(rows):
+            log.observe_odom(float(index), f"t{index}", lost, features, inliers)
+
+    def _without_vision_env(self):
+        keys = (
+            "VISION_MAX_LOST_STREAK",
+            "VISION_MAX_RECOVERY_FRAMES",
+            "VISION_MIN_MEDIAN_FEATURES",
+            "VISION_MIN_INLIERS",
+        )
+        return {key: os.environ.get(key) for key in keys}
+
+    def _restore_env(self, saved):
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_env_files_define_vision_gates(self):
+        for name in (".env", ".env.example"):
+            text = (REPO / name).read_text(encoding="utf-8")
+            self.assertIn("VISION_MAX_LOST_STREAK=3", text)
+            self.assertIn("VISION_MAX_RECOVERY_FRAMES=2", text)
+            self.assertIn("VISION_MIN_MEDIAN_FEATURES=500", text)
+            self.assertIn("VISION_MIN_INLIERS=20", text)
+
+    def test_thresholds_from_env_and_file(self):
+        saved = self._without_vision_env()
+        try:
+            for key in saved:
+                os.environ.pop(key, None)
+            got = HEALTH.thresholds_from_env()
+            self.assertEqual(got.max_lost_streak, 3)
+            self.assertEqual(got.max_recovery_frames, 2)
+            self.assertEqual(got.min_median_features, 500)
+            self.assertEqual(got.min_inliers, 20)
+            HEALTH.load_repo_env()
+            filled = HEALTH.thresholds_from_env()
+            self.assertEqual(filled.max_lost_streak, 3)
+            self.assertEqual(filled.min_inliers, 20)
+            os.environ["VISION_MAX_LOST_STREAK"] = "9"
+            os.environ["VISION_MAX_RECOVERY_FRAMES"] = "1"
+            os.environ["VISION_MIN_MEDIAN_FEATURES"] = "100"
+            os.environ["VISION_MIN_INLIERS"] = "15"
+            HEALTH.load_repo_env()
+            override = HEALTH.thresholds_from_env()
+            self.assertEqual(override.max_lost_streak, 9)
+            self.assertEqual(override.max_recovery_frames, 1)
+            self.assertEqual(override.min_median_features, 100)
+            self.assertEqual(override.min_inliers, 15)
+        finally:
+            self._restore_env(saved)
+
+    def test_odom_info_sequence_within_gates(self):
+        log = HEALTH.TrackingLog()
+        # One lost frame, then tracking returns on the next frame.
+        rows = [(False, 800, 50)] * 4 + [(True, 12, 0), (False, 700, 40)]
+        self._feed_odom(log, rows)
+        summary = log.summary("end")
+        self.assertEqual(summary["metrics"]["lost_streak"]["value"], 1)
+        self.assertEqual(summary["metrics"]["lost_streak"]["threshold"], 3)
+        self.assertTrue(summary["metrics"]["lost_streak"]["pass"])
+        self.assertEqual(summary["metrics"]["recovery_frames"]["value"], 1)
+        self.assertEqual(summary["metrics"]["recovery_frames"]["episodes"], [1])
+        self.assertEqual(summary["metrics"]["recovery_frames"]["open_frames"], 0)
+        self.assertTrue(summary["metrics"]["recovery_frames"]["pass"])
+        self.assertGreaterEqual(summary["metrics"]["median_features"]["value"], 500)
+        self.assertTrue(summary["metrics"]["median_features"]["pass"])
+        self.assertTrue(summary["metrics"]["inliers"]["pass"])
+        self.assertEqual(summary["metrics"]["inliers"]["value"]["min"], 0)
+        self.assertGreaterEqual(summary["metrics"]["inliers"]["value"]["below_threshold"], 1)
+        self.assertTrue(summary["pass"])
+        for name in HEALTH.METRIC_NAMES:
+            metric = summary["metrics"][name]
+            self.assertIn("value", metric)
+            self.assertIn("threshold", metric)
+            self.assertIsInstance(metric["pass"], bool)
+
+    def test_two_recoveries_use_the_worst_episode(self):
+        log = HEALTH.TrackingLog()
+        rows = [
+            (False, 600, 30),
+            (True, 4, 0),
+            (False, 600, 30),
+            (True, 4, 0),
+            (True, 4, 0),
+            (False, 600, 30),
+        ]
+        self._feed_odom(log, rows)
+        recovery = log.summary("end")["metrics"]["recovery_frames"]
+        self.assertEqual(recovery["episodes"], [1, 2])
+        self.assertEqual(recovery["value"], 2)
+        self.assertTrue(recovery["pass"])
+
+    def test_three_lost_frames_fail_recovery_and_keep_the_streak(self):
+        log = HEALTH.TrackingLog()
+        rows = [(False, 600, 30), (True, 5, 0), (True, 5, 0), (True, 5, 0), (False, 600, 30)]
+        self._feed_odom(log, rows)
+        summary = log.summary("end")
+        self.assertEqual(summary["metrics"]["lost_streak"]["value"], 3)
+        self.assertTrue(summary["metrics"]["lost_streak"]["pass"])
+        self.assertEqual(summary["metrics"]["recovery_frames"]["value"], 3)
+        self.assertFalse(summary["metrics"]["recovery_frames"]["pass"])
+        self.assertFalse(summary["pass"])
+
+    def test_four_lost_frames_fail_the_streak(self):
+        log = HEALTH.TrackingLog()
+        rows = [(False, 600, 30)] + [(True, 5, 0)] * 4 + [(False, 600, 30)]
+        self._feed_odom(log, rows)
+        summary = log.summary("end")
+        self.assertEqual(summary["metrics"]["lost_streak"]["value"], 4)
+        self.assertFalse(summary["metrics"]["lost_streak"]["pass"])
+        self.assertFalse(summary["pass"])
+
+    def test_open_loss_fails_recovery_after_finish(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 600, 30), (True, 5, 0)])
+        end = log.finish("end")
+        self.assertEqual(end[0]["event"], "tracking_lost_end")
+        self.assertTrue(end[0]["open"])
+        recovery = log.summary("end")["metrics"]["recovery_frames"]
+        self.assertEqual(recovery["open_frames"], 1)
+        self.assertFalse(recovery["pass"])
+        self.assertFalse(log.summary("end")["pass"])
+
+    def test_low_median_features_fail(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 400, 40), (False, 420, 40)])
+        features = log.summary("end")["metrics"]["median_features"]
+        self.assertEqual(features["value"], 410)
+        self.assertEqual(features["threshold"], 500)
+        self.assertFalse(features["pass"])
+        self.assertTrue(log.summary("end")["metrics"]["inliers"]["pass"])
+
+    def test_even_feature_count_median_meets_the_floor(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 400, 40), (False, 600, 40)])
+        features = log.summary("end")["metrics"]["median_features"]
+        self.assertEqual(features["value"], 500)
+        self.assertTrue(features["pass"])
+
+    def test_tracked_frame_below_inlier_floor_fails(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 600, 10), (False, 600, 40)])
+        inliers = log.summary("end")["metrics"]["inliers"]
+        self.assertFalse(inliers["pass"])
+        self.assertEqual(inliers["threshold"], 20)
+        self.assertFalse(log.summary("end")["pass"])
+
+    def test_lost_frame_inliers_do_not_fail_the_inlier_gate(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 600, 40), (True, 1, 0), (False, 600, 40)])
+        summary = log.summary("end")
+        self.assertTrue(summary["metrics"]["inliers"]["pass"])
+        self.assertEqual(summary["metrics"]["inliers"]["value"]["min"], 0)
+        self.assertEqual(summary["metrics"]["inliers"]["value"]["below_threshold"], 1)
+        self.assertTrue(summary["pass"])
+
+    def test_empty_log_fails_features_and_inliers(self):
+        summary = HEALTH.TrackingLog().summary("end")
+        self.assertFalse(summary["metrics"]["median_features"]["pass"])
+        self.assertIsNone(summary["metrics"]["median_features"]["value"])
+        self.assertFalse(summary["metrics"]["inliers"]["pass"])
+        self.assertFalse(summary["pass"])
+
+    def test_odom_info_is_preferred_over_later_info_stats(self):
+        log = HEALTH.TrackingLog()
+        self._feed_odom(log, [(False, 600, 40)] * 3)
+        events = log.update(10.0, "wall", 9, 4, 0, {"Odometry/Inliers/": 1.0})
+        self.assertEqual([event["event"] for event in events], ["loop_closure"])
+        self.assertEqual(log.loss_count, 0)
+        self.assertEqual(log.loop_count, 1)
+        summary = log.summary("end")
+        self.assertEqual(summary["metrics"]["lost_streak"]["value"], 0)
+        self.assertTrue(summary["pass"])
+        log.update(11.0, "wall", 9, 4, 0, {"Odometry/Inliers/": 1.0})
+        self.assertEqual(log.loop_count, 1)
 
 
 if __name__ == "__main__":

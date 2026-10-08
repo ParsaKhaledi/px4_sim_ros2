@@ -32,7 +32,7 @@ node. The scripts now pass `rtabmap_viz:=${RTABMAPVIZ}`.
 | `Vis/FeatureType` | `10` | ORB-OCTREE for odometry features. Same code as `Kp/DetectorStrategy` 10, which is the loop-closure detector. |
 | `Kp/DetectorStrategy` | `10` | ORB-OCTREE for the vocabulary. Needs a build with the ORB octree; without it RTAB-Map will not extract those features. |
 | `Vis/MaxFeatures` | `1000` | Cap on features per frame. This is the default. The old `--MaxFeatures` was not this key. |
-| `Vis/MinInliers` | `20` | Accept a motion only with at least this many matches. Default. The health log uses the same number. |
+| `Vis/MinInliers` | `20` | Accept a motion only with at least this many matches. Default. `VISION_MIN_INLIERS` is the same floor for frames that are not lost. |
 | `Grid/MapFrameProjection` | `true` | Project the occupancy cloud in the map frame. |
 | `Grid/NormalsSegmentation` | `false` | Do not label ground from point normals. The grid then uses the height passthrough (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`). **Nav2's costmap is built from this grid, so this changes which cells are ground.** The old `--NormalsSegmentation` was ignored, so the default (`true`) was what actually ran. |
 | `Grid/MaxGroundHeight` | stereo `1.0`, RGB-D `0.5` | Metres. Used because normals segmentation is off. The description says to set this in that case. |
@@ -91,17 +91,27 @@ The 7.5 cm baseline is unchanged. The left topic is still Gazebo's
 ## Checking a run
 
 Odometry health is `/rtabmap/odom_info` (`rtabmap_msgs/msg/OdomInfo`; the
-launch file's default namespace is `rtabmap`). A flight is in good shape when:
+launch file's default namespace is `rtabmap`). `HealthCheck/rtabmap_health_log.py`
+subscribes to that topic and scores the run from `.env`. The defaults are:
 
-- `lost` is not true for more than 3 frames in a row
-- after a loss, `lost` is false again within 2 frames (`Odom/ResetCountdown 1` is what makes that possible)
-- the median of `features` is at least 500
-- `inliers` stays at least 20 (`Vis/MinInliers`)
+- `VISION_MAX_LOST_STREAK=3`: `lost` is not true for more than this many frames in a row
+- `VISION_MAX_RECOVERY_FRAMES=2`: after each loss, the first frame with `lost` false arrives within this many frames (`Odom/ResetCountdown 1` is what makes that possible). A loss that is still open at the end of the log fails this gate.
+- `VISION_MIN_MEDIAN_FEATURES=500`: median of `features`
+- `VISION_MIN_INLIERS=20`: `inliers` on frames that are not lost (`Vis/MinInliers`). Lost frames are in the distribution, and the streak and recovery gates cover them.
+
+The last JSONL line is `event=summary`. Each of those four metrics has `value`,
+`threshold`, and `pass`, and the line has an overall `pass`. `--fail-on-loss`
+or `VISION_FAIL_ON_LOSS` exits 1 when `pass` is false. Change the numbers in
+`.env` to retune CI without editing the script.
+
+Until the first `odom_info`, tracking falls back to `/rtabmap/info` inlier
+stats. Loop closures still come from `/rtabmap/info`.
 
 ```bash
 ros2 topic echo /rtabmap/odom_info --field lost
 ros2 topic echo /rtabmap/odom_info --field inliers
 ros2 topic echo /rtabmap/odom_info --field features
+python3 HealthCheck/rtabmap_health_log.py --fail-on-loss --output /tmp/rtabmap_health.jsonl
 ```
 
 The same keys are declared on the nodes when the installed `rtabmap_ros`
