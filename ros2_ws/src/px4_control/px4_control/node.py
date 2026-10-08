@@ -470,8 +470,9 @@ class Px4ControlNode(Node):
         state.header.stamp = self.get_clock().now().to_msg()
         state.header.frame_id = 'odom'
         state.arming_state = 0 if self._status is None else int(self._status.arming_state)
-        state.nav_state = int(self._nav_state)
-        state.nav_state_name = NAV_NAMES.get(self._nav_state, str(self._nav_state))
+        nav_state = self._nav_state if self._nav_state >= 0 else 0
+        state.nav_state = int(nav_state)
+        state.nav_state_name = NAV_NAMES.get(self._nav_state, str(nav_state))
         state.armed = self._armed
         state.offboard = self._nav_state == int(VehicleStatus.NAVIGATION_STATE_OFFBOARD)
         state.pre_flight_checks_pass = False if self._status is None else bool(self._status.pre_flight_checks_pass)
