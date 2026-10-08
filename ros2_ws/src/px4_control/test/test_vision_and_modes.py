@@ -147,11 +147,16 @@ def test_prearm_names_a_missing_or_failed_magnetometer():
     assert gps_missing is not None
     assert 'Magnetometer missing' in gps_missing
     assert 'SYS_HAS_MAG' in gps_missing
-    vision_missing = prearm_block_reason(Status(), Flags(), Estimator(), 'vision')
-    assert vision_missing is not None
-    assert 'Magnetometer missing' in vision_missing
-    assert 'SYS_HAS_MAG' in vision_missing
-    assert 'both modes' in vision_missing
+    vision_waiting = prearm_block_reason(Status(), Flags(), Estimator(), 'vision')
+    assert vision_waiting is not None
+    assert 'waiting for vision yaw' in vision_waiting
+    assert '/fmu/in/vehicle_visual_odometry' in vision_waiting
+    assert 'Magnetometer missing' not in vision_waiting
+    vision_fault = Estimator()
+    vision_fault.cs_mag_fault = True
+    vision_failed = prearm_block_reason(Status(), Flags(), vision_fault, 'vision')
+    assert vision_failed is not None
+    assert 'Magnetometer failed' in vision_failed
 
     aligned = Estimator()
     aligned.cs_yaw_align = True

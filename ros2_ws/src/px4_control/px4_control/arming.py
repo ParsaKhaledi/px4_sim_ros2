@@ -114,20 +114,25 @@ def _magnetometer_arming_text(
     yaw_aligned = bool(getattr(estimator, 'cs_yaw_align', False))
     if fused or yaw_from_vision or yaw_aligned:
         return None
-    text = (
+    # EKF2_MAG_TYPE 5 never sets cs_mag*. Clear mag flags with no vision yaw
+    # mean external vision has not been fused yet, not that the compass is gone.
+    if (estimation_mode or '').strip().lower() == 'vision':
+        return (
+            'Arming is waiting for vision yaw. No external vision has been '
+            'fused yet (cs_yaw_align and cs_ev_yaw are clear). Check '
+            '/fmu/in/vehicle_visual_odometry rate and age. Clear magnetometer '
+            'fusion flags are expected while EKF2_MAG_TYPE is 5. A missing or '
+            'failed compass is reported from cs_mag_fault or from the '
+            "commander's own health text (Compass Sensor missing, No valid "
+            'data from Compass, or Found 0 compass).'
+        )
+    return (
         'Magnetometer missing. No compass fusion is active and yaw is not '
         'aligned. PX4 denies arming when the world has no magnetometer plugin '
         '(Preflight Fail: Compass Sensor missing, No valid data from Compass, '
-        'or Found 0 compass).'
+        'or Found 0 compass). SYS_HAS_MAG stays at its firmware default of 1, '
+        'so the commander still requires a compass.'
     )
-    # Both modes leave SYS_HAS_MAG at 1. estimation_mode does not change that.
-    _ = estimation_mode
-    text += (
-        ' SYS_HAS_MAG stays at its firmware default of 1 in both modes, so '
-        'the commander still requires a compass. Vision mode only stops '
-        'EKF2 from fusing it.'
-    )
-    return text
 
 
 def prearm_block_reason(
