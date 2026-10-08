@@ -163,7 +163,7 @@ def box_inertia(
     return ixx, iyy, izz
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class HousingSpec:
     """Datasheet mass, solid-box inertia, and housing size in metres."""
 

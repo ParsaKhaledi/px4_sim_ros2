@@ -75,28 +75,30 @@ def camera_overrides(profile_name: str, camera: str) -> tuple[list[tuple[str, st
     name = str(profile_name).strip().lower()
     if name not in geo.PROFILES:
         raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {profile_name}")
-    if camera == "stereo":
-        slam = [("Grid/MaxGroundHeight", "1.0"), ("Grid/MaxObstacleHeight", "2.0")]
-        if name == "cpu":
-            slam.append(("Stereo/MaxDisparity", "64"))
-        return slam, []
-    if camera == "rgbd":
-        return (
-            [("Grid/MaxGroundHeight", "0.5"), ("Grid/MaxObstacleHeight", "2.2")],
-            [("Vis/DepthAsMask", "true")],
-        )
-    if camera == "rgbd-wrapper":
-        return (
-            [
-                ("Grid/MaxGroundHeight", "0.5"),
-                ("Grid/MaxObstacleHeight", "2.2"),
-                ("Grid/RayTracing", "true"),
-                ("Grid/3D", "true"),
-                ("Grid/FlatObstacleDetected", "true"),
-            ],
-            [("Vis/DepthAsMask", "true")],
-        )
-    raise ValueError(f"camera must be stereo, rgbd, or rgbd-wrapper, got {camera}")
+    match camera:
+        case "stereo":
+            slam = [("Grid/MaxGroundHeight", "1.0"), ("Grid/MaxObstacleHeight", "2.0")]
+            if name == "cpu":
+                slam.append(("Stereo/MaxDisparity", "64"))
+            return slam, []
+        case "rgbd":
+            return (
+                [("Grid/MaxGroundHeight", "0.5"), ("Grid/MaxObstacleHeight", "2.2")],
+                [("Vis/DepthAsMask", "true")],
+            )
+        case "rgbd-wrapper":
+            return (
+                [
+                    ("Grid/MaxGroundHeight", "0.5"),
+                    ("Grid/MaxObstacleHeight", "2.2"),
+                    ("Grid/RayTracing", "true"),
+                    ("Grid/3D", "true"),
+                    ("Grid/FlatObstacleDetected", "true"),
+                ],
+                [("Vis/DepthAsMask", "true")],
+            )
+        case _:
+            raise ValueError(f"camera must be stereo, rgbd, or rgbd-wrapper, got {camera}")
 
 
 def effective_parameters(profile_name: str, camera: str) -> dict[str, str]:

@@ -80,7 +80,7 @@ def _lens(intrinsics: Intrinsics, tx: float) -> str:
         </lens>"""
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class SensorSpec:
     """One Gazebo camera, without the profile-sized intrinsics.
 
@@ -336,8 +336,13 @@ def render_sdf(
     profile: VisionProfile | None = None,
 ) -> str:
     """Stereo or RGB-D SDF. An omitted profile is ``FULL_PROFILE``."""
-    if variant not in ("stereo", "rgbd"):
-        raise ValueError(variant)
+    match variant:
+        case "stereo":
+            sensor_block = _stereo_sensors
+        case "rgbd":
+            sensor_block = _rgbd_sensors
+        case _:
+            raise ValueError(variant)
     mount = mount or Mount()
     # Callers that omit the profile get FULL_PROFILE so the checked-in model
     # stays 1280x800. Container start passes profile_from_env(). An unset
@@ -345,10 +350,7 @@ def render_sdf(
     profile = FULL_PROFILE if profile is None else profile
     layouts = sensor_layouts()
     inertial, visual, header = _housing(mount)
-    if variant == "stereo":
-        sensors = _stereo_sensors(layouts, profile)
-    else:
-        sensors = _rgbd_sensors(layouts, profile)
+    sensors = sensor_block(layouts, profile)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!-- {header} -->
 <sdf version="1.9">

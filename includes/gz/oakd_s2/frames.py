@@ -32,7 +32,7 @@ Vec3 = tuple[float, float, float]
 Mat3 = tuple[Vec3, Vec3, Vec3]
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class Mount:
     """Pose of the camera link on the drone body, in FLU metres and degrees.
 

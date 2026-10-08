@@ -34,7 +34,7 @@ from hardware import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class VisionProfile:
     """Image size and sensor rate for one ``VISION_PROFILE``.
 
