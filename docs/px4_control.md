@@ -129,7 +129,7 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 |-----------|-------|---------|
 | `EKF2_EV_CTRL` | 11 | horizontal position, vertical position, yaw. Not velocity |
 | `EKF2_MAG_TYPE` | 5 | None. Magnetometer fusion is off |
-| `SYS_HAS_MAG` | 0 | commander does not require a compass |
+| `SYS_HAS_MAG` | 1 | firmware default, not exported. The compass stays required |
 | `EKF2_HGT_REF` | 3 | height from vision |
 | `EKF2_EV_DELAY` | 50 | ms, from `EKF2_EV_DELAY` if set. Read at EKF start |
 | `EKF2_EV_NOISE_MD` | 0 | use the variances on the message |
@@ -143,7 +143,7 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 
 Vision mode disables magnetometer fusion (`EKF2_MAG_TYPE` 5, None in `src/modules/ekf2/EKF/common.h`). Yaw comes from external vision (`EKF2_EV_CTRL` bit 3), and an indoor magnetometer would fight that heading. The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe does the same. GPS mode leaves `EKF2_MAG_TYPE` at the firmware default 0 (Automatic) and does not export it.
 
-`EKF2_MAG_TYPE` only stops EKF2 from fusing the magnetometer. The commander's compass presence check is separate: `HealthAndArmingChecks/checks/magnetometerCheck.cpp` returns immediately when `SYS_HAS_MAG` is 0, and otherwise fails prearm with `Compass Sensor 0 missing` or `Found 0 compass` when the world has no magnetometer plugin. The firmware default is 1 (`system_params.c`). Vision mode sets `SYS_HAS_MAG` to 0 so that check is removed. `4001_gz_x500` and `4002_gz_x500_depth` do not set `SYS_HAS_MAG`. `rcS` applies `PX4_PARAM_SYS_HAS_MAG=0` with `param set` before the airframe, and 0 is not the firmware default, so a later `param set-default` does not put 1 back. On a real vehicle with a working compass, both parameters can stay at their defaults when vision yaw and the magnetometer agree. Indoors, the vision profile values are the ones to use. GPS mode does not export `SYS_HAS_MAG`, so it stays 1.
+`EKF2_MAG_TYPE` stops EKF2 from fusing the magnetometer. It does not remove the sensor. `SYS_HAS_MAG` stays at the firmware default of 1 in both modes (`system_params.c`), and neither profile exports it, so the commander's compass presence check still runs (`magnetometerCheck.cpp`). The x500 keeps its magnetometer. Vision yaw comes from external vision (`EKF2_EV_CTRL` bit 3), so the vision profile sets `EKF2_MAG_TYPE` to 5 and the compass is present but not fused. GPS mode leaves `EKF2_MAG_TYPE` at 0 (Automatic).
 
 The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe uses 11. RTAB-Map's twist is body velocity with a covariance that is often too small or not a real velocity uncertainty, so fusing it pulls the EKF off the pose. Velocity fusion stays off unless `EKF2_EV_CTRL=15` is set in the environment before the params installer runs. The bridge still fills the velocity fields; EKF2 ignores them while bit 2 is clear.
 
@@ -162,7 +162,7 @@ Use the value that leaves the innovation near zero and uncorrelated with acceler
 
 ### gps
 
-Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. Magnetometer fusion stays at the firmware default `EKF2_MAG_TYPE` 0 (Automatic), and `SYS_HAS_MAG` stays at 1. This profile exports neither. `UXRCE_DDS_SYNCT 0` still applies.
+Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. Magnetometer fusion stays at the firmware default `EKF2_MAG_TYPE` 0 (Automatic). `SYS_HAS_MAG` stays at 1 in this mode as well. This profile exports neither. `UXRCE_DDS_SYNCT 0` still applies.
 
 ## Environment
 
@@ -183,7 +183,7 @@ These are read by the params installer and `gz_start_px4_control.sh`. They are n
 
 PX4 must then report `pre_flight_checks_pass` and not be in failsafe. Informational bits such as `manual_control_signal_lost` do not block arming on their own. When the checks fail, the response lists the true `FailsafeFlags` boolean names plus `pre_flight_checks_pass is false`. If `gcs_connection_lost` is one of those bits, the text says arming is blocked because `NAV_DLL_ACT` defaults to 2 and no QGroundControl heartbeat is present, and that the sim profile sets `NAV_DLL_ACT` 0.
 
-A missing or failed magnetometer is named the same way, from `estimator_status_flags`. `cs_mag_fault` says the compass is unhealthy. `fs_bad_mag_x`, `fs_bad_mag_y`, `fs_bad_mag_z`, or `fs_bad_mag_decl` says fusion failed. If none of `cs_mag`, `cs_mag_hdg`, or `cs_mag_3d` is set and yaw is not aligned (`cs_yaw_align` and `cs_ev_yaw` both clear), the text says the magnetometer is missing. That is the `apt_world` case: no Gazebo magnetometer plugin, so PX4 denies arming with `Preflight Fail: Compass Sensor missing`, `No valid data from Compass`, or `Found 0 compass`. In gps mode that sentence also names `SYS_HAS_MAG`, which stays at 1 and is what makes the commander require a compass.
+A missing or failed magnetometer is named the same way, from `estimator_status_flags`. `cs_mag_fault` says the compass is unhealthy. `fs_bad_mag_x`, `fs_bad_mag_y`, `fs_bad_mag_z`, or `fs_bad_mag_decl` says fusion failed. If none of `cs_mag`, `cs_mag_hdg`, or `cs_mag_3d` is set and yaw is not aligned (`cs_yaw_align` and `cs_ev_yaw` both clear), the text says the magnetometer is missing. That sentence names `SYS_HAS_MAG`, which stays at 1 in both modes, so the commander still requires a compass even when vision mode has stopped fusing it. A world with no magnetometer plugin then denies arming with `Preflight Fail: Compass Sensor missing`, `No valid data from Compass`, or `Found 0 compass`.
 
 The parameter read-back has to match before arming. A mismatch is returned as the arm failure.
 

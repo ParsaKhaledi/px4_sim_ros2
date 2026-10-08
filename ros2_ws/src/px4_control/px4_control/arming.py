@@ -120,11 +120,13 @@ def _magnetometer_arming_text(
         '(Preflight Fail: Compass Sensor missing, No valid data from Compass, '
         'or Found 0 compass).'
     )
-    if str(estimation_mode or '').strip().lower() == 'gps':
-        text += (
-            ' SYS_HAS_MAG stays at its firmware default of 1 in gps mode, so '
-            'the commander still requires a compass.'
-        )
+    # Both modes leave SYS_HAS_MAG at 1. estimation_mode does not change that.
+    _ = estimation_mode
+    text += (
+        ' SYS_HAS_MAG stays at its firmware default of 1 in both modes, so '
+        'the commander still requires a compass. Vision mode only stops '
+        'EKF2 from fusing it.'
+    )
     return text
 
 

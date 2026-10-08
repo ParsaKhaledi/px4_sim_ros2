@@ -21,7 +21,7 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert second == first
     assert 'export PX4_PARAM_EKF2_EV_CTRL=11' in second
     assert 'export PX4_PARAM_EKF2_MAG_TYPE=5' in second
-    assert 'export PX4_PARAM_SYS_HAS_MAG=0' in second
+    assert 'SYS_HAS_MAG' not in second
     assert 'export PX4_PARAM_EKF2_HGT_REF=3' in second
     assert 'export PX4_PARAM_EKF2_EV_DELAY=50' in second
     assert 'export PX4_PARAM_EKF2_GPS_CTRL=5' in second

@@ -30,7 +30,7 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     assert expected['NAV_DLL_ACT'] == 0.0
     assert expected['EKF2_EV_CTRL'] == 11.0
     assert expected['EKF2_MAG_TYPE'] == 5.0
-    assert expected['SYS_HAS_MAG'] == 0.0
+    assert expected['SYS_HAS_MAG'] == 1.0
     gps = expected_sim_params('gps')
     assert gps['EKF2_MAG_TYPE'] == 0.0
     assert gps['SYS_HAS_MAG'] == 1.0
@@ -39,7 +39,7 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
         'EKF2_GPS_CTRL': 7.0,
         'EKF2_HGT_REF': 1.0,
         'EKF2_MAG_TYPE': 0.0,
-        'SYS_HAS_MAG': 1.0,
+        'SYS_HAS_MAG': 0.0,
         'NAV_RCL_ACT': 2.0,
         'NAV_DLL_ACT': 2.0,
         'UXRCE_DDS_SYNCT': 1.0,
@@ -48,7 +48,7 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     assert message is not None
     assert 'EKF2_EV_CTRL=0' in message
     assert 'EKF2_MAG_TYPE=0' in message
-    assert 'SYS_HAS_MAG=1' in message
+    assert 'SYS_HAS_MAG=0' in message
     assert 'NAV_RCL_ACT=2' in message
     assert 'NAV_DLL_ACT=2' in message
     assert readback_mismatch(

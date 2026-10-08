@@ -72,7 +72,6 @@ install_px4_control_params() {
     else
       echo "export PX4_PARAM_EKF2_EV_CTRL=${ev_ctrl}"
       echo "export PX4_PARAM_EKF2_MAG_TYPE=5"
-      echo "export PX4_PARAM_SYS_HAS_MAG=0"
       echo "export PX4_PARAM_EKF2_HGT_REF=3"
       echo "export PX4_PARAM_EKF2_EV_DELAY=${ev_delay}"
       echo "export PX4_PARAM_EKF2_EV_NOISE_MD=0"

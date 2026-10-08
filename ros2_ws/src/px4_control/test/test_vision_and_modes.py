@@ -150,7 +150,8 @@ def test_prearm_names_a_missing_or_failed_magnetometer():
     vision_missing = prearm_block_reason(Status(), Flags(), Estimator(), 'vision')
     assert vision_missing is not None
     assert 'Magnetometer missing' in vision_missing
-    assert 'SYS_HAS_MAG' not in vision_missing
+    assert 'SYS_HAS_MAG' in vision_missing
+    assert 'both modes' in vision_missing
 
     aligned = Estimator()
     aligned.cs_yaw_align = True
