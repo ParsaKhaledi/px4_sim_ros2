@@ -9,6 +9,7 @@ from sim_origin import (
     DEFAULT_ALT,
     DEFAULT_LAT,
     DEFAULT_LON,
+    DEFAULT_POSE,
     apply_origin_to_worlds,
     ecef_to_geodetic,
     enu_to_geodetic,
@@ -41,10 +42,11 @@ def test_default_pose_puts_spawn_on_the_campus_point():
         "SIM_ORIGIN_LAT": str(DEFAULT_LAT),
         "SIM_ORIGIN_LON": str(DEFAULT_LON),
         "SIM_ORIGIN_ALT": str(DEFAULT_ALT),
-        "PX4_GZ_MODEL_POSE": "-3,-1.6,0,0,0,3.14",
+        "PX4_GZ_MODEL_POSE": DEFAULT_POSE,
     })
+    assert origin["spawn_z"] == 0.15
     back = enu_to_geodetic(
-        origin["spawn_x"], origin["spawn_y"], origin["spawn_z"],
+        origin["spawn_x"], origin["spawn_y"], 0.0,
         origin["origin_lat"], origin["origin_lon"], origin["origin_alt"],
     )
     assert abs(back[0] - DEFAULT_LAT) < 1e-8
@@ -56,11 +58,13 @@ def test_default_pose_puts_spawn_on_the_campus_point():
     assert abs(origin["origin_alt"] - DEFAULT_ALT) < 1e-3
 
 
-def test_spawn_height_lowers_the_world_origin():
-    lat, lon, alt = world_origin_from_spawn(DEFAULT_LAT, DEFAULT_LON, DEFAULT_ALT, (0.0, 0.0, 2.0))
-    assert abs(lat - DEFAULT_LAT) < 1e-8
-    assert abs(lon - DEFAULT_LON) < 1e-8
-    assert abs(alt - (DEFAULT_ALT - 2.0)) < 1e-3
+def test_pose_z_does_not_change_origin_altitude():
+    flat = world_origin_from_spawn(DEFAULT_LAT, DEFAULT_LON, DEFAULT_ALT, (-3.0, -1.6, 0.0))
+    raised = world_origin_from_spawn(DEFAULT_LAT, DEFAULT_LON, DEFAULT_ALT, (-3.0, -1.6, 0.15))
+    assert abs(flat[2] - DEFAULT_ALT) < 1e-6
+    assert abs(raised[2] - DEFAULT_ALT) < 1e-6
+    assert abs(flat[0] - raised[0]) < 1e-12
+    assert abs(flat[1] - raised[1]) < 1e-12
 
 
 def test_parse_pose_blanks():
@@ -126,7 +130,7 @@ def test_dry_run_prints_exports_without_writing(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("SIM_ORIGIN_LAT", str(DEFAULT_LAT))
     monkeypatch.setenv("SIM_ORIGIN_LON", str(DEFAULT_LON))
     monkeypatch.setenv("SIM_ORIGIN_ALT", str(DEFAULT_ALT))
-    monkeypatch.setenv("PX4_GZ_MODEL_POSE", "-3,-1.6,0,0,0,3.14")
+    monkeypatch.setenv("PX4_GZ_MODEL_POSE", DEFAULT_POSE)
     assert main(["--dry-run"]) == 0
     assert world.read_text(encoding="utf-8") == original
     dry = capsys.readouterr().out

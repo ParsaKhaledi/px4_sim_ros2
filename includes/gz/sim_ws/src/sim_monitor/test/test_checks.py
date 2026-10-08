@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sim_monitor.spawn_frame import DEFAULT_POSE, spawn_ground_pose
 from sim_monitor.checks import (
     RateTracker,
     check_min,
@@ -24,9 +25,14 @@ from sim_monitor.real_time_factor import iter_real_time_factors, parse_stats_mes
 
 
 def test_spawn_pose_default():
-    x, y, z, roll, pitch, yaw = parse_spawn_pose("-3,-1.6,0,0,0,3.14")
-    assert (x, y, z) == (-3.0, -1.6, 0.0)
+    x, y, z, roll, pitch, yaw = parse_spawn_pose(DEFAULT_POSE)
+    assert (x, y, z) == (-3.0, -1.6, 0.15)
     assert yaw == 3.14
+    ground = spawn_ground_pose((x, y, z, roll, pitch, yaw))
+    assert ground[2] == 0.0
+    assert ground[:2] == (-3.0, -1.6)
+    assert ground[5] == 3.14
+    assert ground[3] == 0.0 and ground[4] == 0.0
     qx, qy, qz, qw = quat_from_rpy(roll, pitch, yaw)
     assert abs(qx * qx + qy * qy + qz * qz + qw * qw - 1.0) < 1e-9
 

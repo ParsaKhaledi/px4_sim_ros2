@@ -1,10 +1,11 @@
 """Place the drone spawn on a configured geographic coordinate.
 
 ``SIM_ORIGIN_LAT``, ``SIM_ORIGIN_LON`` and ``SIM_ORIGIN_ALT`` are the
-latitude, longitude and AMSL elevation of the spawn pose
-(``PX4_GZ_MODEL_POSE``), not of the Gazebo world origin. The world origin
-is offset from that point by the spawn translation. Heading stays 0, so
-the ENU world axes stay east, north and up.
+latitude, longitude and ground altitude under the spawn, not of the Gazebo
+world origin. The world origin is offset from that point by the spawn x and
+y only. Pose z is drop clearance above the floor and does not change
+``PX4_HOME_ALT``. Heading stays 0, so the ENU world axes stay east, north
+and up.
 
 PX4 v1.17 gz SITL reads GPS from the model's NavSat sensor, which uses the
 world ``<spherical_coordinates>``. After the world is ready, ``px4-rc.gzsim``
@@ -31,7 +32,7 @@ WGS84_E2 = WGS84_F * (2.0 - WGS84_F)
 DEFAULT_LAT = 35.7048378
 DEFAULT_LON = 51.4095049
 DEFAULT_ALT = 1205.0
-DEFAULT_POSE = "-3,-1.6,0,0,0,3.14"
+DEFAULT_POSE = "-3,-1.6,0.15,0,0,3.14"
 
 _BLOCK = re.compile(
     r"<spherical_coordinates\b[^>]*>.*?</spherical_coordinates>",
@@ -101,13 +102,15 @@ def world_origin_from_spawn(lat_deg: float, lon_deg: float, alt_m: float,
     """World-origin latitude, longitude and elevation for a spawn coordinate.
 
     With ``heading_deg`` 0 the Gazebo ENU axes are east, north and up, so the
-    spawn translation is the ENU vector from the world origin to the drone.
-    The world origin is the spawn coordinate plus the opposite of that vector.
+    spawn x and y are the ENU offset from the world origin to the ground under
+    the drone. Pose z is drop clearance above the floor, not a ground height,
+    so it does not change the origin altitude. That altitude stays ``alt_m``
+    (``SIM_ORIGIN_ALT``).
     """
     if heading_deg != 0.0:
         raise ValueError("only heading_deg 0 is supported")
-    east, north, up = spawn_xyz
-    return enu_to_geodetic(-east, -north, -up, lat_deg, lon_deg, alt_m)
+    east, north, _up = spawn_xyz
+    return enu_to_geodetic(-east, -north, 0.0, lat_deg, lon_deg, alt_m)
 
 
 def spherical_block(lat_deg: float, lon_deg: float, alt_m: float, heading_deg: float = 0.0) -> str:

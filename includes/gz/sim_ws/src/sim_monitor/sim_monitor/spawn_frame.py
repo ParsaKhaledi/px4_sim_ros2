@@ -1,9 +1,11 @@
 """Publish the spawn frame and a ground-truth TF.
 
-``PX4_GZ_MODEL_POSE`` (default ``-3,-1.6,0,0,0,3.14``) is a static transform
-``world`` -> ``spawn``. Ground truth is broadcast as ``world`` ->
-``base_link_gt`` (``GT_CHILD_FRAME``). It is not ``base_link``: RTAB-Map
-publishes ``odom`` -> ``base_link``, and a second parent breaks the tree.
+``PX4_GZ_MODEL_POSE`` (default ``-3,-1.6,0.15,0,0,3.14``) is where the model
+spawns. Pose z is drop clearance above the floor. The static ``world`` ->
+``spawn`` frame uses that x, y, and yaw with z = 0, so it sits on the ground
+under the drone. Ground truth is broadcast as ``world`` -> ``base_link_gt``
+(``GT_CHILD_FRAME``). It is not ``base_link``: RTAB-Map publishes ``odom`` ->
+``base_link``, and a second parent breaks the tree.
 
 Both are in the Gazebo ENU world (x east, y north, z up).
 """
@@ -14,7 +16,17 @@ import os
 
 from sim_monitor.checks import parse_spawn_pose, quat_from_rpy
 
-DEFAULT_POSE = "-3,-1.6,0,0,0,3.14"
+DEFAULT_POSE = "-3,-1.6,0.15,0,0,3.14"
+
+
+def spawn_ground_pose(pose: tuple[float, float, float, float, float, float]) -> tuple[float, float, float, float, float, float]:
+    """``world`` -> ``spawn``: x, y, and yaw from the model pose, z = 0.
+
+    Pose z is drop clearance, so the frame stays on the floor. Roll and pitch
+    are dropped so takeoff height relative to ``spawn`` is height above the floor.
+    """
+    x, y, _z, _roll, _pitch, yaw = pose
+    return (float(x), float(y), 0.0, 0.0, 0.0, float(yaw))
 
 
 def main() -> None:
@@ -34,7 +46,7 @@ def main() -> None:
                 parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, use_sim)],
             )
             pose_text = os.environ.get("PX4_GZ_MODEL_POSE", "") or DEFAULT_POSE
-            x, y, z, roll, pitch, yaw = parse_spawn_pose(pose_text)
+            x, y, z, roll, pitch, yaw = spawn_ground_pose(parse_spawn_pose(pose_text))
             qx, qy, qz, qw = quat_from_rpy(roll, pitch, yaw)
             self.static = StaticTransformBroadcaster(self)
             message = TransformStamped()

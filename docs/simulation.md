@@ -43,7 +43,7 @@ Nav2 (`navigation_launch.py` and `start_nav2.sh`), Nav2 RViz, the x500 `robot_st
 * `child_frame_id`: `base_link_gt` (`GT_CHILD_FRAME`)
 * stamp: Gazebo sim time
 
-`PX4_GZ_MODEL_POSE` (default `-3,-1.6,0,0,0,3.14`, x,y,z,roll,pitch,yaw in radians) is the spawn pose. `sim_monitor.spawn_frame` publishes static TF `world` -> `spawn` from that value, and TF `world` -> `base_link_gt` from `/ground_truth/odom`. The child frame is not `base_link`. RTAB-Map publishes `odom` -> `base_link`, and a second parent splits the TF tree. `trajectory_eval` scores the pose inside the odometry message, so it does not depend on that child frame name.
+`PX4_GZ_MODEL_POSE` (default `-3,-1.6,0.15,0,0,3.14`, x,y,z,roll,pitch,yaw in radians) is the spawn pose. `sim_monitor.spawn_frame` publishes static TF `world` -> `spawn` from that x, y, and yaw with z = 0, so the frame sits on the ground under the drone and takeoff heights relative to `spawn` are heights above the floor. It also publishes TF `world` -> `base_link_gt` from `/ground_truth/odom`. The child frame is not `base_link`. RTAB-Map publishes `odom` -> `base_link`, and a second parent splits the TF tree. `trajectory_eval` scores the pose inside the odometry message, so it does not depend on that child frame name.
 
 If the variable is unset, `gz_start_px4_gz_sim.sh` fills in the default. Compose forwards `PX4_GZ_MODEL_POSE` when `.env` sets it, which matches the devops change that moves the pose into `.env`.
 
@@ -51,11 +51,11 @@ If the variable is unset, `gz_start_px4_gz_sim.sh` fills in the default. Compose
 
 `SIM_ORIGIN_LAT`, `SIM_ORIGIN_LON` and `SIM_ORIGIN_ALT` are the spawn pose, in degrees and metres AMSL. The defaults are the Aerospace Engineering Department, Amirkabir University of Technology, Tehran: 35.7048378 N, 51.4095049 E, 1205 m (SRTM 30 m gives 1206, Open-Meteo 1204).
 
-The spawn is not the Gazebo world origin. With the default pose `-3,-1.6,0` and `heading_deg` 0, world +X is east and world +Y is north, so the world origin sits 3 m east and 1.6 m north of the spawn, at the same elevation when spawn z is 0. `includes/gz/scripts/sim_origin.py` computes that origin at launch and rewrites `<spherical_coordinates>` (EARTH_WGS84, ENU, heading 0) in the worlds PX4 loads, including every world copied from `includes/gz/worlds` and `default.sdf`. The committed SDF files keep their previous coordinates so they do not drift; the rewrite happens on the copies in the PX4 tree.
+The spawn is not the Gazebo world origin. With the default pose `-3,-1.6,0.15` and `heading_deg` 0, world +X is east and world +Y is north, so the world origin sits 3 m east and 1.6 m north of the spawn. Pose z is a drop clearance above the floor, so the world-origin altitude stays `SIM_ORIGIN_ALT` and a z of 0.15 does not change `PX4_HOME_ALT`. `includes/gz/scripts/sim_origin.py` computes that origin at launch and rewrites `<spherical_coordinates>` (EARTH_WGS84, ENU, heading 0) in the worlds PX4 loads, including every world copied from `includes/gz/worlds` and `default.sdf`. The committed SDF files keep their previous coordinates so they do not drift; the rewrite happens on the copies in the PX4 tree.
 
 PX4 v1.17 `px4-rc.gzsim` does the same job a second time. If `PX4_HOME_LAT`, `PX4_HOME_LON` and `PX4_HOME_ALT` are all set, it calls `/world/<name>/set_spherical_coordinates` with those values as the **world origin**, before the model is spawned. The start script exports the computed world origin through those three variables so the service matches the SDF. They are not the vehicle home. The vehicle home is the first GPS fix.
 
-GPS comes from the NavSat sensor on `x500_base` `base_link`. That link is 0.24 m above the model origin, and the sensor has no further position offset, so latitude and longitude match the spawn while the reported AMSL is `SIM_ORIGIN_ALT + spawn_z + 0.24`. With the default pose that is 1205.24 m. There is no `sensor_gps_sim` path in the gz init script; the gz NavSat reading is the one PX4 uses.
+GPS comes from the NavSat sensor on `x500_base` `base_link`. That link is 0.24 m above the model origin, and the sensor has no further position offset, so latitude and longitude match the spawn while the reported AMSL is `SIM_ORIGIN_ALT + spawn_z + 0.24`. With the default pose that is 1205.39 m. There is no `sensor_gps_sim` path in the gz init script; the gz NavSat reading is the one PX4 uses.
 
 ## Offline models
 

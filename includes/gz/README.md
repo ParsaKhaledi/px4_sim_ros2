@@ -20,4 +20,4 @@ export PYTHONPATH=includes/gz/sim_ws/src/trajectory_eval
 python3 -m trajectory_eval offline --ground-truth gt.tum --output /tmp/traj
 ```
 
-Spawn pose `PX4_GZ_MODEL_POSE` defaults to `-3,-1.6,0,0,0,3.14` (ENU, radians) and is published as static TF `world` -> `spawn`.
+Spawn pose `PX4_GZ_MODEL_POSE` defaults to `-3,-1.6,0.15,0,0,3.14` (ENU, radians). Pose z is drop clearance above the floor. Static TF `world` -> `spawn` uses that x, y, and yaw with z = 0.

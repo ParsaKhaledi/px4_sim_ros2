@@ -9,7 +9,8 @@
 #               force Mesa software GL (llvmpipe). Useful on a VM with no GPU.
 # PX4_GZ_MODEL_POSE
 #               spawn pose "x,y,z,roll,pitch,yaw" in the Gazebo ENU world.
-#               Default: -3,-1.6,0,0,0,3.14
+#               Default: -3,-1.6,0.15,0,0,3.14
+#               z is drop clearance above the floor, not a ground height.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -18,9 +19,9 @@ source /opt/ros/$ROS_DISTRO/setup.bash
 
 WORLD="${1:-default}"
 MODEL="x500_depth"
-DEFAULT_POSE="-3,-1.6,0,0,0,3.14"
+DEFAULT_POSE="-3,-1.6,0.15,0,0,3.14"
 
-export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
+export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0.15,0,0,3.14}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=gz_resolve_dir.sh
