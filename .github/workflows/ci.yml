@@ -120,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -v "${PWD}:/work" -w /work ros:jazzy-ros-base bash -lc '
-            set -euo pipefail
+            set -eo pipefail
             apt-get update
             apt-get install -y python3-colcon-common-extensions
             mkdir -p ros2_ws/src
@@ -129,7 +129,10 @@ jobs:
             if [ "${count}" -eq 0 ]; then
               echo "No ROS packages yet. An empty colcon workspace is success."
             fi
+            # setup.bash reads unset AMENT_* variables. nounset must stay off.
+            set +u
             source /opt/ros/jazzy/setup.bash
+            set -u
             cd ros2_ws
             colcon build
             colcon test

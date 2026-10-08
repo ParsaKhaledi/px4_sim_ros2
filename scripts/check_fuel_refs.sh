@@ -14,7 +14,14 @@ if [ "${#hits[@]}" -eq 0 ]; then
 fi
 
 echo "Found ${#hits[@]} fuel.gazebosim.org references."
-printf '%s\n' "${hits[@]}" | head -n 40
+shown=0
+for hit in "${hits[@]}"; do
+  if [ "${shown}" -ge 40 ]; then
+    break
+  fi
+  printf '%s\n' "${hit}"
+  shown=$((shown + 1))
+done
 echo
 if [ "${FUEL_CHECK_STRICT:-0}" = "1" ]; then
   echo "FUEL_CHECK_STRICT=1, failing."
