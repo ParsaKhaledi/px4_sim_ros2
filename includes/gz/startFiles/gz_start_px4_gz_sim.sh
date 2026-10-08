@@ -23,7 +23,10 @@ DEFAULT_POSE="-3,-1.6,0,0,0,3.14"
 export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_GZ="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=gz_resolve_dir.sh
+source "${SCRIPT_DIR}/gz_resolve_dir.sh"
+gz_resolve_dir || exit 1
+REPO_GZ="${GZ_DIR}"
 
 # SIM_ORIGIN_* is the spawn coordinate. The script writes the matching
 # world origin into PX4's worlds and exports it as PX4_HOME_LAT/LON/ALT.
@@ -81,9 +84,9 @@ fi
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
-if [ "${WORLD}" = "default" ] || [ -z "${WORLD}" ]; then
-  make px4_sitl "gz_${MODEL}"
-else
+# Repo worlds such as apt_world are not ninja targets. PX4_GZ_WORLD selects
+# the sdf; the airframe target stays gz_<model>.
+if [ -n "${WORLD}" ] && [ "${WORLD}" != "default" ]; then
   export PX4_GZ_WORLD="${WORLD}"
-  make px4_sitl "gz_${MODEL}_${WORLD}"
 fi
+make px4_sitl "gz_${MODEL}"

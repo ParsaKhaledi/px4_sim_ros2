@@ -5,7 +5,9 @@ HOME=/home/${USER_NAME}
 source /opt/ros/$ROS_DISTRO/setup.bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GZ_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=gz_resolve_dir.sh
+source "${SCRIPT_DIR}/gz_resolve_dir.sh"
+gz_resolve_dir || exit 1
 BASE_CONFIG="${GZ_DIR}/config_gz_bridge.yaml"
 SIM_CONFIG="${GZ_DIR}/config_gz_bridge_sim.yaml"
 MERGED_CONFIG="/tmp/px4_gz_bridge.yaml"

@@ -112,8 +112,11 @@ def world_origin_from_spawn(lat_deg: float, lon_deg: float, alt_m: float,
 
 def spherical_block(lat_deg: float, lon_deg: float, alt_m: float, heading_deg: float = 0.0) -> str:
     """One world spherical-coordinates element, indented for an SDF world."""
+    # The opening tag keeps the indent already on its line. Children and the
+    # closing tag carry their own indent so a rewrite does not double-indent
+    # only the first line.
     return (
-        "    <spherical_coordinates>\n"
+        "<spherical_coordinates>\n"
         "      <surface_model>EARTH_WGS84</surface_model>\n"
         "      <world_frame_orientation>ENU</world_frame_orientation>\n"
         f"      <latitude_deg>{lat_deg:.10f}</latitude_deg>\n"
@@ -134,7 +137,7 @@ def rewrite_spherical_coordinates(text: str, lat_deg: float, lon_deg: float,
 
     updated, count = _BLOCK.subn(replace, text)
     if count == 0:
-        updated, inserted = _WORLD.subn(rf"\1\n{block}\n", text, count=1)
+        updated, inserted = _WORLD.subn("\\1\n    " + block + "\n", text, count=1)
         count = inserted
     return updated, count
 

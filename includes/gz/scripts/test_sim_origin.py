@@ -89,6 +89,14 @@ def test_rewrite_updates_every_block_and_inserts_when_missing(tmp_path):
     assert updated.count("ENU") == 2
     assert "\n      <latitude_deg>" in updated
     assert "<heading_deg>0.0000</heading_deg>" in updated
+    indented = (
+        "    <spherical_coordinates>\n"
+        "      <latitude_deg>1</latitude_deg>\n"
+        "    </spherical_coordinates>\n"
+    )
+    rewritten, _count = rewrite_spherical_coordinates(indented, DEFAULT_LAT, DEFAULT_LON, DEFAULT_ALT)
+    assert rewritten.startswith("    <spherical_coordinates>\n")
+    assert "\n        <spherical_coordinates>" not in rewritten
     assert "50.0" not in updated
 
     bare = "<sdf><world name='empty'></world></sdf>"
