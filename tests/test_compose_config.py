@@ -72,6 +72,11 @@ def test_ci_override_is_headless():
                 targets.append(volume.get("source", ""))
                 targets.append(volume.get("target", ""))
         assert not any(item in ("/dev", "/dev/", "/tmp/.X11-unix") or str(item).endswith("/dev") for item in targets)
+    px4_env = rendered["services"]["PX4"]["environment"]
+    assert str(px4_env["PX4_PARAM_NAV_DLL_ACT"]) == "0"
+    assert str(px4_env["PX4_PARAM_NAV_RCL_ACT"]) == "1"
+    assert str(px4_env["PX4_PARAM_COM_RC_IN_MODE"]) == "1"
+    assert str(px4_env["PX4_PARAM_COM_RC_LOSS_T"]) == "35"
 
 
 CAMERA_ENV = {

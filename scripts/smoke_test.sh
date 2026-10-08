@@ -30,6 +30,7 @@ trap cleanup EXIT
 
 "${ROOT}/scripts/compose_stack.sh" down || true
 "${ROOT}/scripts/compose_stack.sh" up
+"${ROOT}/scripts/assert_px4_params.sh"
 
 echo "Checking camera rates first."
 docker exec px4_sim bash -lc \

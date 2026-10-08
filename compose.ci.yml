@@ -9,6 +9,12 @@ services:
       LIBGL_ALWAYS_SOFTWARE: "1"
       GALLIUM_DRIVER: llvmpipe
       RTABMAPVIZ: "false"
+      # param set after the saved bson import, before airframe set-default.
+      # 0 disables the GCS datalink preflight. 1 is RC-loss Hold.
+      PX4_PARAM_NAV_DLL_ACT: "0"
+      PX4_PARAM_NAV_RCL_ACT: "1"
+      PX4_PARAM_COM_RC_IN_MODE: "1"
+      PX4_PARAM_COM_RC_LOSS_T: "35"
     ports: !override []
     volumes: !override
       - ./HealthCheck:/home/px4/volume/HealthCheck

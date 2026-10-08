@@ -190,6 +190,7 @@ fly_until_done() {
 "${ROOT}/scripts/compose_stack.sh" down || true
 mkdir -p "${FLIGHTS}"
 "${ROOT}/scripts/compose_stack.sh" up
+"${ROOT}/scripts/assert_px4_params.sh"
 
 attempt=1
 fly_until_done
