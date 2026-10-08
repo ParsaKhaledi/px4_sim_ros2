@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <robot name="x500_depth">
-  <!-- Camera and IMU frames are static TFs from sim_monitor.camera_tf,
-       parsed from the x500_depth and Oak-D SDFs. They are not repeated
-       here, so each frame has one parent. -->
+  <!-- The vision StatePublisher publishes the camera and IMU frames.
+       This description does not repeat them. -->
   <link name="base_link"/>
 </robot>

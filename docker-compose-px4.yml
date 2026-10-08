@@ -33,11 +33,7 @@ services:
         CameraType: ${CameraType:-rgbd}
         World: ${World:-default}
         IMU_SOURCE: ${IMU_SOURCE:-oak}
-        PX4_IMU_RATE_HZ: ${PX4_IMU_RATE_HZ:-}
-        CAM_PITCH_DEG: ${CAM_PITCH_DEG:-}
-        CAM_X: ${CAM_X:-}
-        CAM_Y: ${CAM_Y:-}
-        CAM_Z: ${CAM_Z:-}
+        IMU_STAMP_MODE: ${IMU_STAMP_MODE:-receive}
         XRCE_DDS_AGENT_IP: "10.20.10.7"
         HEADLESS: ${HEADLESS:-0}
         HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}

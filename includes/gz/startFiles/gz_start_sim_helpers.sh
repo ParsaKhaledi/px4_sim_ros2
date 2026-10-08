@@ -1,7 +1,8 @@
 #!/bin/bash
 # Background helpers that run next to the ros_gz bridge:
-#   /sim/real_time_factor, the spawn frame, the camera static TF,
-#   /sim/preflight_check, and px4_imu_relay when IMU_SOURCE=px4.
+#   /sim/real_time_factor, the spawn frame, /sim/preflight_check,
+#   and px4_imu_relay when IMU_SOURCE=px4.
+# Camera frames are not published here.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -27,7 +28,6 @@ export PYTHONPATH="${SIM_SRC}/sim_monitor:${PYTHONPATH:-}"
 
 python3 -m sim_monitor.real_time_factor &
 python3 -m sim_monitor.spawn_frame &
-python3 -m sim_monitor.camera_tf &
 case "${IMU_SOURCE:-oak}" in
   oak|OAK) ;;
   px4|PX4)

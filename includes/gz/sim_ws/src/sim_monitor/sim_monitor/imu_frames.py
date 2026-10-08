@@ -91,3 +91,22 @@ def flu_enu_quaternion_xyzw(q_frd_ned_wxyz) -> tuple[float, float, float, float]
     """Same rotation in the ``(x, y, z, w)`` order ROS messages use."""
     w, x, y, z = flu_enu_quaternion(q_frd_ned_wxyz)
     return (float(x), float(y), float(z), float(w))
+
+
+def gravity_quaternion_xyzw(q_frd_ned_wxyz) -> tuple[float, float, float, float]:
+    """Roll and pitch of the ENU/FLU attitude, with yaw set to zero.
+
+    The full NED/FRD to ENU/FLU conversion runs first. Yaw is then dropped so
+    the quaternion carries gravity only. RTAB-Map is also told to ignore yaw
+    by a large yaw variance on the IMU message.
+    """
+    rotation = quat_to_rot(flu_enu_quaternion(q_frd_ned_wxyz))
+    pitch = math.asin(max(-1.0, min(1.0, float(-rotation[2, 0]))))
+    roll = math.atan2(float(rotation[2, 1]), float(rotation[2, 2]))
+    w, x, y, z = quat_from_rpy(roll, pitch, 0.0)
+    return (float(x), float(y), float(z), float(w))
+
+
+def yaw_from_quat(q_wxyz) -> float:
+    w, x, y, z = quat_normalize(np.asarray(q_wxyz, dtype=float))
+    return float(math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))

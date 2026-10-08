@@ -1,4 +1,4 @@
-"""IMU frame conversion, source selection, and SDF camera transforms."""
+"""IMU frame conversion, stamps, and the absence of camera static TFs."""
 
 import math
 import sys
@@ -8,32 +8,44 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sim_monitor.camera_extrinsics import (
-    OPTICAL_RPY,
-    REFERENCE_X500,
-    REPO_GZ,
-    camera_transforms,
-)
+REPO_GZ = Path(__file__).resolve().parents[4]
+PACKAGE = Path(__file__).resolve().parents[1]
+
 from sim_monitor.checks import expected_imu_hz, minimum_rate_hz
-from sim_monitor.imu_frames import flu_enu_quaternion, frd_to_flu, quat_from_rpy, quat_to_rot
+from sim_monitor.imu_frames import (
+    flu_enu_quaternion,
+    frd_to_flu,
+    gravity_quaternion_xyzw,
+    quat_from_rpy,
+    quat_to_rot,
+    yaw_from_quat,
+)
 from sim_monitor.imu_source import (
+    PX4_OFFSET,
+    RECEIVE,
     bridge_gazebo_imu,
     configured_imu_publishers,
     default_tf_pairs,
-    diagonal_covariance,
+    imu_stamp_ns,
+    input_rate_hz,
+    measure_px4_offset_ns,
     normalize_imu_source,
     optical_frame,
-    ros_stamp_ns,
+    orientation_covariance,
+    px4_sample_us,
+    rate_log,
 )
 from sim_monitor.px4_imu_relay import px4_topic
 
 G = 9.80665
-
-
-def _by_child(transforms, child):
-    matches = [item for item in transforms if item.child == child]
-    assert len(matches) == 1, child
-    return matches[0]
+# Frames this stack must not publish. Ground-truth TF (base_link_gt) is separate.
+CAMERA_FRAMES = (
+    "camera_link",
+    "imu_link",
+    "optical_frame",
+    "OakD-Lite",
+    "camera_rgb_frame",
+)
 
 
 def test_identity_attitude_points_north_and_level():
@@ -54,11 +66,23 @@ def test_specific_force_at_rest_is_plus_g_up():
     np.testing.assert_allclose(flu, (0.0, 0.0, G), atol=1e-9)
 
 
+def test_gravity_quaternion_keeps_roll_pitch_and_drops_yaw():
+    level = flu_enu_quaternion((1.0, 0.0, 0.0, 0.0))
+    assert abs(yaw_from_quat(level) - math.pi / 2.0) < 1e-9
+    gravity = gravity_quaternion_xyzw((1.0, 0.0, 0.0, 0.0))
+    w = gravity[3]
+    assert abs(yaw_from_quat((w, gravity[0], gravity[1], gravity[2]))) < 1e-9
+    rotation = quat_to_rot((w, gravity[0], gravity[1], gravity[2]))
+    np.testing.assert_allclose(rotation[:, 2], [0.0, 0.0, 1.0], atol=1e-9)
+    covariance = orientation_covariance(0.02)
+    assert covariance[8] == 1.0e3
+    assert abs(covariance[0] - 0.0004) < 1e-12
+    assert covariance[4] == covariance[0]
+
+
 def test_only_one_imu_publisher_per_mode():
-    oak = configured_imu_publishers("oak")
-    px4 = configured_imu_publishers("px4")
-    assert oak == ("ros_gz_bridge",)
-    assert px4 == ("px4_imu_relay",)
+    assert configured_imu_publishers("oak") == ("ros_gz_bridge",)
+    assert configured_imu_publishers("px4") == ("px4_imu_relay",)
     assert bridge_gazebo_imu("oak") is True
     assert bridge_gazebo_imu("px4") is False
     assert bridge_gazebo_imu("") is True
@@ -66,13 +90,12 @@ def test_only_one_imu_publisher_per_mode():
     sim = (REPO_GZ / "config_gz_bridge_sim.yaml").read_text(encoding="utf-8")
     imu = (REPO_GZ / "config_gz_bridge_imu.yaml").read_text(encoding="utf-8")
     assert 'ros_topic_name: "/imu"' not in sim
-    assert sim.count('ros_topic_name: "/imu"') == 0
     assert imu.count('ros_topic_name: "/imu"') == 1
 
 
-def test_px4_rate_and_optical_frame():
+def test_px4_rate_minimum_and_optical_frame():
     assert expected_imu_hz({"IMU_SOURCE": "oak", "IMU_RATE_HZ": "200"}) == 200.0
-    assert expected_imu_hz({"IMU_SOURCE": "px4"}) == 100.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 100.0
     assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
     assert "camera_rgb_frame" in default_tf_pairs({"CameraType": "rgbd"})
     assert "stereo_left_camera_frame" in default_tf_pairs({"CameraType": "stereo"})
@@ -82,14 +105,33 @@ def test_px4_rate_and_optical_frame():
     assert optical_frame({"PREFLIGHT_OPTICAL_FRAME": "custom"}) == "custom"
 
 
-def test_stamp_uses_timesync_only_on_the_ros_clock():
+def test_receive_stamp_is_the_default_and_raw_boot_time_is_not_published():
     receive = 5_000_000_000
-    assert ros_stamp_ns(4_000_000, None, receive) == receive
-    # 1.5 s of PX4 time plus a 3.5 s offset lands on the receive time.
-    assert ros_stamp_ns(1_500_000, 3_500_000, receive) == receive
-    # A wall-clock offset is not sim time, so the receive time is kept.
-    wall_offset_us = 1_700_000_000_000_000
-    assert ros_stamp_ns(1_500_000, wall_offset_us, receive) == receive
+    sample_us = 1_500_000
+    assert imu_stamp_ns(RECEIVE, receive, sample_us, offset_ns=0) == receive
+    assert imu_stamp_ns("", receive, sample_us, offset_ns=None) == receive
+    # A raw boot timestamp is a different epoch from /clock.
+    assert sample_us * 1000 != receive
+    offset = measure_px4_offset_ns(sample_us, receive)
+    assert imu_stamp_ns(PX4_OFFSET, receive, sample_us, offset) == receive
+    later_us = sample_us + 20_000
+    later_receive = receive + 50_000_000
+    assert imu_stamp_ns(PX4_OFFSET, later_receive, later_us, offset) == later_us * 1000 + offset
+    assert px4_sample_us(10, None) == 10
+    assert px4_sample_us(10, 7) == 7
+
+
+def test_sensor_combined_rate_is_sim_time_and_warns_below_100():
+    start = 1_000_000_000
+    fast = [start + i * 10_000_000 for i in range(11)]
+    assert abs(input_rate_hz(fast) - 100.0) < 1e-6
+    slow = [start + i * 20_000_000 for i in range(6)]
+    assert abs(input_rate_hz(slow) - 50.0) < 1e-6
+    assert rate_log(100.0) == ("info", "sensor_combined 100.0 Hz sim")
+    level, text = rate_log(50.0)
+    assert level == "warn"
+    assert "below 100 Hz" in text
+    assert rate_log(None) is None
 
 
 def test_px4_topic_prefers_a_version_suffix():
@@ -98,63 +140,17 @@ def test_px4_topic_prefers_a_version_suffix():
     assert px4_topic([], "vehicle_attitude") == "/fmu/out/vehicle_attitude"
 
 
-def test_covariance_is_diagonal():
-    cov = diagonal_covariance(0.1)
-    assert cov[0] == cov[4] == cov[8]
-    assert abs(cov[0] - 0.01) < 1e-12
-    assert cov[1] == 0.0
-
-
-def test_rgbd_static_tf_matches_the_sdf():
-    x500 = REFERENCE_X500.read_text(encoding="utf-8")
-    oak = (REPO_GZ / "models" / "OakD-Lite-rgbd" / "model.sdf").read_text(encoding="utf-8")
-    transforms = camera_transforms(x500, oak, {})
-    children = [item.child for item in transforms]
-    assert len(children) == len(set(children))
-    mount = _by_child(transforms, "OakD-Lite/base_link")
-    assert mount.parent == "base_link"
-    np.testing.assert_allclose(mount.xyz, (0.12, 0.03, 0.242))
-    np.testing.assert_allclose(mount.rpy, (0.0, 0.0, 0.0))
-    rgb = _by_child(transforms, "camera_rgb_frame")
-    assert rgb.parent == "OakD-Lite/base_link"
-    np.testing.assert_allclose(rgb.xyz, (0.01233, -0.03, 0.01878))
-    np.testing.assert_allclose(rgb.rpy, (0.0, 0.3, 0.0))
-    optical = _by_child(transforms, "camera_rgb_optical_frame")
-    assert optical.parent == "camera_rgb_frame"
-    np.testing.assert_allclose(optical.rpy, OPTICAL_RPY)
-    imu = _by_child(transforms, "imu_link")
-    np.testing.assert_allclose(imu.xyz, (0.01233, -0.03, 0.014))
-    np.testing.assert_allclose(imu.rpy, (0.0, 0.0, 0.0))
-    depth = _by_child(transforms, "depth_camera_frame")
-    np.testing.assert_allclose(depth.rpy, (0.0, 0.3, 0.0))
-
-
-def test_mount_env_overrides_the_sdf_pitch():
-    x500 = REFERENCE_X500.read_text(encoding="utf-8")
-    oak = (REPO_GZ / "models" / "OakD-Lite-rgbd" / "model.sdf").read_text(encoding="utf-8")
-    transforms = camera_transforms(
-        x500,
-        oak,
-        {"CAM_PITCH_DEG": "17", "CAM_X": "0.2"},
-    )
-    mount = _by_child(transforms, "OakD-Lite/base_link")
-    np.testing.assert_allclose(mount.xyz, (0.2, 0.03, 0.242))
-    np.testing.assert_allclose(mount.rpy[1], math.radians(17.0))
-    rgb = _by_child(transforms, "camera_rgb_frame")
-    np.testing.assert_allclose(rgb.rpy, (0.0, 0.3, 0.0))
-
-
-def test_stereo_static_tf_uses_the_stereo_model():
-    x500 = REFERENCE_X500.read_text(encoding="utf-8")
-    oak = (REPO_GZ / "models" / "OakD-Lite-stereo" / "model.sdf").read_text(encoding="utf-8")
-    transforms = camera_transforms(x500, oak, {})
-    children = {item.child for item in transforms}
-    assert "camera_rgb_frame" not in children
-    left = _by_child(transforms, "stereo_left_camera_frame")
-    right = _by_child(transforms, "stereo_right_camera_frame")
-    np.testing.assert_allclose(left.xyz, (0.1233, 0.037, 0.013))
-    np.testing.assert_allclose(right.xyz, (0.1233, -0.037, 0.013))
-    np.testing.assert_allclose(left.rpy, (0.0, 0.3, 0.0))
-    optical = _by_child(transforms, "stereo_left_camera_optical_frame")
-    assert optical.parent == "stereo_left_camera_frame"
-    assert _by_child(transforms, "imu_link").parent == "OakD-Lite/base_link"
+def test_no_camera_static_transforms_are_published():
+    urdf = (REPO_GZ / "x500_tf_publisher" / "x500_urdf.urdf").read_text(encoding="utf-8")
+    helpers = (REPO_GZ / "startFiles" / "gz_start_sim_helpers.sh").read_text(encoding="utf-8")
+    assert "camera_tf" not in helpers
+    for name in ("camera_link", "imu_link", "optical_frame", "OakD-Lite"):
+        assert name not in urdf
+    assert not (PACKAGE / "sim_monitor" / "camera_tf.py").exists()
+    assert not (PACKAGE / "sim_monitor" / "camera_extrinsics.py").exists()
+    for path in (PACKAGE / "sim_monitor").glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "sendTransform" not in text and "StaticTransformBroadcaster" not in text:
+            continue
+        for name in CAMERA_FRAMES:
+            assert name not in text

@@ -110,28 +110,22 @@ Simulation assets and startup scripts live under [includes/](includes/). See [in
 
 ## IMU source
 
-`IMU_SOURCE` selects the `sensor_msgs/Imu` publisher on `/imu`. RTAB-Map already subscribes to that topic. Both modes publish the same static camera tree, parsed from the `x500_depth` model and the Oak-D SDF (`CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, and `CAM_Z` override the mount when they are set).
+`IMU_SOURCE` selects the `sensor_msgs/Imu` publisher on `/imu`. RTAB-Map already subscribes to that topic. This stack does not publish static transforms for `camera_link`, the optical frames, or `imu_link`. The vision StatePublisher owns that tree, including the camera mount. Preflight still requires a TF path from the `/imu` `frame_id` to the camera optical frame.
 
 | | `oak` (default) | `px4` |
 | --- | --- | --- |
-| When | The camera IMU is on the Oak-D, so no lever arm and no PX4 time sync | EKF2 and RTAB-Map should share the flight IMU |
+| When | The camera IMU is on the Oak-D, so no lever arm | EKF2 and RTAB-Map should share the flight IMU |
 | Publisher | Gazebo `/imu` bridged to ROS `/imu` | `px4_imu_relay` from `/fmu/out/sensor_combined` and `/fmu/out/vehicle_attitude` |
 | `frame_id` | `imu_link` | `base_link` |
-| Expected sim rate | `IMU_RATE_HZ`, or the `VISION_PROFILE` rate | `PX4_IMU_RATE_HZ` (default 100) |
+| Preflight minimum | half of `IMU_RATE_HZ`, or half the `VISION_PROFILE` IMU rate | 100 Hz in sim time, unless `PREFLIGHT_MIN_IMU_HZ` is set |
 
-`oak` frame tree for `CameraType=rgbd`. The stereo model uses `stereo_left_camera_frame` and `stereo_right_camera_frame` in place of the RGB and depth frames. The 0.3 rad pitch is the sensor pose in the current Oak-D SDF. The mount itself is untilted unless `CAM_PITCH_DEG` is set.
+`px4` stamps each sample with ROS time when it is received (`IMU_STAMP_MODE=receive`, the default). With `use_sim_time` that clock is Gazebo `/clock`. `IMU_STAMP_MODE=px4_offset` adds one fixed offset, measured once at startup, from the PX4 sample time to `/clock`. SITL lockstep keeps PX4's clock on Gazebo time, so that constant stays valid. `sensor_combined` in px4_msgs v1.17 has `timestamp` and no `timestamp_sample`; the relay uses `timestamp_sample` when the message has it. A raw PX4 boot timestamp is not published. RTAB-Map's `wait_imu_to_init` compares IMU stamps with image stamps and would drop those samples.
 
-```
-base_link
-└── OakD-Lite/base_link                 0.12  0.03  0.242
-    ├── camera_rgb_frame                sensor pose, pitch 0.3 rad
-    │   └── camera_rgb_optical_frame    rpy -pi/2  0  -pi/2
-    ├── depth_camera_frame
-    │   └── depth_camera_optical_frame
-    └── imu_link                        /imu in oak mode
-```
+Orientation is roll and pitch after the full NED/FRD to ENU/FLU conversion, with yaw set to zero. `orientation_covariance` is diagonal: roll and pitch use `orientation_stddev` squared (default 0.02 rad), and yaw uses `yaw_variance` (default 1e3 rad²). RTAB-Map then takes gravity from the quaternion and ignores heading. That avoids a yaw feedback loop when EKF2's yaw comes from RTAB-Map in vision mode.
 
-`px4` uses that same tree. `/imu` is stamped in `base_link`, and RTAB-Map rotates it into the camera optical frame through TF. The relay converts PX4 FRD/NED specific force, gyro, and attitude into FLU/ENU. At rest the z acceleration is about +9.81 m/s².
+Gyro and specific force stay in the body frame and map FRD to FLU as `(x, -y, -z)`. At rest the z acceleration is about +9.81 m/s².
+
+The relay logs the measured `sensor_combined` input rate in sim time and warns below 100 Hz. RTAB-Map's IMU path wants 100 Hz or more. The `px4` preflight minimum is that same 100 Hz.
 
 Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
 
