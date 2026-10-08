@@ -45,7 +45,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 Component versions (PX4, px4_msgs, XRCE agent, ROS distro) live in [versions.env](versions.env). `.env` only pins the image you pull and the runtime knobs.
 
-Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build both images and do not push them. The GPU job checks image contents only. Headless smoke and the out-and-back flight stay on a manual or nightly run. Point `PX4_IMAGE` at a published tag when you want to run that build.
+Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only and do not push it. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. Point `PX4_IMAGE` at a published tag when you want to run that build.
 
 ### Compose profiles
 
@@ -165,13 +165,15 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 ## CI and local tests
 
-Pull requests run lint, colcon, the CPU image build, the GPU image build, and a headless flight. Nothing is pushed from a pull request. The GPU job stops after the image contents check. It does not start Gazebo.
+Pull requests run lint, colcon, the CPU image build, and two headless flights on that image. Nothing is pushed from a pull request. The GPU image is not built on a pull request. There is no GPU flight.
 
-The pull-request flight uses the plain `x500` model (`CameraType=none`, `PX4_GZ_MODEL=x500`) so physics can run without a camera renderer. It takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. Grading uses the Gazebo model pose when `/ground_truth/odom` is absent, and the log includes the PX4 `vehicle_local_position` error against that pose. If `px4_control.Drone` imports, that API flies the same mission.
+The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). The second flight uses `x500_depth` with `CameraType=rgbd` and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. Both flights share one image load inside the `flight_test` job, because a second job would build the image again.
+
+Each flight takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. Grading uses the Gazebo model pose when `/ground_truth/odom` is absent, and the log includes the PX4 `vehicle_local_position` error against that pose. `logs/flights/*/trajectory.json` also stores the Gazebo real-time factor and, for the camera flight, each camera topic's rate, mean, and variance. If `px4_control.Drone` imports, that API flies the same mission.
 
 A crash (tilt past about 60°, a ground impact, an unexpected disarm, failsafe, or land, pose far from the setpoint, or a few seconds without odometry) records the reason and restarts the PX4 container. `E2E_MAX_RETRIES` (default 2) is how many restarts are allowed after the first try. The run fails when every attempt crashes. Thresholds are the `E2E_*` keys in `.env`.
 
-Nightly keeps the 1.0 m leg and the depth-camera model (`x500_depth`) on a self-hosted runner. Camera smoke still needs a machine that can render.
+Nightly keeps the 1.0 m leg and the depth-camera model (`x500_depth`) on a self-hosted runner.
 
 ```bash
 # Static checks
@@ -179,13 +181,17 @@ Nightly keeps the 1.0 m leg and the depth-camera model (`x500_depth`) on a self-
 docker compose -f docker-compose-px4.yml config -q
 docker compose -f docker-compose-px4-GPU.yml config -q
 
-# Headless smoke against a local or pulled image. Needs a renderer for cameras.
+# Headless smoke against a local or pulled image.
 HEADLESS=1 RTABMAPVIZ=false ./scripts/smoke_test.sh "${PX4_IMAGE}"
 
-# Flight-only out-and-back, same shape as the pull-request job.
+# Fast out-and-back, same shape as the first pull-request flight.
 CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
 
-# Full camera model. Needs a renderer.
+# Camera model on Mesa llvmpipe. Software RTF is well below 1.
+CameraType=rgbd PX4_GZ_MODEL=x500_depth GZ_HEADLESS_RENDERING=1 \
+  E2E_CHECK_CAMERAS=1 E2E_WALL_SCALE=3 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
+
+# Nightly shape: depth camera and a 1 m leg, on a machine that can render.
 CameraType=rgbd PX4_GZ_MODEL=x500_depth E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
 ```
 

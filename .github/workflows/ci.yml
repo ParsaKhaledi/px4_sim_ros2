@@ -80,7 +80,7 @@ jobs:
           set -euo pipefail
           hadolint dockerFile/Dockerfile_px4_sim_NO_GPU dockerFile/Dockerfile_px4_sim_with_GPU
           shellcheck scripts/*.sh DockerBuild.sh
-          yamllint compose.yml compose.gpu.yml compose.gui.yml compose.ci.yml \
+          yamllint compose.yml compose.gpu.yml compose.gui.yml compose.ci.yml compose.xvfb.yml \
             docker-compose-px4.yml docker-compose-px4-GPU.yml \
             HealthCheck/checks .github/workflows .github/actions
           actionlint
@@ -106,6 +106,7 @@ jobs:
           docker compose -f compose.yml -f compose.gpu.yml config -q
           docker compose -f compose.yml -f compose.gui.yml config -q
           docker compose -f compose.yml -f compose.ci.yml config -q
+          docker compose -f compose.yml -f compose.ci.yml -f compose.xvfb.yml config -q
           docker compose -f compose.yml -f compose.gpu.yml -f compose.gui.yml config -q
           docker compose -f compose.yml -f compose.ci.yml --profile slam --profile nav config -q
           docker compose -f docker-compose-px4.yml --profile gcs --profile slam --profile nav config -q
@@ -155,7 +156,8 @@ jobs:
     secrets: inherit
 
   # Separate runner, so it builds the CPU image again from the cache
-  # and loads it locally. No push. Plain x500, no camera render, no GPU.
+  # and loads it locally. No push. Plain x500, then the camera model
+  # on Mesa llvmpipe. No GPU.
   flight_test:
     needs: build
     uses: ./.github/workflows/_build.yml
@@ -167,7 +169,9 @@ jobs:
     secrets: inherit
 
   # Image and contents check only. No Gazebo, smoke, or flight.
+  # Skipped on pull requests so CI does not spend a runner on the GPU image.
   build_gpu:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     needs: lint
     uses: ./.github/workflows/_build.yml
     with:

@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "e2e"))
 from gz_pose import (  # noqa: E402
     ned_from_enu,
     parse_pose_v,
+    parse_rtf,
     px4_gt_error_m,
     setpoint_world,
     tilt_deg,
@@ -76,3 +77,9 @@ def test_tilt_of_a_rolled_body():
     # 90 degree roll about x: quaternion x=sin(45), w=cos(45).
     half = 0.70710678118
     assert tilt_deg(half, 0.0, 0.0, half) > 80
+
+
+def test_parse_rtf_reads_the_stats_line():
+    text = "iterations: 10\nreal_time_factor: 0.42\n"
+    assert parse_rtf(text) == 0.42
+    assert parse_rtf("no stats here") is None

@@ -19,10 +19,12 @@ import time
 
 from crash_monitor import crash_reason, load_crash_thresholds
 from grading import grade_mission, load_thresholds, yaw_from_quat
+from camera_check import CameraTracker, rtf_summary
 from gz_pose import (
     error_stats,
     gazebo_env,
     parse_pose_v,
+    parse_rtf,
     px4_gt_error_m,
     setpoint_world,
     tilt_deg,
@@ -37,7 +39,7 @@ class FlightCrash(Exception):
         self.samples = samples or []
 
     def payload(self, thresholds, driver: str) -> dict:
-        return {
+        data = {
             "status": "crashed",
             "passed": False,
             "driver": driver,
@@ -49,6 +51,10 @@ class FlightCrash(Exception):
             "px4_position_error_m": error_stats(self.samples),
             "thresholds": _threshold_dump(thresholds),
         }
+        extra = getattr(self, "extra", None)
+        if isinstance(extra, dict):
+            data.update(extra)
+        return data
 
 
 class FlightSetupError(Exception):
@@ -93,6 +99,22 @@ def read_gz_pose(world: str, model: str, timeout_s: float = 2.0):
     except (OSError, subprocess.TimeoutExpired):
         return None
     return parse_pose_v((proc.stdout or "") + "\n" + (proc.stderr or ""), model)
+
+
+def read_gz_rtf(world: str, timeout_s: float = 1.0):
+    topic = f"/world/{world}/stats"
+    try:
+        proc = subprocess.run(
+            ["gz", "topic", "-e", "-n", "1", "-t", topic],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            env=gazebo_env(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return parse_rtf((proc.stdout or "") + "\n" + (proc.stderr or ""))
 
 
 class FlightWatch:
@@ -143,6 +165,13 @@ class FlightWatch:
         self._types = {}
         self.world = os.environ.get("World") or "default"
         self.model = os.environ.get("E2E_GZ_MODEL") or os.environ.get("PX4_GZ_MODEL") or "x500"
+        scale = float(os.environ.get("E2E_WALL_SCALE") or "1")
+        self.wall_scale = scale if scale > 0 else 1.0
+        self.check_cameras = os.environ.get("E2E_CHECK_CAMERAS", "0") == "1"
+        min_variance = float(os.environ.get("E2E_CAMERA_MIN_VARIANCE") or "1")
+        self.cameras = CameraTracker(min_variance=min_variance) if self.check_cameras else None
+        self.rtf_samples = []
+        self._rtf_wall = 0.0
 
     def set_phase(self, phase: str) -> None:
         with self._lock:
@@ -258,6 +287,16 @@ class FlightWatch:
             node.create_subscription(Odometry, "/ground_truth/odom", self._on_odom, qos_sub)
         except ImportError:
             pass
+        if self.cameras is not None:
+            from sensor_msgs.msg import Image
+
+            for topic in self.cameras.required:
+                node.create_subscription(
+                    Image,
+                    topic,
+                    lambda msg, name=topic: self._on_image(name, msg),
+                    qos_sub,
+                )
         self._gz_thread = threading.Thread(target=self._gz_loop, daemon=True)
         self._gz_thread.start()
         if self.commanding:
@@ -291,14 +330,39 @@ class FlightWatch:
 
     def _gz_loop(self) -> None:
         while not self._stop.is_set():
-            if self._odom_msg is not None:
-                time.sleep(0.2)
-                continue
-            pose = read_gz_pose(self.world, self.model, timeout_s=1.0)
-            if pose is not None:
-                self._gz = pose
-                self._gz_wall = time.monotonic()
+            if self._odom_msg is None:
+                pose = read_gz_pose(self.world, self.model, timeout_s=1.0)
+                if pose is not None:
+                    self._gz = pose
+                    self._gz_wall = time.monotonic()
+            now = time.monotonic()
+            if now - self._rtf_wall >= 5.0:
+                self._rtf_wall = now
+                rtf = read_gz_rtf(self.world, timeout_s=1.0)
+                if rtf is not None:
+                    self.rtf_samples.append(rtf)
             time.sleep(0.05)
+
+    def _on_image(self, topic: str, msg) -> None:
+        if self.cameras is None:
+            return
+        self.cameras.add(
+            topic,
+            str(getattr(msg, "encoding", "")),
+            int(getattr(msg, "width", 0)),
+            int(getattr(msg, "height", 0)),
+            bytes(getattr(msg, "data", b"")),
+            time.monotonic(),
+        )
+
+    def sensor_fields(self) -> dict:
+        fields = {"gz_rtf": rtf_summary(self.rtf_samples)}
+        if self.cameras is None:
+            return fields
+        report = self.cameras.report()
+        fields["cameras"] = report
+        fields["camera_reason"] = report.get("reason")
+        return fields
 
     def _spin_monitor(self) -> None:
         while not self._stop.is_set():
@@ -560,6 +624,7 @@ class FlightWatch:
         return True
 
     def _wait_until(self, predicate, sim_timeout: float, wall_timeout: float, finish_on_sim: bool = False) -> bool:
+        wall_timeout = wall_timeout * self.wall_scale
         start_sim = self._sim_s()
         start_wall = time.monotonic()
         if self._phase_sim is None:
@@ -689,6 +754,12 @@ class FlightWatch:
         graded["track"] = self.samples
         graded["px4_position_error_m"] = error_stats(self.samples)
         graded["crash_reason"] = self.crash
+        graded.update(self.sensor_fields())
+        camera_report = graded.get("cameras") or {}
+        if self.cameras is not None and not camera_report.get("passed") and not crashed:
+            graded["status"] = "failed"
+            graded["passed"] = False
+            graded["checks"] = list(graded.get("checks") or []) + list(camera_report.get("checks") or [])
         if crashed:
             graded["status"] = "crashed"
             graded["passed"] = False
@@ -701,4 +772,5 @@ def run_px4_mission(thresholds=None) -> dict:
         return watch.run()
     except FlightCrash as exc:
         exc.samples = watch.samples
+        exc.extra = watch.sensor_fields()
         raise

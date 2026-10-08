@@ -184,6 +184,20 @@ def match_score(name: str, wanted: str) -> int:
     return 0
 
 
+def parse_rtf(text: str) -> float | None:
+    """Pull real_time_factor out of `gz topic` text for /world/<name>/stats."""
+
+    for line in text.splitlines():
+        if "real_time_factor" not in line or ":" not in line:
+            continue
+        raw = line.split(":", 1)[1].strip()
+        try:
+            return float(raw)
+        except ValueError:
+            continue
+    return None
+
+
 def parse_pose_v(text: str, model_name: str) -> dict | None:
     """Pick the vehicle pose out of a `gz.msgs.Pose_V` text dump."""
 

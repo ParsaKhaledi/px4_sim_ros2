@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "e2e"))
 
-from report import build_report, crash_reset_count, write_stub  # noqa: E402
+from report import build_report, crash_reset_count, needs_render_fallback, write_stub  # noqa: E402
 from test_out_and_back import driver_name  # noqa: E402
 
 
@@ -39,6 +39,27 @@ def test_every_attempt_crashed():
         "low_altitude",
         "odometry_timeout",
     ]
+
+
+def test_blank_frames_ask_for_the_xvfb_fallback():
+    attempts = [
+        {
+            "attempt": 1,
+            "status": "failed",
+            "passed": False,
+            "camera_reason": "blank_camera",
+            "gz_rtf": {"mean": 0.4, "min": 0.3, "max": 0.5, "samples": 4},
+        }
+    ]
+    report = build_report(attempts)
+    assert report["camera_reason"] == "blank_camera"
+    assert report["gz_rtf"]["mean"] == 0.4
+    assert needs_render_fallback(attempts)
+
+
+def test_a_crash_does_not_switch_renderers():
+    attempts = [{"attempt": 1, "status": "crashed", "crash_reason": "tilt", "camera_reason": "no_camera_frames"}]
+    assert not needs_render_fallback(attempts)
 
 
 def test_stub_for_a_killed_attempt(tmp_path):

@@ -152,8 +152,9 @@ jobs:
         with:
           name: smoke-${{ inputs.variant }}-${{ github.sha }}
 
-      # Plain x500, no cameras. The GPU job never sets run_flight.
-      - name: Flight test
+      # Both flights share this loaded image. A second job would build it again.
+      # The GPU job never sets run_flight.
+      - name: Flight test (plain x500)
         if: inputs.run_flight && inputs.variant == 'no-gpu'
         env:
           PX4_IMAGE: px4_sim:ci-${{ github.sha }}
@@ -167,11 +168,38 @@ jobs:
           COMPOSE_SERVICES: PX4
           E2E_LEG_LENGTH_M: "0.3"
           E2E_MAX_RETRIES: "2"
+          E2E_CHECK_CAMERAS: "0"
+          E2E_WALL_SCALE: "1"
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "0"
+          E2E_FLIGHT_DIR: ${{ github.workspace }}/logs/flights/x500
           SMOKE_TEST_TIMEOUT: "900"
         run: ./scripts/run_e2e.sh
 
+      - name: Flight test (x500_depth, software rendering)
+        if: always() && !cancelled() && inputs.run_flight && inputs.variant == 'no-gpu' && steps.meta.outcome == 'success'
+        env:
+          PX4_IMAGE: px4_sim:ci-${{ github.sha }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: rgbd
+          World: default
+          PX4_GZ_MODEL: x500_depth
+          COMPOSE_PROFILES: ""
+          COMPOSE_SERVICES: PX4
+          E2E_LEG_LENGTH_M: "0.3"
+          E2E_MAX_RETRIES: "2"
+          E2E_CHECK_CAMERAS: "1"
+          E2E_WALL_SCALE: "3"
+          E2E_FLIGHT_DIR: ${{ github.workspace }}/logs/flights/camera
+          GZ_HEADLESS_RENDERING: "1"
+          GZ_USE_XVFB: "0"
+          SMOKE_TEST_TIMEOUT: "1200"
+        run: ./scripts/run_e2e.sh
+
       - name: Flight artifacts
-        if: always() && inputs.run_flight && inputs.variant == 'no-gpu'
+        if: always() && !cancelled() && inputs.run_flight && inputs.variant == 'no-gpu'
         uses: ./.github/actions/collect-artifacts
         with:
           name: flight-${{ github.sha }}

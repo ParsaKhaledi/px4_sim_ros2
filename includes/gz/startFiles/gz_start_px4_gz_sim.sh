@@ -15,6 +15,50 @@ cd "${HOME}/PX4-Autopilot" || exit 1
 
 export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
 
+# Camera models need a render even when HEADLESS=1. PX4 then starts
+# `gz sim -s`, which has no GUI. Mesa llvmpipe supplies the GL driver.
+# GZ_HEADLESS_RENDERING=1 adds Gazebo's EGL flag. GZ_USE_XVFB=1 is the
+# fallback when those frames come out blank.
+if [ "${GZ_USE_XVFB:-0}" = "1" ]; then
+    export DISPLAY="${DISPLAY:-:99}"
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export GALLIUM_DRIVER=llvmpipe
+    display_number="${DISPLAY#:}"
+    if [ ! -S "/tmp/.X11-unix/X${display_number}" ]; then
+        Xvfb "${DISPLAY}" -screen 0 1280x1024x24 >/tmp/xvfb.log 2>&1 &
+        waited=0
+        while [ ! -S "/tmp/.X11-unix/X${display_number}" ] && [ "${waited}" -lt 20 ]; do
+            sleep 0.25
+            waited=$((waited + 1))
+        done
+    fi
+elif [ "${GZ_HEADLESS_RENDERING:-0}" = "1" ]; then
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export GALLIUM_DRIVER=llvmpipe
+    export EGL_PLATFORM=surfaceless
+    mkdir -p /tmp/gz-bin
+    cat > /tmp/gz-bin/gz << 'EOF'
+#!/bin/sh
+# PX4 launches `gz sim -s`. Add EGL rendering for camera sensors.
+if [ "$1" = "sim" ]; then
+    shift
+    query=0
+    for arg in "$@"; do
+        case "$arg" in
+            --versions|--help|-h|-g) query=1 ;;
+        esac
+    done
+    if [ "$query" = "1" ]; then
+        exec /usr/bin/gz sim "$@"
+    fi
+    exec /usr/bin/gz sim --headless-rendering "$@"
+fi
+exec /usr/bin/gz "$@"
+EOF
+    chmod +x /tmp/gz-bin/gz
+    export PATH="/tmp/gz-bin:${PATH}"
+fi
+
 if [ "${WORLD}" = "default" ] || [ -z "${WORLD}" ]; then
     make px4_sitl "gz_${MODEL}"
 else

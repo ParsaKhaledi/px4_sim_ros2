@@ -185,6 +185,8 @@ def main() -> int:
         "driver": result.get("driver"),
         "checks": result.get("checks"),
         "px4_position_error_m": result.get("px4_position_error_m"),
+        "gz_rtf": result.get("gz_rtf"),
+        "cameras": result.get("cameras"),
     }
     print(json.dumps(summary, indent=2))
     return 0 if result.get("passed") else 1

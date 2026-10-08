@@ -127,6 +127,19 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
 	echo "source ${WORKDIR}/install/setup.bash" >> ~/.bashrc 
 	# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
+# Mesa llvmpipe and Xvfb, after the PX4 build so this layer does not
+# rebuild the firmware. Camera flights render with EGL or a virtual display.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1-mesa-dri \
+        libegl-mesa0 \
+        libglx-mesa0 \
+        libgl1 \
+        libegl1 \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/*
+USER ${USER_NAME}
+
 ### Finilize
 WORKDIR ${WORKDIR}
 

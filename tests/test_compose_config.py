@@ -28,6 +28,7 @@ def test_every_compose_file_parses():
         ("compose.yml", "compose.gpu.yml"),
         ("compose.yml", "compose.gui.yml"),
         ("compose.yml", "compose.ci.yml"),
+        ("compose.yml", "compose.ci.yml", "compose.xvfb.yml"),
         ("compose.yml", "compose.gpu.yml", "compose.gui.yml"),
         ("docker-compose-px4.yml",),
         ("docker-compose-px4-GPU.yml",),
@@ -60,6 +61,8 @@ def test_ci_override_is_headless():
         assert str(env["HEADLESS"]) == "1"
         assert str(env["RTABMAPVIZ"]) == "false"
         assert env["DISPLAY"] == ""
+        assert str(env["GZ_HEADLESS_RENDERING"]) == "0"
+        assert str(env["GZ_USE_XVFB"]) == "0"
         targets = []
         for volume in service.get("volumes") or []:
             if isinstance(volume, str):
@@ -68,3 +71,13 @@ def test_ci_override_is_headless():
                 targets.append(volume.get("source", ""))
                 targets.append(volume.get("target", ""))
         assert not any(item in ("/dev", "/dev/", "/tmp/.X11-unix") or str(item).endswith("/dev") for item in targets)
+
+
+def test_xvfb_override_replaces_the_empty_display():
+    rendered = _config("compose.yml", "compose.ci.yml", "compose.xvfb.yml")
+    env = rendered["services"]["PX4"]["environment"]
+    assert env["DISPLAY"] == ":99"
+    assert str(env["GZ_USE_XVFB"]) == "1"
+    assert str(env["GZ_HEADLESS_RENDERING"]) == "0"
+    assert str(env["LIBGL_ALWAYS_SOFTWARE"]) == "1"
+    assert env["GALLIUM_DRIVER"] == "llvmpipe"
