@@ -104,7 +104,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
-Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation. Headless Gazebo, sim time, ground truth, offline worlds, wall maps, trajectory scoring, and preflight checks are described in [docs/simulation.md](docs/simulation.md).
 
 Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
 

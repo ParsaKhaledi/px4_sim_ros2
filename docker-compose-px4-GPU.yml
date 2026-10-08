@@ -22,6 +22,12 @@ services:
       DISPLAY: ${DISPLAY}
       XAUTHORITY: ${XAUTH}
       CameraType: ${CameraType}
+      HEADLESS: ${HEADLESS:-0}
+      HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}
+      PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:-}
+      USE_SIM_TIME: ${USE_SIM_TIME:-true}
+      PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-0.8}
+      PREFLIGHT_MAX_POSE_ERR_M: ${PREFLIGHT_MAX_POSE_ERR_M:-0.10}
         
     volumes:
       - /tmp/.X11-unix/:/tmp/.X11-unix/

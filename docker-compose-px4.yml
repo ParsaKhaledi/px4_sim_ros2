@@ -33,6 +33,20 @@ services:
         CameraType: ${CameraType:-rgbd}
         World: ${World:-default}
         XRCE_DDS_AGENT_IP: "10.20.10.7"
+        HEADLESS: ${HEADLESS:-0}
+        HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}
+        HEADLESS_SOFTWARE: ${HEADLESS_SOFTWARE:-0}
+        PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:-}
+        USE_SIM_TIME: ${USE_SIM_TIME:-true}
+        PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-0.8}
+        PREFLIGHT_MAX_POSE_ERR_M: ${PREFLIGHT_MAX_POSE_ERR_M:-0.10}
+        PREFLIGHT_MIN_CAMERA_HZ: ${PREFLIGHT_MIN_CAMERA_HZ:-5}
+        PREFLIGHT_MIN_IMU_HZ: ${PREFLIGHT_MIN_IMU_HZ:-10}
+        PREFLIGHT_MIN_GT_HZ: ${PREFLIGHT_MIN_GT_HZ:-20}
+        PREFLIGHT_CLOCK_MAX_AGE_S: ${PREFLIGHT_CLOCK_MAX_AGE_S:-1.0}
+        PREFLIGHT_CAMERA_TOPIC: ${PREFLIGHT_CAMERA_TOPIC:-/camera/rgb/image_raw}
+        PREFLIGHT_IMU_TOPIC: ${PREFLIGHT_IMU_TOPIC:-/imu/data}
+        PREFLIGHT_GT_TOPIC: ${PREFLIGHT_GT_TOPIC:-/ground_truth/odom}
           
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
@@ -268,7 +282,7 @@ services:
       # command: /bin/bash -c "sleep inf"
 
       command: /bin/bash -c "
-        ros2 launch nav2_bringup navigation_launch.py \
+        ros2 launch nav2_bringup navigation_launch.py use_sim_time:=${USE_SIM_TIME:-true} \
         params_file:=/home/px4/volume/Params/nav2/nav2_params.yaml"
         
 

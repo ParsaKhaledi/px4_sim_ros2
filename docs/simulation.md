@@ -1,0 +1,145 @@
+# Simulation
+
+Gazebo Harmonic (gz) runs inside the PX4 container. Worlds and models under `includes/gz/` are copied into the PX4 tree at container start, so these files do not need an image rebuild.
+
+## Frames
+
+| Name | Axes | Used for |
+|------|------|----------|
+| ENU world | x east, y north, z up | Gazebo world, `/ground_truth/odom`, spawn TF, wall maps |
+| FLU body | x forward, y left, z up | ROS `base_link`, RTAB-Map odometry |
+| NED world | x north, y east, z down | PX4 local position (`vehicle_odometry.position`) |
+| FRD body | x forward, y right, z down | PX4 attitude (`vehicle_odometry.q`, body to NED) |
+
+`/ground_truth/odom` is the Gazebo model pose in ENU. PX4 `vehicle_odometry` is converted to ENU/FLU before it is compared with ground truth: position `(east, north, up) = (ned_y, ned_x, -ned_z)`, and the quaternion is the px4_ros_com NED/FRD to ENU/FLU rotation. GPS latitude/longitude/altitude is converted to metres in an ENU frame whose origin is the first fix.
+
+The static TF `world` -> `spawn` is the spawn pose, so a pose can be expressed relative to the takeoff point by transforming through `spawn`.
+
+## Headless Gazebo
+
+`HEADLESS=0` (the default) starts the gz server and the gz GUI. The GUI needs `DISPLAY` and `xhost`.
+
+`HEADLESS=1` starts only the server. PX4 already passes `-s` and skips `gz sim -g`. A small `gz` wrapper adds `--headless-rendering` so camera sensors still render through EGL, with no X server. Set `HEADLESS_BACKEND=xvfb` to use a virtual X display instead (the image must contain `Xvfb`). Set `HEADLESS_SOFTWARE=1` to force Mesa software OpenGL on a machine with no GPU.
+
+```bash
+HEADLESS=1 CameraType=rgbd World=default ./scripts/up.sh
+```
+
+`HEADLESS`, `HEADLESS_BACKEND`, and `HEADLESS_SOFTWARE` are in `.env.example` and are passed into the PX4 service by `docker-compose-px4.yml`.
+
+## Sim time
+
+Nav2 (`navigation_launch.py` and `start_nav2.sh`), Nav2 RViz, the x500 `robot_state_publisher`, and the ros_gz bridge use sim time. The bridge publishes `/clock` from Gazebo. Override with `USE_SIM_TIME=false`. RTAB-Map launch scripts are owned by the vision work and are not changed here.
+
+## Real-time factor
+
+`sim_monitor.real_time_factor` reads `/world/<name>/stats` and publishes `std_msgs/Float64` on `/sim/real_time_factor`. It also logs the value about once every five seconds. The bridge script starts this node.
+
+## Ground truth and the spawn frame
+
+`patch_x500_ground_truth.py` adds a Gazebo `OdometryPublisher` to `x500_depth` before SITL starts. The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`. `config_gz_bridge_sim.yaml` bridges it to `nav_msgs/Odometry`.
+
+* `header.frame_id`: `world` (ENU)
+* `child_frame_id`: `base_link`
+* stamp: Gazebo sim time
+
+`PX4_GZ_MODEL_POSE` (default `-3,-1.6,0,0,0,3.14`, x,y,z,roll,pitch,yaw in radians) is the spawn pose. `sim_monitor.spawn_frame` publishes static TF `world` -> `spawn` from that value, and TF `world` -> `base_link` from `/ground_truth/odom`.
+
+If the variable is unset, `gz_start_px4_gz_sim.sh` fills in the default. Compose forwards `PX4_GZ_MODEL_POSE` when `.env` sets it, which matches the devops change that moves the pose into `.env`.
+
+## Offline models
+
+`husarion_office.sdf` referenced Fuel meshes, and `sonoma_raceway.sdf` included the Sonoma Raceway model from Fuel. `includes/gz/scripts/fuel_assets.py` downloads those files into `includes/gz/models/` and rewrites the URIs to `model://`. The committed worlds do not contact Fuel at runtime.
+
+```bash
+python3 includes/gz/scripts/check_offline_worlds.py
+python3 includes/gz/scripts/fuel_assets.py   # re-download if a world gains a Fuel URI
+```
+
+The check fails if any world under `includes/gz/worlds/` still contains `fuel.gazebosim.org` or `fuel.ignitionrobotics.org`.
+
+Fuel furniture models keep their upstream licence (see each `model.config` when Fuel provided one). The Sonoma Raceway model is CC0.
+
+## Wall maps
+
+`includes/gz/scripts/wall_geometry.py` slices each world's collision geometry with a horizontal plane at `z = 0.5 m` and writes `includes/gz/walls/<world>.json`.
+
+```json
+{
+  "world": "apt_world",
+  "frame": "world_enu",
+  "units": "m",
+  "slice_z_m": 0.5,
+  "segment_count": 0,
+  "segments": [
+    {"start": [0.0, 0.0], "end": [1.0, 0.0], "source": "model/link/collision", "kind": "box"}
+  ]
+}
+```
+
+`start` and `end` are `[x, y]` in the Gazebo ENU world, in metres. `kind` is `box`, `cylinder`, or `mesh`. Shapes shorter than 0.25 m (floors) are skipped. Segments shorter than 5 cm are dropped. `unresolved_uris` lists meshes that were not on disk. A control node can compute the distance from a point to the nearest segment.
+
+Regenerate with:
+
+```bash
+python3 includes/gz/scripts/wall_geometry.py
+```
+
+## trajectory_eval
+
+Package: `includes/gz/sim_ws/src/trajectory_eval`. It does not need `colcon` for the math; the container can run it with `PYTHONPATH` pointed at the package.
+
+Recorded streams, all in ENU metres:
+
+| Name | Source |
+|------|--------|
+| `ground_truth` | `/ground_truth/odom` |
+| `gps` | `/fmu/out/vehicle_gps_position` (or `vehicle_gps_position_vN`), WGS84 to ENU about the first fix |
+| `rtabmap` | `/rtabmap/odom` |
+| `ekf2` | `/fmu/out/vehicle_odometry` (or a versioned name), NED/FRD to ENU/FLU |
+
+Topics are flags (`--gt-topic`, `--gps-topic`, `--rtabmap-topic`, `--ekf-topic`). Live recording uses the node clock, so `use_sim_time` puts every stamp on the sim timeline. A rosbag is read with its recorded timestamps.
+
+```bash
+export PYTHONPATH=includes/gz/sim_ws/src/trajectory_eval
+python3 -m trajectory_eval record --duration 20 --output /tmp/traj
+python3 -m trajectory_eval bag --bag /path/to/bag --output /tmp/traj
+python3 -m trajectory_eval offline --ground-truth gt.tum --rtabmap rtab.tum --ekf ekf.tum --output /tmp/traj
+```
+
+Each stream is written as a TUM file (`timestamp tx ty tz qx qy qz qw`) for evo. Estimates are resampled onto ground-truth stamps before scoring. `metrics.json` and `metrics.csv` contain:
+
+* absolute trajectory error RMS, mean, and max, unaligned relative to takeoff (each trajectory minus its first position) and after an SE(3) alignment with scale fixed at 1
+* relative pose error on ground-truth segments of 1 m and 5 m, as metres, metres per metre, and percent of distance (null when the path is shorter than the segment)
+* final position error, both ways
+* height error and yaw error (absolute, and with the initial yaw removed). GPS yaw is omitted because a fix has no body heading.
+* GPS versus ground truth: residual RMS and per-axis mean and standard deviation
+
+`trajectories_xy.png` and `ate_unaligned.png` are written when matplotlib is installed.
+
+Unit tests cover the frame conversions, the geodetic conversion, alignment, and the metrics:
+
+```bash
+python3 -m pytest includes/gz/sim_ws/src/trajectory_eval/test includes/gz/sim_ws/src/sim_monitor/test includes/gz/scripts/test_wall_geometry.py includes/gz/scripts/test_offline_worlds.py
+```
+
+## Preflight
+
+`sim_monitor.preflight_check` serves `/sim/preflight_check` (`std_srvs/Trigger`). `success` is true only when every line passes. `message` is the reason list, one check per line, each starting with `PASS` or `FAIL`.
+
+Checks:
+
+* `/sim/real_time_factor` >= `PREFLIGHT_MIN_RTF` (default 0.8) and `/clock` is fresh and advancing
+* camera, IMU, and `/ground_truth/odom` rates (`PREFLIGHT_MIN_CAMERA_HZ` 5, `PREFLIGHT_MIN_IMU_HZ` 10, `PREFLIGHT_MIN_GT_HZ` 20)
+* RTAB-Map `/rtabmap/odom_info` has `lost=false`, and the RTAB-Map pose relative to its start is within `PREFLIGHT_MAX_POSE_ERR_M` (default 0.10 m) of ground truth relative to its start
+* PX4 `pre_flight_checks_pass` on `vehicle_status` or `vehicle_status_vN` (highest version)
+* EKF2 external-vision fusion: any of `cs_ev_pos`, `cs_ev_vel`, `cs_ev_hgt`, `cs_ev_yaw` on `estimator_status_flags` or a versioned name
+* TF pairs in `PREFLIGHT_TF_PAIRS` (default `world:spawn,world:base_link,base_link:camera_rgb_frame,base_link:imu_link`)
+
+Thresholds are environment variables, listed in `.env.example` and forwarded by Compose. The bridge script starts the service next to the real-time-factor publisher and the spawn frame.
+
+```bash
+ros2 service call /sim/preflight_check std_srvs/srv/Trigger
+```
+
+IMU is bridged from gz `/imu/data` in `config_gz_bridge_sim.yaml`. Camera image topics stay in `config_gz_bridge.yaml`.

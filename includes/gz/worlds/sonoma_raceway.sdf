@@ -43,7 +43,7 @@
 
     <include>
       <pose>-290 142 -7.2 0 0 0</pose>
-      <uri>https://fuel.ignitionrobotics.org/1.0/openrobotics/models/Sonoma Raceway</uri>
+      <uri>model://sonoma_raceway</uri>
     </include>
 
   </world>

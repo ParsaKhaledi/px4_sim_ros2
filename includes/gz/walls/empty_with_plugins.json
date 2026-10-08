@@ -1,0 +1,12 @@
+{
+  "world": "empty_with_plugins",
+  "frame": "world_enu",
+  "units": "m",
+  "slice_z_m": 0.5,
+  "min_height_m": 0.25,
+  "min_segment_m": 0.05,
+  "description": "2D line segments where collision geometry crosses slice_z_m. Coordinates are Gazebo world ENU metres (x east, y north). A control node can compute distance from a point to the nearest segment.",
+  "segment_count": 0,
+  "unresolved_uris": [],
+  "segments": []
+}

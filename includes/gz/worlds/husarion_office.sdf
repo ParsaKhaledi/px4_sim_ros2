@@ -130,14 +130,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/mopcart2/1/files/meshes/MopCart2.obj</uri>
+              <uri>model://mopcart2/meshes/MopCart2.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/mopcart2/1/files/meshes/MopCart2.obj</uri>
+              <uri>model://mopcart2/meshes/MopCart2.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -167,14 +167,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/mopcart3/1/files/meshes/MopCart3.obj</uri>
+              <uri>model://mopcart3/meshes/MopCart3.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/mopcart3/1/files/meshes/MopCart3.obj</uri>
+              <uri>model://mopcart3/meshes/MopCart3.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -255,14 +255,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -292,14 +292,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -329,14 +329,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -366,14 +366,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -403,14 +403,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -440,14 +440,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3043,14 +3043,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3080,14 +3080,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3117,14 +3117,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3154,14 +3154,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3191,14 +3191,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3228,14 +3228,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3265,14 +3265,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3302,14 +3302,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3339,14 +3339,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3376,14 +3376,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3413,14 +3413,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3450,14 +3450,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3487,14 +3487,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/adjtable/3/files/meshes/AdjTable_Col.obj</uri>
+              <uri>model://adjtable/meshes/AdjTable_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3524,14 +3524,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/bathroomsink/1/files/meshes/BathroomSink.obj</uri>
+              <uri>model://bathroomsink/meshes/BathroomSink.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/bathroomsink/1/files/meshes/BathroomSink_Col.obj</uri>
+              <uri>model://bathroomsink/meshes/BathroomSink_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3583,7 +3583,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3623,7 +3623,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3663,7 +3663,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3703,7 +3703,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3743,7 +3743,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3783,7 +3783,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3823,7 +3823,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3863,7 +3863,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3903,7 +3903,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/deskchair/1/files/meshes/DeskChair.obj</uri>
+              <uri>model://deskchair/meshes/DeskChair.obj</uri>
               <scale>0.01 0.01 0.01</scale>
             </mesh>
           </geometry>
@@ -3920,7 +3920,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/toilet/1/files/meshes/toilet.obj</uri>
+              <uri>model://toilet/meshes/toilet.obj</uri>
               <scale>1.75 1.75 1.75</scale>
             </mesh>
           </geometry>
@@ -3928,7 +3928,7 @@
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/toilet/1/files/meshes/toilet.obj</uri>
+              <uri>model://toilet/meshes/toilet.obj</uri>
               <scale>1.75 1.75 1.75</scale>
             </mesh>
           </geometry>
@@ -3960,14 +3960,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -3997,14 +3997,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4034,14 +4034,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4071,14 +4071,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4108,14 +4108,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4145,14 +4145,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4217,7 +4217,7 @@
             </script>
             <pbr>
               <metal>
-                <albedo_map>https://fuel.gazebosim.org/1.0/openrobotics/models/table/3/files/Table_Diffuse.jpg</albedo_map>
+                <albedo_map>model://table/Table_Diffuse.jpg</albedo_map>
               </metal>
             </pbr>
           </material>
@@ -4422,7 +4422,7 @@
             </script>
             <pbr>
               <metal>
-                <albedo_map>https://fuel.gazebosim.org/1.0/openrobotics/models/table/3/files/Table_Diffuse.jpg</albedo_map>
+                <albedo_map>model://table/Table_Diffuse.jpg</albedo_map>
               </metal>
             </pbr>
           </material>
@@ -4592,14 +4592,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4629,14 +4629,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4666,14 +4666,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4703,14 +4703,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4740,14 +4740,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4777,14 +4777,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/woodenchair/1/files/meshes/WoodenChair_Col.obj</uri>
+              <uri>model://woodenchair/meshes/WoodenChair_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4814,14 +4814,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4851,14 +4851,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4888,14 +4888,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/trashbin/1/files/meshes/TrashBin.obj</uri>
+              <uri>model://trashbin/meshes/TrashBin.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4925,14 +4925,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4962,14 +4962,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -4999,14 +4999,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5036,14 +5036,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/officechairblack/1/files/meshes/OfficeChairBlack_Col.obj</uri>
+              <uri>model://officechairblack/meshes/OfficeChairBlack_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5072,7 +5072,7 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/coffeetable/1/files/meshes/CoffeeTable.obj</uri>
+              <uri>model://coffeetable/meshes/CoffeeTable.obj</uri>
               <scale>0.00817 0.00817 0.00817</scale>
             </mesh>
           </geometry>
@@ -5080,7 +5080,7 @@
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/coffeetable/1/files/meshes/CoffeeTable.obj</uri>
+              <uri>model://coffeetable/meshes/CoffeeTable.obj</uri>
               <scale>0.00817 0.00817 0.00817</scale>
             </mesh>
           </geometry>
@@ -5112,14 +5112,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5149,14 +5149,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf_Col.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5186,14 +5186,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf_Col.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5223,14 +5223,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/squareshelf/2/files/meshes/SquareShelf_Col.obj</uri>
+              <uri>model://squareshelf/meshes/SquareShelf_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5260,14 +5260,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5297,14 +5297,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5334,14 +5334,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5371,14 +5371,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/fridge/1/files/meshes/Fridge.obj</uri>
+              <uri>model://fridge/meshes/Fridge.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/fridge/1/files/meshes/Fridge_Col.obj</uri>
+              <uri>model://fridge/meshes/Fridge_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5408,14 +5408,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/fridge/1/files/meshes/Fridge.obj</uri>
+              <uri>model://fridge/meshes/Fridge.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/fridge/1/files/meshes/Fridge_Col.obj</uri>
+              <uri>model://fridge/meshes/Fridge_Col.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5445,14 +5445,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5482,14 +5482,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5519,14 +5519,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/whitecabinet/1/files/meshes/WhiteCabinet.obj</uri>
+              <uri>model://whitecabinet/meshes/WhiteCabinet.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5556,14 +5556,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5593,14 +5593,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5630,14 +5630,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5667,14 +5667,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5704,14 +5704,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5741,14 +5741,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5778,14 +5778,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5815,14 +5815,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5852,14 +5852,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5889,14 +5889,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -5926,14 +5926,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/drawer/1/files/meshes/Drawer.obj</uri>
+              <uri>model://drawer/meshes/Drawer.obj</uri>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>

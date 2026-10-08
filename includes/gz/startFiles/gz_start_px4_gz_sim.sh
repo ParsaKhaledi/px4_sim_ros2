@@ -1,21 +1,80 @@
 #!/bin/bash
+# Start PX4 SITL with Gazebo Harmonic.
+#
+# HEADLESS=1    no gz GUI and no X display. Cameras still render via EGL
+#               (--headless-rendering). GUI mode is the default.
+# HEADLESS_BACKEND=xvfb
+#               use Xvfb instead of EGL when the binary is installed.
+# HEADLESS_SOFTWARE=1
+#               force Mesa software GL (llvmpipe). Useful on a VM with no GPU.
+# PX4_GZ_MODEL_POSE
+#               spawn pose "x,y,z,roll,pitch,yaw" in the Gazebo ENU world.
+#               Default: -3,-1.6,0,0,0,3.14
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
-WORKDIR=/home/${USER_NAME}/ws_px4
 
 source /opt/ros/$ROS_DISTRO/setup.bash
 
 WORLD="${1:-default}"
 MODEL="x500_depth"
+DEFAULT_POSE="-3,-1.6,0,0,0,3.14"
+
+export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_GZ="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+python3 "${REPO_GZ}/scripts/patch_x500_ground_truth.py" || \
+  echo "WARN: could not patch x500_depth with the ground-truth plugin"
+
+export GZ_SIM_RESOURCE_PATH="${REPO_GZ}/models:${GZ_SIM_RESOURCE_PATH:-}"
+
+headless=0
+case "${HEADLESS:-0}" in
+  1|true|TRUE|yes|YES) headless=1 ;;
+esac
+
+if [ -z "${REAL_GZ:-}" ]; then
+  REAL_GZ="$(command -v gz || true)"
+  export REAL_GZ
+fi
+export PATH="${REPO_GZ}/bin:${PATH}"
+
+if [ "${headless}" = "1" ]; then
+  export HEADLESS=1
+  backend="${HEADLESS_BACKEND:-egl}"
+  if [ "${backend}" = "xvfb" ] && command -v Xvfb >/dev/null 2>&1; then
+    export HEADLESS_BACKEND=xvfb
+    export DISPLAY="${HEADLESS_DISPLAY:-:99}"
+    display_num="${DISPLAY#:}"
+    if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+      Xvfb "${DISPLAY}" -screen 0 1280x1024x24 -ac +extension GLX +render -noreset \
+        >/tmp/xvfb-gz.log 2>&1 &
+      sleep 0.3
+    fi
+    echo "Gazebo headless backend: Xvfb on ${DISPLAY}"
+  else
+    if [ "${backend}" = "xvfb" ]; then
+      echo "Xvfb is not installed; using EGL --headless-rendering"
+    fi
+    export HEADLESS_BACKEND=egl
+    unset DISPLAY
+    echo "Gazebo headless backend: EGL --headless-rendering (no GUI)"
+  fi
+  if [ "${HEADLESS_SOFTWARE:-0}" = "1" ]; then
+    export LIBGL_ALWAYS_SOFTWARE=1
+    echo "Gazebo headless: software rendering enabled"
+  fi
+else
+  echo "Gazebo GUI mode (set HEADLESS=1 to disable the GUI)"
+fi
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
-export PX4_GZ_MODEL_POSE="-3,-1.6,0,0,0,3.14"
-
 if [ "${WORLD}" = "default" ] || [ -z "${WORLD}" ]; then
-    make px4_sitl "gz_${MODEL}"
+  make px4_sitl "gz_${MODEL}"
 else
-    export PX4_GZ_WORLD="${WORLD}"
-    make px4_sitl "gz_${MODEL}_${WORLD}"
+  export PX4_GZ_WORLD="${WORLD}"
+  make px4_sitl "gz_${MODEL}_${WORLD}"
 fi
