@@ -1,7 +1,7 @@
 # Simulation topics added beside config_gz_bridge.yaml.
 # Camera image topics stay in config_gz_bridge.yaml.
-# /imu/data is the Oak-D topic name. If another branch also bridges it,
-# keep only one of the two entries.
+# The Oak-D model publishes gz topic /imu. RTAB-Map subscribes to ROS /imu.
+# Do not also bridge /imu from config_gz_bridge.yaml.
 
 - ros_topic_name: "/ground_truth/odom"
   gz_topic_name: "/ground_truth/odom"
@@ -9,8 +9,8 @@
   gz_type_name: "gz.msgs.Odometry"
   direction: GZ_TO_ROS
 
-- ros_topic_name: "/imu/data"
-  gz_topic_name: "/imu/data"
+- ros_topic_name: "/imu"
+  gz_topic_name: "/imu"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS

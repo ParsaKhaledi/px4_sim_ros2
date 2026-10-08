@@ -7,13 +7,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sim_monitor.checks import (
     RateTracker,
+    check_rate,
+    default_min_rtf,
+    expected_sensor_hz,
+    gated_rate_hz,
     match_versioned_topic,
+    minimum_rate_hz,
     parse_spawn_pose,
     quat_from_rpy,
     relative_position_error,
     summarize,
 )
-from sim_monitor.real_time_factor import iter_real_time_factors
+from sim_monitor.real_time_factor import iter_real_time_factors, parse_stats_message, windowed_rtf
 
 
 def test_spawn_pose_default():
@@ -56,6 +61,43 @@ def test_rate_tracker():
 
 
 def test_rtf_parser():
-    text = "sim_time {\n  sec: 2\n}\nreal_time_factor: 0.83\niterations: 10\n"
-    assert iter_real_time_factors(text) == 0.83
+    text = "sim_time {\n  sec: 2\n  nsec: 500000000\n}\nreal_time_factor: 0.03\niterations: 10\n"
+    assert iter_real_time_factors(text) == 0.03
     assert iter_real_time_factors("no factor here") is None
+    sim_time, gz_rtf = parse_stats_message(text)
+    assert gz_rtf == 0.03
+    assert abs(sim_time - 2.5) < 1e-9
+
+
+def test_windowed_rtf_ignores_the_gz_field():
+    # 1.0 s of sim time across 5.0 s of wall time is 0.2, whatever gz printed.
+    samples = [(0.0, 0.0), (5.0, 1.0)]
+    assert abs(windowed_rtf(samples, 5.0) - 0.2) < 1e-9
+    longer = [(0.0, 0.0), (2.0, 0.4), (6.0, 1.0), (10.0, 2.0)]
+    # Window keeps the samples whose wall age is <= 5 s: (6, 1) and (10, 2).
+    assert abs(windowed_rtf(longer, 5.0) - 0.25) < 1e-9
+    assert windowed_rtf([(1.0, 1.0)], 5.0) is None
+
+
+def test_sim_rate_and_wall_fallback():
+    tracker = RateTracker(2.0)
+    for index in range(5):
+        tracker.add(wall_s := index * 0.5, sim_s := index * 0.1)
+    assert abs(tracker.hz_wall(2.0) - 2.0) < 1e-6
+    assert abs(tracker.hz_sim(0.4) - 10.0) < 1e-6
+    assert abs(gated_rate_hz(None, 2.0, 0.2) - 10.0) < 1e-9
+    ok, text = check_rate("/ground_truth/odom", 50.0, 10.4, 20.0)
+    assert ok is True
+    assert "/ground_truth/odom: 50.0 Hz sim (10.4 Hz wall)" in text
+
+
+def test_preflight_thresholds_follow_profile_and_overrides():
+    assert expected_sensor_hz("camera", {}) == 30.0
+    assert expected_sensor_hz("imu", {"VISION_PROFILE": "cpu"}) == 100.0
+    assert expected_sensor_hz("camera", {"VISION_PROFILE": "cpu"}) == 10.0
+    assert expected_sensor_hz("camera", {"CAM_RATE_HZ": "15"}) == 15.0
+    assert minimum_rate_hz("camera", {"VISION_PROFILE": "full"}) == 15.0
+    assert minimum_rate_hz("imu", {"VISION_PROFILE": "cpu", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
+    assert default_min_rtf({"HEADLESS_SOFTWARE": "1"}) == 0.15
+    assert default_min_rtf({}) == 0.8
+    assert default_min_rtf({"HEADLESS_SOFTWARE": "1", "PREFLIGHT_MIN_RTF": "0.5"}) == 0.5

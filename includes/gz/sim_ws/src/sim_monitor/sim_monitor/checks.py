@@ -6,34 +6,121 @@ is the full reason list, one check per line.
 
 from __future__ import annotations
 
+import os
 from collections import deque
 
 import numpy as np
 
 
+def _span_hz(stamps: deque[float], now: float, window_s: float) -> float:
+    while stamps and now - stamps[0] > window_s:
+        stamps.popleft()
+    if len(stamps) < 2:
+        return 0.0
+    span = stamps[-1] - stamps[0]
+    if span <= 0.0:
+        return 0.0
+    return (len(stamps) - 1) / span
+
+
 class RateTracker:
-    """Wall-clock message rate over a sliding window."""
+    """Message rate over a sliding window, in sim time and in wall time."""
 
     def __init__(self, window_s: float) -> None:
         self.window_s = window_s
         self.times: deque[float] = deque()
+        self.sim_times: deque[float] = deque()
 
-    def add(self, stamp: float) -> None:
+    def add(self, stamp: float, sim_s: float | None = None) -> None:
+        """Record a wall-clock arrival and, when known, the header stamp."""
         self.times.append(stamp)
-        self._trim(stamp)
-
-    def _trim(self, now: float) -> None:
-        while self.times and now - self.times[0] > self.window_s:
-            self.times.popleft()
+        _span_hz(self.times, stamp, self.window_s)
+        if sim_s is not None:
+            self.sim_times.append(sim_s)
+            _span_hz(self.sim_times, sim_s, self.window_s)
 
     def hz(self, now: float) -> float:
-        self._trim(now)
-        if len(self.times) < 2:
-            return 0.0
-        span = self.times[-1] - self.times[0]
-        if span <= 0.0:
-            return 0.0
-        return (len(self.times) - 1) / span
+        """Wall-clock rate. Kept so older callers keep working."""
+        return self.hz_wall(now)
+
+    def hz_wall(self, now: float) -> float:
+        return _span_hz(self.times, now, self.window_s)
+
+    def hz_sim(self, now_sim: float) -> float:
+        return _span_hz(self.sim_times, now_sim, self.window_s)
+
+
+def header_stamp_s(msg) -> float | None:
+    """Header stamp in seconds, or None when the message has no header."""
+    header = getattr(msg, "header", None)
+    if header is None or not hasattr(header, "stamp"):
+        return None
+    stamp = header.stamp
+    if not hasattr(stamp, "sec"):
+        return None
+    return float(stamp.sec) + float(getattr(stamp, "nanosec", 0)) * 1e-9
+
+
+def gated_rate_hz(sim_hz: float | None, wall_hz: float, rtf: float | None) -> float:
+    """Sim-time rate, or wall rate divided by real-time factor when there is no header."""
+    if sim_hz is not None:
+        return sim_hz
+    if rtf is not None and rtf > 0.0:
+        return wall_hz / rtf
+    return wall_hz
+
+
+def _env_float(environ: dict[str, str], name: str) -> float | None:
+    raw = environ.get(name, "")
+    if raw == "":
+        return None
+    return float(raw)
+
+
+def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> float:
+    """Camera or IMU rate from CAM_RATE_HZ / IMU_RATE_HZ or VISION_PROFILE.
+
+    ``full`` is 30 Hz cameras and 200 Hz IMU. ``cpu`` is 10 Hz cameras and
+    100 Hz IMU. With no profile the full rates are used.
+    """
+    env = os.environ if environ is None else environ
+    if kind == "camera":
+        override = _env_float(env, "CAM_RATE_HZ")
+        if override is not None:
+            return override
+        if env.get("VISION_PROFILE", "").strip().lower() == "cpu":
+            return 10.0
+        return 30.0
+    if kind != "imu":
+        raise ValueError(f"unknown sensor kind {kind!r}")
+    override = _env_float(env, "IMU_RATE_HZ")
+    if override is not None:
+        return override
+    if env.get("VISION_PROFILE", "").strip().lower() == "cpu":
+        return 100.0
+    return 200.0
+
+
+def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
+    """Preflight minimum. An explicit PREFLIGHT_MIN_*_HZ wins, else half the expected rate."""
+    env = os.environ if environ is None else environ
+    name = "PREFLIGHT_MIN_CAMERA_HZ" if kind == "camera" else "PREFLIGHT_MIN_IMU_HZ"
+    override = _env_float(env, name)
+    if override is not None:
+        return override
+    return 0.5 * expected_sensor_hz(kind, env)
+
+
+def default_min_rtf(environ: dict[str, str] | None = None) -> float:
+    """0.15 under software rendering, otherwise 0.8. PREFLIGHT_MIN_RTF overrides."""
+    env = os.environ if environ is None else environ
+    override = _env_float(env, "PREFLIGHT_MIN_RTF")
+    if override is not None:
+        return override
+    software = env.get("HEADLESS_SOFTWARE", "0").strip().lower()
+    if software in {"1", "true", "yes"}:
+        return 0.15
+    return 0.8
 
 
 def line(ok: bool, text: str) -> str:
@@ -43,6 +130,17 @@ def line(ok: bool, text: str) -> str:
 def check_min(name: str, value: float, minimum: float, unit: str) -> tuple[bool, str]:
     ok = value >= minimum
     return ok, line(ok, f"{name}: {value:.3f} {unit} >= {minimum:.3f} {unit}")
+
+
+def check_rate(topic: str, sim_hz: float, wall_hz: float, minimum: float) -> tuple[bool, str]:
+    """Gate on the sim-time rate and report the wall rate beside it."""
+    ok = sim_hz >= minimum
+    relation = ">=" if ok else "<"
+    text = (
+        f"{topic}: {sim_hz:.1f} Hz sim ({wall_hz:.1f} Hz wall) "
+        f"{relation} {minimum:.1f} Hz sim"
+    )
+    return ok, line(ok, text)
 
 
 def check_max(name: str, value: float, maximum: float, unit: str) -> tuple[bool, str]:

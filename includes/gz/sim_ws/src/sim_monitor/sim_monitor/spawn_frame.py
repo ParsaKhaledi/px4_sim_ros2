@@ -1,8 +1,9 @@
 """Publish the spawn frame and a ground-truth TF.
 
 ``PX4_GZ_MODEL_POSE`` (default ``-3,-1.6,0,0,0,3.14``) is a static transform
-``world`` -> ``spawn``. Ground-truth odometry is also broadcast as
-``world`` -> ``base_link`` so the URDF camera frames hang off the true pose.
+``world`` -> ``spawn``. Ground truth is broadcast as ``world`` ->
+``base_link_gt`` (``GT_CHILD_FRAME``). It is not ``base_link``: RTAB-Map
+publishes ``odom`` -> ``base_link``, and a second parent breaks the tree.
 
 Both are in the Gazebo ENU world (x east, y north, z up).
 """
@@ -49,6 +50,7 @@ def main() -> None:
             self.spawn = message
             self.static.sendTransform(message)
             self.broadcaster = TransformBroadcaster(self)
+            self.gt_child = os.environ.get("GT_CHILD_FRAME", "") or "base_link_gt"
             topic = os.environ.get("PREFLIGHT_GT_TOPIC", "/ground_truth/odom")
             self.create_subscription(Odometry, topic, self._on_odom, qos_profile_sensor_data)
             self.create_timer(1.0, self._republish_spawn)
@@ -66,7 +68,7 @@ def main() -> None:
             transform.header = msg.header
             if not transform.header.frame_id:
                 transform.header.frame_id = "world"
-            transform.child_frame_id = msg.child_frame_id or "base_link"
+            transform.child_frame_id = self.gt_child
             transform.transform.translation.x = msg.pose.pose.position.x
             transform.transform.translation.y = msg.pose.pose.position.y
             transform.transform.translation.z = msg.pose.pose.position.z

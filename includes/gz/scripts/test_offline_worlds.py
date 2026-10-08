@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fuel_assets import FILE_URL, find_fuel_references
-from patch_x500_ground_truth import patch_text
+from patch_x500_ground_truth import candidate_models, patch_text
 
 
 def test_fuel_file_url_pattern():
@@ -40,4 +40,17 @@ def test_ground_truth_plugin_is_inserted_once():
     assert "OdometryPublisher" in patched
     assert "/ground_truth/odom" in patched
     assert patched.count("OdometryPublisher") == 1
+    assert "base_link_gt" in patched
     assert patch_text(patched) == patched
+    stale = patched.replace("base_link_gt", "base_link")
+    assert "base_link_gt" in patch_text(stale)
+
+
+def test_candidate_model_paths_are_unique(monkeypatch):
+    monkeypatch.setattr(
+        "patch_x500_ground_truth.Path.home",
+        staticmethod(lambda: Path("/home/px4")),
+    )
+    monkeypatch.setenv("PX4_GZ_MODELS", "/home/px4/PX4-Autopilot/Tools/simulation/gz/models")
+    resolved = [path.resolve() for path in candidate_models()]
+    assert len(resolved) == 1

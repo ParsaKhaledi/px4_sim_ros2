@@ -16,7 +16,7 @@ PLUGIN = """\
     <plugin filename="gz-sim-odometry-publisher-system"
             name="gz::sim::systems::OdometryPublisher">
       <odom_frame>world</odom_frame>
-      <robot_base_frame>base_link</robot_base_frame>
+      <robot_base_frame>base_link_gt</robot_base_frame>
       <odom_publish_frequency>50</odom_publish_frequency>
       <odom_topic>/ground_truth/odom</odom_topic>
       <tf_topic>/ground_truth/tf</tf_topic>
@@ -29,24 +29,35 @@ MARKER = "gz::sim::systems::OdometryPublisher"
 
 def candidate_models() -> list[Path]:
     """Return x500_depth model.sdf paths that may exist on this machine."""
-    found: list[Path] = []
+    raw: list[Path] = []
     env_models = os.environ.get("PX4_GZ_MODELS", "")
     if env_models:
-        found.append(Path(env_models) / "x500_depth" / "model.sdf")
+        raw.append(Path(env_models) / "x500_depth" / "model.sdf")
     home = Path.home()
-    found.append(
+    raw.append(
         home / "PX4-Autopilot" / "Tools" / "simulation" / "gz" / "models" / "x500_depth" / "model.sdf"
     )
-    found.append(
+    raw.append(
         Path("/home/px4/PX4-Autopilot/Tools/simulation/gz/models/x500_depth/model.sdf")
     )
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for path in raw:
+        key = path.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(path)
     return found
 
 
 def patch_text(model_xml: str) -> str:
     """Return model XML with the ground-truth plugin inserted once."""
     if MARKER in model_xml:
-        return model_xml
+        return model_xml.replace(
+            "<robot_base_frame>base_link</robot_base_frame>",
+            "<robot_base_frame>base_link_gt</robot_base_frame>",
+        )
     close = model_xml.rfind("</model>")
     if close < 0:
         raise ValueError("model.sdf has no </model> element")

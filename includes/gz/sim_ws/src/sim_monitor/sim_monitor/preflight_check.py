@@ -13,8 +13,13 @@ from sim_monitor.checks import (
     RateTracker,
     check_max,
     check_min,
+    check_rate,
+    default_min_rtf,
+    gated_rate_hz,
+    header_stamp_s,
     line,
     match_versioned_topic,
+    minimum_rate_hz,
     relative_position_error,
     summarize,
 )
@@ -45,20 +50,20 @@ def main() -> None:
                 "preflight_check",
                 parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, use_sim)],
             )
-            self.min_rtf = _env_float("PREFLIGHT_MIN_RTF", 0.8)
+            self.min_rtf = default_min_rtf()
             self.max_pose = _env_float("PREFLIGHT_MAX_POSE_ERR_M", 0.10)
-            self.min_camera = _env_float("PREFLIGHT_MIN_CAMERA_HZ", 5.0)
-            self.min_imu = _env_float("PREFLIGHT_MIN_IMU_HZ", 10.0)
+            self.min_camera = minimum_rate_hz("camera")
+            self.min_imu = minimum_rate_hz("imu")
             self.min_gt = _env_float("PREFLIGHT_MIN_GT_HZ", 20.0)
             self.clock_max_age = _env_float("PREFLIGHT_CLOCK_MAX_AGE_S", 1.0)
             self.camera_topic = os.environ.get("PREFLIGHT_CAMERA_TOPIC", "/camera/rgb/image_raw")
-            self.imu_topic = os.environ.get("PREFLIGHT_IMU_TOPIC", "/imu/data")
+            self.imu_topic = os.environ.get("PREFLIGHT_IMU_TOPIC", "/imu")
             self.gt_topic = os.environ.get("PREFLIGHT_GT_TOPIC", "/ground_truth/odom")
             self.rtab_topic = os.environ.get("PREFLIGHT_RTABMAP_ODOM_TOPIC", "/rtabmap/odom")
             self.rtab_info_topic = os.environ.get("PREFLIGHT_RTABMAP_INFO_TOPIC", "/rtabmap/odom_info")
             self.tf_pairs = os.environ.get(
                 "PREFLIGHT_TF_PAIRS",
-                "world:spawn,world:base_link,base_link:camera_rgb_frame,base_link:imu_link",
+                "world:spawn,world:base_link_gt,base_link:camera_rgb_frame,base_link:imu_link",
             )
             self.rates = {
                 self.camera_topic: RateTracker(2.0),
@@ -81,6 +86,7 @@ def main() -> None:
             self.status_topic = None
             self.flags_topic = None
             self._subscribed = set()
+            self.type_errors: dict[str, str] = {}
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
             self.create_service(Trigger, "/sim/preflight_check", self._handle)
@@ -89,24 +95,32 @@ def main() -> None:
             self.get_logger().info("serving /sim/preflight_check")
 
         def _discover(self) -> None:
-            names_and_types = dict(self.get_topic_names_and_types())
-            for topic in (self.camera_topic, self.imu_topic, self.gt_topic, self.rtab_topic, "/clock", "/sim/real_time_factor"):
-                self._subscribe(names_and_types, topic)
-            self._subscribe(names_and_types, self.rtab_info_topic)
-            names = list(names_and_types)
-            status = match_versioned_topic(names, "vehicle_status")
-            flags = match_versioned_topic(names, "estimator_status_flags")
-            if status:
-                self.status_topic = status
-                self._subscribe(names_and_types, status)
-            if flags:
-                self.flags_topic = flags
-                self._subscribe(names_and_types, flags)
+            try:
+                names_and_types = dict(self.get_topic_names_and_types())
+                for topic in (self.camera_topic, self.imu_topic, self.gt_topic, self.rtab_topic, "/clock", "/sim/real_time_factor"):
+                    self._subscribe(names_and_types, topic)
+                self._subscribe(names_and_types, self.rtab_info_topic)
+                names = list(names_and_types)
+                status = match_versioned_topic(names, "vehicle_status")
+                flags = match_versioned_topic(names, "estimator_status_flags")
+                if status:
+                    self.status_topic = status
+                    self._subscribe(names_and_types, status)
+                if flags:
+                    self.flags_topic = flags
+                    self._subscribe(names_and_types, flags)
+            except Exception as exc:
+                self.get_logger().error(f"topic discovery failed: {exc}")
 
         def _subscribe(self, names_and_types, topic: str) -> None:
-            if topic in self._subscribed or topic not in names_and_types:
+            if topic in self._subscribed or topic in self.type_errors or topic not in names_and_types:
                 return
-            message_type = get_message(names_and_types[topic][0])
+            try:
+                message_type = get_message(names_and_types[topic][0])
+            except Exception as exc:
+                self.type_errors[topic] = str(exc)
+                self.get_logger().error(f"cannot load message type for {topic}: {exc}")
+                return
             self.create_subscription(
                 message_type, topic, lambda msg, topic=topic: self._on_msg(topic, msg), qos_profile_sensor_data,
             )
@@ -115,7 +129,7 @@ def main() -> None:
         def _on_msg(self, topic: str, msg) -> None:
             now = time.monotonic()
             if topic in self.rates:
-                self.rates[topic].add(now)
+                self.rates[topic].add(now, header_stamp_s(msg))
             if topic == "/sim/real_time_factor":
                 self.rtf = float(msg.data)
             elif topic == "/clock":
@@ -176,8 +190,15 @@ def main() -> None:
             return response
 
         def _rate(self, topic: str, minimum: float, now: float):
-            hz = self.rates[topic].hz(now) if topic in self.rates else 0.0
-            return check_min(topic, hz, minimum, "Hz")
+            if topic in self.type_errors:
+                return False, line(False, f"{topic}: message type unavailable ({self.type_errors[topic]})")
+            tracker = self.rates.get(topic)
+            wall_hz = tracker.hz_wall(now) if tracker else 0.0
+            sim_hz = None
+            if tracker is not None and len(tracker.sim_times) >= 2:
+                sim_hz = tracker.hz_sim(tracker.sim_times[-1])
+            gated = gated_rate_hz(sim_hz, wall_hz, self.rtf)
+            return check_rate(topic, gated, wall_hz, minimum)
 
         def _rtabmap(self):
             if self.rtab_lost is None:
@@ -193,7 +214,12 @@ def main() -> None:
 
         def _px4(self):
             lines = []
-            if self.preflight_pass is None:
+            if self.status_topic and self.status_topic in self.type_errors:
+                lines.append((False, line(
+                    False,
+                    f"px4 pre-arm: message type unavailable ({self.type_errors[self.status_topic]})",
+                )))
+            elif self.preflight_pass is None:
                 watched = self.status_topic or "vehicle_status(_vN)"
                 lines.append((False, line(False, f"px4 pre-arm: no pre_flight_checks_pass on {watched}")))
             else:
@@ -201,7 +227,12 @@ def main() -> None:
                     self.preflight_pass,
                     line(self.preflight_pass, "px4 pre-arm: pre_flight_checks_pass=true" if self.preflight_pass else "px4 pre-arm: pre_flight_checks_pass=false"),
                 ))
-            if not self.vision_flags:
+            if self.flags_topic and self.flags_topic in self.type_errors:
+                lines.append((False, line(
+                    False,
+                    f"ekf2 external vision: message type unavailable ({self.type_errors[self.flags_topic]})",
+                )))
+            elif not self.vision_flags:
                 watched = self.flags_topic or "estimator_status_flags(_vN)"
                 lines.append((False, line(False, f"ekf2 external vision: no flags on {watched}")))
             else:

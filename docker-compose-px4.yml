@@ -38,14 +38,18 @@ services:
         HEADLESS_SOFTWARE: ${HEADLESS_SOFTWARE:-0}
         PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:-}
         USE_SIM_TIME: ${USE_SIM_TIME:-true}
-        PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-0.8}
+        # Empty lets the preflight node pick 0.15 under HEADLESS_SOFTWARE, else 0.8.
+        PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-}
         PREFLIGHT_MAX_POSE_ERR_M: ${PREFLIGHT_MAX_POSE_ERR_M:-0.10}
-        PREFLIGHT_MIN_CAMERA_HZ: ${PREFLIGHT_MIN_CAMERA_HZ:-5}
-        PREFLIGHT_MIN_IMU_HZ: ${PREFLIGHT_MIN_IMU_HZ:-10}
+        # Empty lets camera/IMU minimums follow CAM_RATE_HZ, IMU_RATE_HZ, or VISION_PROFILE.
+        PREFLIGHT_MIN_CAMERA_HZ: ${PREFLIGHT_MIN_CAMERA_HZ:-}
+        PREFLIGHT_MIN_IMU_HZ: ${PREFLIGHT_MIN_IMU_HZ:-}
         PREFLIGHT_MIN_GT_HZ: ${PREFLIGHT_MIN_GT_HZ:-20}
         PREFLIGHT_CLOCK_MAX_AGE_S: ${PREFLIGHT_CLOCK_MAX_AGE_S:-1.0}
         PREFLIGHT_CAMERA_TOPIC: ${PREFLIGHT_CAMERA_TOPIC:-/camera/rgb/image_raw}
-        PREFLIGHT_IMU_TOPIC: ${PREFLIGHT_IMU_TOPIC:-/imu/data}
+        PREFLIGHT_IMU_TOPIC: ${PREFLIGHT_IMU_TOPIC:-/imu}
+        GT_CHILD_FRAME: ${GT_CHILD_FRAME:-base_link_gt}
+        SIM_RTF_WINDOW_S: ${SIM_RTF_WINDOW_S:-5}
         PREFLIGHT_GT_TOPIC: ${PREFLIGHT_GT_TOPIC:-/ground_truth/odom}
         # Spawn coordinate (Amirkabir aerospace dept). Not the world origin.
         SIM_ORIGIN_LAT: ${SIM_ORIGIN_LAT:-35.7048378}
