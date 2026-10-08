@@ -10,6 +10,10 @@ them from the world file Gazebo is about to load, and from PX4's
 Sensor elements on the model are not added or removed. A second x500 in the
 same world would load the systems again, once per model. Multi-vehicle would
 need the systems back in one shared place. That is out of scope.
+
+The world name is the first argument (default ``default``). Lookup uses
+``PX4_GZ_MODELS``, ``PX4_GZ_WORLDS``, ``GZ_SIM_SERVER_CONFIG_PATH``, and
+``PX4_GZ_SERVER_CONFIG`` when those are set.
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ _NAME = re.compile(r'\bname="([^"]+)"')
 
 
 def plugin_block(filename: str, system_name: str) -> str:
+    """One self-closing ``<plugin>`` line for a Gazebo system."""
     return f'    <plugin filename="{filename}" name="{system_name}" />\n'
 
 
@@ -69,15 +74,18 @@ def strip_sensor_systems(text: str) -> tuple[str, list[str]]:
 
 
 def short_name(system_name: str) -> str:
+    """Last component of a ``gz::sim::systems`` name, for log lines."""
     return system_name.rsplit("::", 1)[-1]
 
 
 def removal_line(path: Path, removed: list[str]) -> str:
+    """One log line naming the systems stripped from a file."""
     listed = ", ".join(short_name(name) for name in removed) if removed else "none"
     return f"removed sensor systems from {path.name}: {listed}"
 
 
 def unique_paths(paths: list[Path]) -> list[Path]:
+    """Drop duplicate paths after resolving them."""
     found: list[Path] = []
     seen: set[Path] = set()
     for path in paths:
@@ -131,6 +139,7 @@ def candidate_server_configs() -> list[Path]:
 
 
 def patch_model(path: Path) -> None:
+    """Add the four sensor systems to an x500_base model that lacks them."""
     original = path.read_text(encoding="utf-8")
     updated, added = ensure_model_systems(original)
     if updated == original:
@@ -141,6 +150,7 @@ def patch_model(path: Path) -> None:
 
 
 def strip_file(path: Path) -> list[str]:
+    """Remove the four sensor systems from a world or server.config."""
     original = path.read_text(encoding="utf-8")
     updated, removed = strip_sensor_systems(original)
     if updated != original:
@@ -150,6 +160,7 @@ def strip_file(path: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Patch x500_base and strip the launched world. The argument is the world name."""
     world_name = "default"
     if argv is None:
         argv = sys.argv[1:]

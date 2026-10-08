@@ -33,14 +33,17 @@ MTL_MAP = re.compile(r"^\s*map_\w+\s+(\S+)", re.MULTILINE)
 
 
 def repo_gz_dir() -> Path:
+    """``includes/gz``, the parent of this scripts directory."""
     return Path(__file__).resolve().parents[1]
 
 
 def models_dir() -> Path:
+    """Local model cache, ``includes/gz/models``."""
     return repo_gz_dir() / "models"
 
 
 def worlds_dir() -> Path:
+    """World SDFs under ``includes/gz/worlds``."""
     return repo_gz_dir() / "worlds"
 
 
@@ -249,6 +252,7 @@ def find_fuel_references(root: Path) -> list[str]:
 
 
 def main() -> int:
+    """Download Fuel models referenced by the worlds and rewrite those URIs."""
     total = 0
     for world in sorted(worlds_dir().glob("*.sdf")):
         total += rewrite_world(world)

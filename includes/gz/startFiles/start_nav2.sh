@@ -1,4 +1,5 @@
 #!/bin/bash
+# Nav2. USE_SIM_TIME defaults to true so planners follow Gazebo /clock.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}

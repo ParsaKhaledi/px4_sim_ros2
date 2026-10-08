@@ -59,6 +59,7 @@ def _add_topic_args(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run ``record``, ``bag``, or ``offline`` and write the report directory."""
     args = _build_parser().parse_args(argv)
     distances = tuple(args.rpe)
     if args.command == "offline":

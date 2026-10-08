@@ -3,6 +3,12 @@
 Success is true when every check passes. The message is one reason per line,
 each starting with PASS, FAIL, or SKIP. A SKIP line means that check did not
 run; it does not fail the service. Thresholds come from the environment.
+
+Subscribes to camera_info, ``/imu``, ``/ground_truth/odom``, ``/clock``,
+``/sim/real_time_factor``, ``/rtabmap/odom``, ``/rtabmap/odom_info``, and the
+versioned PX4 status, estimator-flag, and distance-sensor topics. Topic names
+follow ``PREFLIGHT_*``. Discovery uses a steady wall clock. Rate gates use
+sim time from ``/clock``.
 """
 
 from __future__ import annotations
@@ -108,9 +114,11 @@ class PoseOrigins:
         self.pending_reset = False
 
     def ground_truth(self, position: tuple[float, float, float]) -> None:
+        """Store the latest ground-truth position. The origin is set with RTAB-Map."""
         self.gt_position = position
 
     def rtab(self, position: tuple[float, float, float]) -> None:
+        """Store the RTAB-Map pose and recapture both origins on a new map."""
         reset = self.rtab_origin is None or self.pending_reset or jumped_to_identity(self.rtab_position, position)
         if reset:
             self.rtab_origin = position
@@ -119,6 +127,7 @@ class PoseOrigins:
         self.rtab_position = position
 
     def lost(self, lost: bool) -> None:
+        """Remember a lost tracker so the next pose recaptures both origins."""
         if lost and self.rtab_lost is not True:
             self.pending_reset = True
         self.rtab_lost = lost
@@ -176,6 +185,7 @@ def _env_float(name: str, default: float) -> float:
 
 
 def main() -> None:
+    """Run the ``/sim/preflight_check`` service until interrupted."""
     import rclpy
     from rclpy.duration import Duration
     from rclpy.node import Node

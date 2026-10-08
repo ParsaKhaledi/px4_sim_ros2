@@ -68,6 +68,7 @@ def lidar_rate_hz(environ: dict[str, str] | None = None) -> float:
 
 
 def format_rate(rate_hz: float) -> str:
+    """SDF ``update_rate`` text. Whole numbers drop the decimal."""
     if rate_hz == int(rate_hz):
         return str(int(rate_hz))
     return str(rate_hz)
@@ -200,6 +201,7 @@ def patch_file(path: Path, environ: dict[str, str] | None = None) -> bool:
 
 
 def main() -> int:
+    """Insert or remove the downward lidar on each present x500_depth model."""
     found = False
     for path in candidate_models():
         if path.is_file():

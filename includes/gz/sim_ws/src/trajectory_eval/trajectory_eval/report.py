@@ -1,4 +1,9 @@
-"""Turn resampled trajectories into JSON, CSV, and plots."""
+"""Turn resampled trajectories into JSON, CSV, and plots.
+
+Writes ``<name>.tum``, ``metrics.json``, ``metrics.csv``, and, when matplotlib
+is installed, ``trajectories_xy.png`` and ``ate_unaligned.png``. No environment
+variables. Inputs are the pose streams from the recorder or from TUM files.
+"""
 
 from __future__ import annotations
 
@@ -79,6 +84,7 @@ def _flatten(prefix: str, value, rows: list[tuple[str, str, float]]) -> None:
 
 
 def write_csv(path: Path, document: dict) -> None:
+    """Flatten numeric fields of the report document into ``metric,kind,value`` rows."""
     rows: list[tuple[str, str, float]] = []
     _flatten("", document, rows)
     path.parent.mkdir(parents=True, exist_ok=True)

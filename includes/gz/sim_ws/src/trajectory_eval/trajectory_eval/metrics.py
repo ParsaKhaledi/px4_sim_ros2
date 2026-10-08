@@ -62,14 +62,17 @@ def align_se3(source: np.ndarray, target: np.ndarray) -> tuple[np.ndarray, np.nd
 
 
 def apply_se3(points: np.ndarray, rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:
+    """Apply ``R @ p + t`` to each row of ``points``."""
     return (rotation @ np.asarray(points, dtype=float).T).T + translation
 
 
 def position_errors(estimate: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """Euclidean distance of each estimate row from the matching reference row."""
     return np.linalg.norm(np.asarray(estimate) - np.asarray(reference), axis=1)
 
 
 def error_stats(errors: np.ndarray) -> dict[str, float]:
+    """RMSE, mean, max, and count. Empty input is NaN with count 0."""
     errors = np.asarray(errors, dtype=float)
     if len(errors) == 0:
         return {"rmse": float("nan"), "mean": float("nan"), "max": float("nan"), "count": 0}

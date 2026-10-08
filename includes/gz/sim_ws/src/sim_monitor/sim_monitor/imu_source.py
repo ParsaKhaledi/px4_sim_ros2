@@ -2,7 +2,9 @@
 
 ``IMU_SOURCE=oak`` (the default) bridges the Oak-D Gazebo IMU.
 ``IMU_SOURCE=px4`` relays PX4 ``sensor_combined`` and ``vehicle_attitude``.
-Only one of those publishers is configured.
+Only one of those publishers is configured. ``IMU_STAMP_MODE`` is ``receive``
+or ``px4_offset``. ``CameraType`` and ``PREFLIGHT_TF_PAIRS`` pick the
+preflight TF pairs. ``PREFLIGHT_OPTICAL_FRAME`` overrides the camera optical frame.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ def normalize_imu_source(value: str | None) -> str:
 
 
 def imu_source(environ: dict[str, str] | None = None) -> str:
+    """``IMU_SOURCE`` from the environment. Unset means oak."""
     env = os.environ if environ is None else environ
     return normalize_imu_source(env.get("IMU_SOURCE", ""))
 
@@ -85,6 +88,7 @@ def normalize_stamp_mode(value: str | None) -> str:
 
 
 def stamp_mode(environ: dict[str, str] | None = None) -> str:
+    """``IMU_STAMP_MODE`` from the environment. Unset means receive."""
     env = os.environ if environ is None else environ
     return normalize_stamp_mode(env.get("IMU_STAMP_MODE", ""))
 

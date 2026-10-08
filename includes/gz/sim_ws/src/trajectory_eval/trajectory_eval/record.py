@@ -1,4 +1,11 @@
-"""Live recorder. Timestamps come from the node clock (sim time when enabled)."""
+"""Live recorder. Timestamps come from the node clock (sim time when enabled).
+
+Subscribes to ``--gt-topic`` (default ``/ground_truth/odom``), ``--gps-topic``
+(``/fmu/out/vehicle_gps_position``), ``--rtabmap-topic`` (``/rtabmap/odom``),
+and ``--ekf-topic`` (``/fmu/out/vehicle_odometry``). ``--use-sim-time`` defaults
+to true. Discovery runs on a steady wall clock so a stalled ``/clock`` does
+not stop it. Sample stamps stay on sim time.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +16,7 @@ from trajectory_eval.metrics import PoseSample
 
 
 def record_live(args) -> dict[str, list[PoseSample]]:
+    """Subscribe until ``--duration`` sim seconds, or until interrupted."""
     import rclpy
     from rclpy.clock import Clock, ClockType
     from rclpy.node import Node

@@ -229,6 +229,7 @@ def shell_exports(origin: dict[str, float]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Rewrite world spherical coordinates and print ``PX4_HOME_*`` for ``eval``."""
     parser = argparse.ArgumentParser(
         description="Set the Gazebo world origin so the spawn pose is SIM_ORIGIN_*.",
     )

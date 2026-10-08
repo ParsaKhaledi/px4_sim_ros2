@@ -4,6 +4,12 @@ The service returns success when every check passed. The message is the full
 reason list, one check per line, each starting with PASS, FAIL, or SKIP.
 A SKIP line means that check did not run. It is not a PASS and it does not
 fail the service.
+
+Rates are sim time from message headers and ``/clock``. The wall rate is
+reported beside them. Thresholds come from ``PREFLIGHT_MIN_*``,
+``IMU_RATE_HZ``, ``IMU_SOURCE``, ``CAM_RATE_HZ``, ``VISION_PROFILE``,
+``HEADLESS_SOFTWARE``, ``PX4_GZ_MODEL``, ``PX4_SIM_MODEL``, ``CameraType``,
+and ``LIDAR_DOWN``.
 """
 
 from __future__ import annotations
@@ -51,9 +57,11 @@ class RateTracker:
         return self.hz_wall(now)
 
     def hz_wall(self, now: float) -> float:
+        """Arrival rate on the wall clock. The right edge is ``now``."""
         return _span_hz(self.times, now, self.window_s)
 
     def hz_sim(self, now_sim: float) -> float:
+        """Header-stamp rate. ``now_sim`` is ``/clock``, so a gap lowers the rate."""
         return _span_hz(self.sim_times, now_sim, self.window_s)
 
 
@@ -257,12 +265,14 @@ def default_min_rtf(environ: dict[str, str] | None = None) -> float:
     if override is not None:
         return override
     software = env.get("HEADLESS_SOFTWARE", "0").strip().lower()
+    # Software GL on a CPU sim sits near 0.2; 0.8 is the floor with a GPU.
     if software in {"1", "true", "yes"}:
         return 0.15
     return 0.8
 
 
 def line(ok: bool, text: str) -> str:
+    """``PASS`` or ``FAIL`` followed by the reason text."""
     return f"{'PASS' if ok else 'FAIL'} {text}"
 
 
@@ -360,6 +370,7 @@ def ground_truth_leak_from_info(
 
 
 def check_min(name: str, value: float, minimum: float, unit: str) -> tuple[bool, str]:
+    """Pass when ``value`` is at least ``minimum``."""
     ok = value >= minimum
     return ok, line(ok, f"{name}: {value:.3f} {unit} >= {minimum:.3f} {unit}")
 
@@ -394,6 +405,7 @@ def check_rate(topic: str, sim_hz: float, wall_hz: float, minimum: float) -> tup
 
 
 def check_max(name: str, value: float, maximum: float, unit: str) -> tuple[bool, str]:
+    """Pass when ``value`` is at most ``maximum``."""
     ok = value <= maximum
     return ok, line(ok, f"{name}: {value:.3f} {unit} <= {maximum:.3f} {unit}")
 

@@ -30,6 +30,7 @@ def spawn_ground_pose(pose: tuple[float, float, float, float, float, float]) -> 
 
 
 def main() -> None:
+    """Publish TF ``world`` to ``spawn`` and ``world`` to the ground-truth child."""
     import rclpy
     from geometry_msgs.msg import TransformStamped
     from nav_msgs.msg import Odometry

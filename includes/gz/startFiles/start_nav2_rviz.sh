@@ -1,4 +1,5 @@
 #!/bin/bash
+# Nav2 RViz. USE_SIM_TIME defaults to true so the display follows Gazebo /clock.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}

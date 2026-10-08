@@ -57,6 +57,7 @@ def px4_topic(names: list[str], suffix: str) -> str:
 
 
 def split_stamp(stamp_ns: int) -> tuple[int, int]:
+    """Split a ROS stamp in nanoseconds into ``(sec, nanosec)``."""
     stamp_ns = int(stamp_ns)
     sec = stamp_ns // 1_000_000_000
     nanosec = stamp_ns - sec * 1_000_000_000
@@ -64,12 +65,14 @@ def split_stamp(stamp_ns: int) -> tuple[int, int]:
 
 
 def trim_rate_window(stamps_ns: list[int], now_ns: int, window_ns: int = RATE_WINDOW_NS) -> None:
+    """Append a sim-time stamp and drop samples older than the window."""
     stamps_ns.append(int(now_ns))
     while len(stamps_ns) > 2 and now_ns - stamps_ns[0] > window_ns:
         stamps_ns.pop(0)
 
 
 def main() -> None:
+    """Relay PX4 ``sensor_combined`` and ``vehicle_attitude`` onto ``/imu``."""
     import rclpy
     from rclpy.clock import Clock, ClockType
     from rclpy.node import Node

@@ -21,6 +21,7 @@ G = 9.80665
 
 
 def quat_normalize(q: np.ndarray) -> np.ndarray:
+    """Unit quaternion. Input is ``(w, x, y, z)``. A zero quaternion becomes identity."""
     q = np.asarray(q, dtype=float)
     norm = float(np.linalg.norm(q))
     if norm == 0.0:
@@ -59,6 +60,7 @@ def quat_from_rpy(roll: float, pitch: float, yaw: float) -> np.ndarray:
 
 
 def quat_to_rot(q: np.ndarray) -> np.ndarray:
+    """3x3 rotation matrix for a ``(w, x, y, z)`` quaternion."""
     w, x, y, z = quat_normalize(q)
     return np.array(
         [
@@ -108,5 +110,6 @@ def gravity_quaternion_xyzw(q_frd_ned_wxyz) -> tuple[float, float, float, float]
 
 
 def yaw_from_quat(q_wxyz) -> float:
+    """Yaw about Z, in radians, for a Z-up quaternion."""
     w, x, y, z = quat_normalize(np.asarray(q_wxyz, dtype=float))
     return float(math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))

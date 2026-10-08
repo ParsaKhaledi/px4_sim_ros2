@@ -14,6 +14,7 @@ from fuel_assets import find_fuel_references, worlds_dir
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Exit 1 when a world SDF still names a Gazebo Fuel host."""
     parser = argparse.ArgumentParser(
         description="Fail if a Gazebo world still references Gazebo Fuel.",
     )

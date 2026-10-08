@@ -1,4 +1,10 @@
-"""Read a rosbag2 recording into the same streams the live recorder produces."""
+"""Read a rosbag2 recording into the same streams the live recorder produces.
+
+Topics match the live defaults: ``/ground_truth/odom``,
+``/fmu/out/vehicle_gps_position``, ``/rtabmap/odom``, and
+``/fmu/out/vehicle_odometry``. Versioned PX4 names are accepted. Stamps are
+the recorded header times, already on the sim timeline when the bag was.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ from trajectory_eval.record import _resolve_px4_topic
 
 
 def read_bag(args) -> dict[str, list[PoseSample]]:
+    """Load ground truth, GPS, RTAB-Map, and EKF2 poses from a rosbag2 directory."""
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message

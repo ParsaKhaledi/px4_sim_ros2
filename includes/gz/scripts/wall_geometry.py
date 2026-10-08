@@ -130,6 +130,7 @@ def box_corners(size: np.ndarray) -> np.ndarray:
 
 
 def segments_from_box(size: np.ndarray, world_from_box: np.ndarray, slice_z: float):
+    """XY outline where a box crosses ``slice_z``. Short boxes are floors and are skipped."""
     corners = transform_points(box_corners(size), world_from_box)
     # Walk the 12 box edges explicitly so a rotated box still slices.
     edges = [
@@ -168,6 +169,7 @@ def segments_from_box(size: np.ndarray, world_from_box: np.ndarray, slice_z: flo
 
 
 def segments_from_cylinder(radius: float, length: float, world_from_cyl: np.ndarray, slice_z: float, sides: int = 12):
+    """XY outline where a cylinder crosses ``slice_z``. Short cylinders are skipped."""
     half = length / 2.0
     angles = np.linspace(0.0, 2.0 * np.pi, sides, endpoint=False)
     ring = np.stack([radius * np.cos(angles), radius * np.sin(angles), np.zeros(sides)], axis=1)
@@ -233,6 +235,7 @@ def triangle_slice(a: np.ndarray, b: np.ndarray, c: np.ndarray, slice_z: float):
 
 
 def segments_from_triangles(vertices: np.ndarray, faces: np.ndarray, world_from_mesh: np.ndarray, scale: np.ndarray, slice_z: float):
+    """XY segments where mesh triangles cross ``slice_z`` in the world frame."""
     if len(vertices) == 0 or len(faces) == 0:
         return []
     scaled = vertices * scale.reshape(1, 3)
@@ -555,7 +558,7 @@ def _unique_segments(records: list[dict]) -> list[dict]:
 
 
 def export_world(sdf_path: Path, slice_z: float = 0.5) -> dict:
-    """Return the wall-map document for one world SDF."""
+    """Wall-map document for one world. ``frame`` is ``world_enu`` (Gazebo ENU metres)."""
     gz_dir = sdf_path.resolve().parents[1]
     model_roots = [gz_dir / "models", sdf_path.resolve().parent]
     raw = collisions_to_segments(sdf_path, model_roots, slice_z)
@@ -563,6 +566,7 @@ def export_world(sdf_path: Path, slice_z: float = 0.5) -> dict:
     unresolved = sorted({item.get("uri", "") for item in raw if item.get("kind") == "unresolved"})
     return {
         "world": sdf_path.stem,
+        # Gazebo world ENU. Spawn-relative points use TF world -> spawn.
         "frame": "world_enu",
         "units": "m",
         "slice_z_m": slice_z,
@@ -580,6 +584,7 @@ def export_world(sdf_path: Path, slice_z: float = 0.5) -> dict:
 
 
 def main() -> int:
+    """Write ``includes/gz/walls/<world>.json`` for every world SDF."""
     gz_dir = Path(__file__).resolve().parents[1]
     out_dir = gz_dir / "walls"
     out_dir.mkdir(parents=True, exist_ok=True)

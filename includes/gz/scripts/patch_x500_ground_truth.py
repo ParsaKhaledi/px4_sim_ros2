@@ -196,6 +196,7 @@ def patch_file(path: Path) -> bool:
 
 
 def main() -> int:
+    """Patch every present x500 model SDF. Missing files are skipped."""
     patched = False
     for path in candidate_models():
         if path.is_file():

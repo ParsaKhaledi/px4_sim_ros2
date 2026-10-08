@@ -107,6 +107,7 @@ def consume_stats_line(buffer: str, line: str) -> tuple[str, tuple[float | None,
 
 
 def main() -> None:
+    """Publish ``/sim/real_time_factor`` from Gazebo world stats."""
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy

@@ -75,11 +75,13 @@ def yaw_from_quat(q: np.ndarray) -> float:
 
 
 def quat_xyzw_to_wxyz(q_xyzw: np.ndarray) -> np.ndarray:
+    """ROS ``(x, y, z, w)`` to the ``(w, x, y, z)`` order used in the math."""
     x, y, z, w = q_xyzw
     return np.array([w, x, y, z], dtype=float)
 
 
 def quat_wxyz_to_xyzw(q_wxyz: np.ndarray) -> np.ndarray:
+    """``(w, x, y, z)`` to the ROS message order ``(x, y, z, w)``."""
     w, x, y, z = q_wxyz
     return np.array([x, y, z, w], dtype=float)
 

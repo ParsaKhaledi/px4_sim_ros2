@@ -1,4 +1,10 @@
 #!/bin/bash
+# Merge the ros_gz bridge config and start the sim helpers.
+#
+# USE_SIM_TIME (default true) is passed to the bridge, which publishes /clock.
+# IMU_SOURCE=oak (default) appends config_gz_bridge_imu.yaml so gz /imu reaches
+# ROS. IMU_SOURCE=px4 leaves /imu to px4_imu_relay.
+# config_gz_bridge_sim.yaml adds /ground_truth/odom.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
