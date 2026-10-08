@@ -1,12 +1,15 @@
 """Pure checks used by /sim/preflight_check.
 
-The service returns success only when every line starts with PASS. The message
-is the full reason list, one check per line.
+The service returns success when every check passed. The message is the full
+reason list, one check per line, each starting with PASS, FAIL, or SKIP.
+A SKIP line means that check did not run. It is not a PASS and it does not
+fail the service.
 """
 
 from __future__ import annotations
 
 import os
+import re
 from collections import deque
 
 import numpy as np
@@ -146,6 +149,99 @@ def line(ok: bool, text: str) -> str:
     return f"{'PASS' if ok else 'FAIL'} {text}"
 
 
+# PX4 spawns the airframe as ``<model>_<instance>``. The start script's model
+# is x500_depth and the first instance is 0, so GZBridge listens on
+# /model/x500_depth_0/odometry_with_covariance.
+DEFAULT_PX4_VISION_MODEL = "x500_depth_0"
+GROUND_TRUTH_LEAK_CHECK = "no ground-truth leak to PX4 vision"
+
+
+def px4_vision_model_name(environ: dict[str, str] | None = None) -> str:
+    """Spawned Gazebo model name on PX4's external-vision topic.
+
+    ``PX4_GZ_MODEL`` is the airframe (this repo uses ``x500_depth``).
+    ``PX4_SIM_MODEL`` is the same name with an optional ``gz_`` prefix.
+    PX4 appends ``_<PX4_INSTANCE>`` (default 0). A value that already ends
+    with that suffix is the spawned entity name.
+    """
+    env = os.environ if environ is None else environ
+    raw = env.get("PX4_GZ_MODEL", "").strip() or env.get("PX4_SIM_MODEL", "").strip()
+    if raw.startswith("gz_"):
+        raw = raw[3:]
+    instance = env.get("PX4_INSTANCE", "").strip() or env.get("px4_instance", "").strip() or "0"
+    if not raw:
+        raw = "x500_depth"
+    suffix = f"_{instance}"
+    if raw.endswith(suffix):
+        return raw
+    return f"{raw}{suffix}"
+
+
+def px4_vision_covariance_topic(model_name: str | None = None, environ: dict[str, str] | None = None) -> str:
+    """Topic GZBridge subscribes to and forwards to EKF2 as external vision."""
+    name = model_name if model_name is not None else px4_vision_model_name(environ)
+    return f"/model/{name}/odometry_with_covariance"
+
+
+def gz_topic_publishers(info_text: str) -> list[str]:
+    """Publisher lines from ``gz topic -i`` output.
+
+    Subscriber addresses are ignored. ``No publishers`` is an empty list.
+    """
+    publishers: list[str] = []
+    in_publishers = False
+    for raw in info_text.splitlines():
+        stripped = raw.strip()
+        lower = stripped.lower()
+        if lower.startswith("publishers"):
+            in_publishers = True
+            continue
+        if lower.startswith("subscribers"):
+            in_publishers = False
+            continue
+        if not in_publishers or not stripped:
+            continue
+        if lower == "none" or lower.startswith("no publisher"):
+            continue
+        publishers.append(stripped)
+    return publishers
+
+
+def ground_truth_leak_from_info(
+    info_text: str,
+    *,
+    gz_cli: bool,
+    model_name: str | None = None,
+    returncode: int = 0,
+) -> tuple[bool, str]:
+    """PASS, FAIL, or SKIP for the ground-truth vision-topic leak.
+
+    ``gz_cli`` false is SKIP: the check did not run. A publisher on
+    ``/model/<model>/odometry_with_covariance`` is FAIL because that pose
+    enters EKF2 as external vision.
+    """
+    model = model_name or DEFAULT_PX4_VISION_MODEL
+    topic = px4_vision_covariance_topic(model)
+    name = GROUND_TRUTH_LEAK_CHECK
+    if not gz_cli:
+        return True, f"SKIP {name}: gz CLI is absent"
+    publishers = gz_topic_publishers(info_text)
+    if publishers:
+        shown = publishers[0]
+        extra = f" ({len(publishers)} publishers)" if len(publishers) > 1 else ""
+        return False, (
+            f"FAIL {name}: {topic} has a publisher {shown}{extra}; "
+            "ground-truth pose would enter EKF2 as external vision"
+        )
+    if returncode != 0 and not re.search(r"publishers", info_text, re.IGNORECASE):
+        detail = " ".join(info_text.split())
+        if len(detail) > 180:
+            detail = detail[:180] + "..."
+        suffix = f": {detail}" if detail else ""
+        return False, f"FAIL {name}: gz topic -i -t {topic} failed{suffix}"
+    return True, f"PASS {name}: {topic} has no publisher"
+
+
 def check_min(name: str, value: float, minimum: float, unit: str) -> tuple[bool, str]:
     ok = value >= minimum
     return ok, line(ok, f"{name}: {value:.3f} {unit} >= {minimum:.3f} {unit}")
@@ -233,7 +329,10 @@ def match_versioned_topic(names: list[str], suffix: str) -> str | None:
 
 
 def summarize(results: list[tuple[bool, str]]) -> tuple[bool, str]:
-    """Join check lines. Success is true only when every check passed."""
-    success = all(ok for ok, _text in results) and len(results) > 0
+    """Join check lines. Success is true when every check passed.
+
+    A line that starts with SKIP did not run. It does not fail the service.
+    """
+    success = all(ok or text.startswith("SKIP") for ok, text in results) and len(results) > 0
     message = "\n".join(text for _ok, text in results)
     return success, message

@@ -1,12 +1,15 @@
 """Service /sim/preflight_check (std_srvs/Trigger).
 
-Success is true only when every check passes. The message is one reason per
-line, each starting with PASS or FAIL. Thresholds come from the environment.
+Success is true when every check passes. The message is one reason per line,
+each starting with PASS, FAIL, or SKIP. A SKIP line means that check did not
+run; it does not fail the service. Thresholds come from the environment.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import time
 
 import numpy as np
@@ -19,10 +22,13 @@ from sim_monitor.checks import (
     check_rate,
     default_min_rtf,
     gated_rate_hz,
+    ground_truth_leak_from_info,
     header_stamp_s,
     line,
     match_versioned_topic,
     minimum_rate_hz,
+    px4_vision_covariance_topic,
+    px4_vision_model_name,
     relative_position_error,
     summarize,
     with_rtf_hint,
@@ -93,6 +99,50 @@ class PoseOrigins:
         if lost and self.rtab_lost is not True:
             self.pending_reset = True
         self.rtab_lost = lost
+
+
+def _gz_executable(environ: dict[str, str]) -> str | None:
+    """Path to the gz CLI, or None when it is not installed."""
+    candidate = environ.get("REAL_GZ", "").strip()
+    if candidate and (shutil.which(candidate) or os.path.isfile(candidate)):
+        return shutil.which(candidate) or candidate
+    return shutil.which("gz")
+
+
+def check_ground_truth_vision_leak(environ: dict[str, str] | None = None) -> tuple[bool, str]:
+    """Fail when ground truth is publishing on PX4's external-vision topic.
+
+    Runs ``gz topic -i -t /model/<model>/odometry_with_covariance``. The model
+    name follows ``PX4_GZ_MODEL`` / ``PX4_SIM_MODEL`` plus the PX4 instance,
+    and defaults to ``x500_depth_0``. SKIP when the gz CLI is absent.
+    """
+    env = os.environ if environ is None else environ
+    model = px4_vision_model_name(env)
+    topic = px4_vision_covariance_topic(model)
+    gz_bin = _gz_executable(env)
+    if gz_bin is None:
+        return ground_truth_leak_from_info("", gz_cli=False, model_name=model)
+    try:
+        completed = subprocess.run(
+            [gz_bin, "topic", "-i", "-t", topic],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False, (
+            f"FAIL no ground-truth leak to PX4 vision: gz topic -i -t {topic} timed out"
+        )
+    except OSError:
+        return ground_truth_leak_from_info("", gz_cli=False, model_name=model)
+    info = f"{completed.stdout or ''}\n{completed.stderr or ''}"
+    return ground_truth_leak_from_info(
+        info,
+        gz_cli=True,
+        model_name=model,
+        returncode=completed.returncode,
+    )
 
 
 def _env_float(name: str, default: float) -> float:
@@ -247,6 +297,7 @@ def main() -> None:
             results.append(self._rate(self.imu_topic, self.min_imu, now))
             results.append(self._imu_to_optical())
             results.append(self._rate(self.gt_topic, self.min_gt, now))
+            results.append(check_ground_truth_vision_leak())
             results.extend(self._rtabmap())
             results.extend(self._px4())
             results.extend(self._tf())

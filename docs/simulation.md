@@ -37,7 +37,7 @@ Nav2 (`navigation_launch.py` and `start_nav2.sh`), Nav2 RViz, the x500 `robot_st
 
 ## Ground truth and the spawn frame
 
-`patch_x500_ground_truth.py` adds a Gazebo `OdometryPublisher` to `x500_depth` before SITL starts. The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`. `config_gz_bridge_sim.yaml` bridges it to `nav_msgs/Odometry`.
+`patch_x500_ground_truth.py` adds a Gazebo `OdometryPublisher` to `x500_depth` before SITL starts. The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`, and the pose with covariance on `/ground_truth/odom_with_covariance`. That covariance topic is set in the plugin. The default is `/model/<model_name>/odometry_with_covariance`, and PX4 v1.17 GZBridge subscribes to exactly that topic and feeds it to EKF2 as external vision, so the default would inject the true pose into the estimator. `config_gz_bridge_sim.yaml` bridges `/ground_truth/odom` to `nav_msgs/Odometry`. Preflight runs `gz topic -i` on `/model/<model>/odometry_with_covariance` (model name from `PX4_GZ_MODEL` or `PX4_SIM_MODEL` plus the instance, default `x500_depth_0`) and fails when that topic has a publisher. It reports SKIP when the `gz` CLI is absent.
 
 * `header.frame_id`: `world` (ENU)
 * `child_frame_id`: `base_link_gt` (`GT_CHILD_FRAME`)

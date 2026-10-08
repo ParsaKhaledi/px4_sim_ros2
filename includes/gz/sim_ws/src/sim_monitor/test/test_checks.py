@@ -14,14 +14,19 @@ from sim_monitor.checks import (
     default_min_rtf,
     expected_sensor_hz,
     gated_rate_hz,
+    ground_truth_leak_from_info,
+    gz_topic_publishers,
     match_versioned_topic,
     minimum_rate_hz,
     parse_spawn_pose,
+    px4_vision_covariance_topic,
+    px4_vision_model_name,
     quat_from_rpy,
     relative_position_error,
     summarize,
     with_rtf_hint,
 )
+from sim_monitor.preflight_check import check_ground_truth_vision_leak
 from sim_monitor.real_time_factor import iter_real_time_factors, parse_stats_message, windowed_rtf
 
 
@@ -101,6 +106,59 @@ def test_summarize_requires_every_check():
     assert message == "PASS a\nFAIL b"
     ok, message = summarize([(True, "PASS a"), (True, "PASS b")])
     assert ok is True
+    ok, message = summarize([(True, "PASS a"), (False, "SKIP gz CLI is absent")])
+    assert ok is True
+    assert message.splitlines()[1].startswith("SKIP")
+
+
+def test_ground_truth_vision_topic_publisher_parse():
+    quiet = """Publishers [Address, Message Type]:
+  No publishers
+
+Subscribers [Address, Message Type]:
+  tcp://172.17.0.2:45941, gz.msgs.OdometryWithCovariance
+"""
+    leaked = """Publishers [Address, Message Type]:
+  tcp://172.17.0.2:40001, gz.msgs.OdometryWithCovariance
+  tcp://172.17.0.2:40002, gz.msgs.OdometryWithCovariance
+
+Subscribers [Address, Message Type]:
+  tcp://172.17.0.2:45941, gz.msgs.OdometryWithCovariance
+"""
+    assert gz_topic_publishers(quiet) == []
+    assert gz_topic_publishers(leaked) == [
+        "tcp://172.17.0.2:40001, gz.msgs.OdometryWithCovariance",
+        "tcp://172.17.0.2:40002, gz.msgs.OdometryWithCovariance",
+    ]
+    assert px4_vision_model_name({}) == "x500_depth_0"
+    assert px4_vision_model_name({"PX4_SIM_MODEL": "gz_x500_depth"}) == "x500_depth_0"
+    assert px4_vision_model_name({"PX4_GZ_MODEL": "x500_depth", "PX4_INSTANCE": "1"}) == "x500_depth_1"
+    assert px4_vision_model_name({"PX4_GZ_MODEL": "x500_depth_0"}) == "x500_depth_0"
+    assert px4_vision_covariance_topic("x500_depth_0") == "/model/x500_depth_0/odometry_with_covariance"
+
+    ok, text = ground_truth_leak_from_info("", gz_cli=False, model_name="x500_depth_0")
+    assert ok is True
+    assert text.startswith("SKIP no ground-truth leak to PX4 vision")
+    assert "PASS" not in text
+
+    ok, text = ground_truth_leak_from_info(quiet, gz_cli=True, model_name="x500_depth_0")
+    assert ok is True
+    assert text.startswith("PASS no ground-truth leak to PX4 vision")
+    assert "/model/x500_depth_0/odometry_with_covariance has no publisher" in text
+
+    ok, text = ground_truth_leak_from_info(leaked, gz_cli=True, model_name="x500_depth_0")
+    assert ok is False
+    assert text.startswith("FAIL no ground-truth leak to PX4 vision")
+    assert "has a publisher tcp://172.17.0.2:40001" in text
+    assert "EKF2" in text
+
+
+def test_ground_truth_leak_check_skips_without_gz(monkeypatch):
+    monkeypatch.setattr("sim_monitor.preflight_check.shutil.which", lambda _name: None)
+    ok, text = check_ground_truth_vision_leak({})
+    assert ok is True
+    assert text.startswith("SKIP no ground-truth leak to PX4 vision")
+    assert "PASS" not in text
 
 
 def test_rate_tracker():
