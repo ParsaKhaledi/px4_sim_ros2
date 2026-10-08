@@ -228,22 +228,22 @@ def _resolve_imu_hz(env: dict[str, str]) -> tuple[float, str]:
     return 80.0, "fallback"
 
 
-def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
-    """Expected IMU rate in Hz. The preflight minimum is half of this.
+# A cpu profile measured exactly 100 Hz sim, so the floor sits under the expected rate.
+IMU_MIN_FRACTION = 0.75
 
-    A vision-profile rate is the exception: that ``imu_hz`` is the minimum,
-    so a full profile of 200 Hz rejects a 100 Hz sim-time stream.
-    """
+
+def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
+    """Expected IMU rate in Hz. The preflight minimum is ``IMU_MIN_FRACTION`` of this."""
     env = os.environ if environ is None else environ
     return _resolve_imu_hz(env)[0]
 
 
 def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
-    """Preflight minimum. ``PREFLIGHT_MIN_*_HZ`` wins, else half the expected rate.
+    """Preflight minimum. ``PREFLIGHT_MIN_*_HZ`` wins.
 
-    The vision profile's ``imu_hz`` is used whole. Half of 200 Hz is 100 Hz,
-    and a 100 Hz sim-time IMU must fail that profile. Model and fallback
-    rates are halved, so the oak minimum is never a fixed 50 Hz.
+    Cameras use half the expected rate. Every IMU source uses
+    ``IMU_MIN_FRACTION`` of its expected rate: ``IMU_RATE_HZ``, the vision
+    profile, the model SDF, and the oak or px4 fallback.
     """
     env = os.environ if environ is None else environ
     name = "PREFLIGHT_MIN_CAMERA_HZ" if kind == "camera" else "PREFLIGHT_MIN_IMU_HZ"
@@ -251,10 +251,7 @@ def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
     if override is not None:
         return override
     if kind == "imu":
-        hz, source = _resolve_imu_hz(env)
-        if source == "profile":
-            return hz
-        return 0.5 * hz
+        return IMU_MIN_FRACTION * expected_imu_hz(env)
     return 0.5 * expected_sensor_hz(kind, env)
 
 

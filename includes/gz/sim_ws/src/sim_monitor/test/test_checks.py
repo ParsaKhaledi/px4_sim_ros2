@@ -277,6 +277,16 @@ def test_rtf_failure_hints_unless_vision_profile_is_cpu():
     assert with_rtf_hint(passed, pass_text, {}) == pass_text
 
 
+def _constant_imu(hz: float) -> RateTracker:
+    """Samples at ``hz`` over one second of sim time, ending at t = 1."""
+    tracker = RateTracker(2.0)
+    count = int(round(hz))
+    for index in range(count + 1):
+        stamp = index / hz
+        tracker.add(stamp, stamp)
+    return tracker
+
+
 def test_full_profile_fails_a_100_hz_sim_imu(monkeypatch):
     import types
 
@@ -292,18 +302,23 @@ def test_full_profile_fails_a_100_hz_sim_imu(monkeypatch):
     monkeypatch.setitem(sys.modules, "geometry", module)
     env = {"VISION_PROFILE": "full", "IMU_SOURCE": "oak"}
     assert expected_imu_hz(env) == 200.0
-    assert minimum_rate_hz("imu", env) == 200.0
-    assert minimum_rate_hz("imu", {"VISION_PROFILE": "full", "IMU_RATE_HZ": "80"}) == 40.0
-    assert minimum_rate_hz("imu", {"VISION_PROFILE": "cpu", "IMU_SOURCE": "oak"}) == 100.0
-    tracker = RateTracker(2.0)
-    for index in range(101):
-        stamp = index * 0.01
-        tracker.add(stamp, stamp)
-    ok, text = topic_rate_line("/imu", tracker, 1.0, 1.0, minimum_rate_hz("imu", env), 1.0)
+    assert minimum_rate_hz("imu", env) == 150.0
+    assert minimum_rate_hz("imu", {"VISION_PROFILE": "full", "IMU_RATE_HZ": "80"}) == 60.0
+    cpu = {"VISION_PROFILE": "cpu", "IMU_SOURCE": "oak"}
+    assert expected_imu_hz(cpu) == 100.0
+    assert minimum_rate_hz("imu", cpu) == 75.0
+    full = _constant_imu(100.0)
+    ok, text = topic_rate_line("/imu", full, 1.0, 1.0, minimum_rate_hz("imu", env), 1.0)
     assert ok is False
     assert "100.0 Hz sim" in text
-    assert "200.0" in text
-    assert expected_imu_hz({"VISION_PROFILE": "cpu", "IMU_SOURCE": "oak"}) == 100.0
+    assert "150.0" in text
+    passed, pass_text = topic_rate_line("/imu", _constant_imu(95.0), 1.0, 1.0, minimum_rate_hz("imu", cpu), 1.0)
+    assert passed is True
+    assert "95.0 Hz sim" in pass_text
+    failed, fail_text = topic_rate_line("/imu", _constant_imu(70.0), 1.0, 1.0, minimum_rate_hz("imu", cpu), 1.0)
+    assert failed is False
+    assert "70.0 Hz sim" in fail_text
+    assert "75.0" in fail_text
 
 
 def test_preflight_thresholds_follow_profile_and_overrides():
@@ -314,10 +329,10 @@ def test_preflight_thresholds_follow_profile_and_overrides():
     assert minimum_rate_hz("imu", {"VISION_PROFILE": "cpu", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
     assert expected_imu_hz({"IMU_SOURCE": "oak"}) == 50.0
     assert expected_imu_hz({"IMU_SOURCE": "oak", "CameraType": "stereo"}) == 50.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 25.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 40.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 37.5
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 60.0
     assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "IMU_RATE_HZ": "80"}) == 40.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "IMU_RATE_HZ": "80"}) == 60.0
     assert default_min_rtf({"HEADLESS_SOFTWARE": "1"}) == 0.15
     assert default_min_rtf({}) == 0.8
     assert default_min_rtf({"HEADLESS_SOFTWARE": "1", "PREFLIGHT_MIN_RTF": "0.5"}) == 0.5
