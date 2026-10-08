@@ -40,6 +40,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
 | `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
+| `VISION_PROFILE` | Camera profile, `full` or `cpu` | `full` |
 | `World` | Gazebo world filename stem | `default` |
 | `HEADLESS` | `1` skips the Gazebo GUI | `0` |
 | `RTABMAPVIZ` | RTAB-Map visualization. Unset stays closed. | `false` |

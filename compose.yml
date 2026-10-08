@@ -29,6 +29,16 @@ x-ros-env: &ros-env
   CAM_X: ${CAM_X:-0.12}
   CAM_Y: ${CAM_Y:-0.03}
   CAM_Z: ${CAM_Z:-0.242}
+  # full is the stock camera profile. cpu is the lighter one.
+  VISION_PROFILE: ${VISION_PROFILE:-full}
+  # Optional overrides. Empty unless set, so the profile keeps its own values.
+  CAM_RATE_HZ: ${CAM_RATE_HZ:-}
+  CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
+  CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
+  CAM_COLOR_WIDTH: ${CAM_COLOR_WIDTH:-}
+  CAM_COLOR_HEIGHT: ${CAM_COLOR_HEIGHT:-}
+  IMU_RATE_HZ: ${IMU_RATE_HZ:-}
+  VISION_MIN_ODOM_HZ: ${VISION_MIN_ODOM_HZ:-}
   # Empty unless a software-rendered flight sets them. The tuner then
   # edits the copied model, not the Oak-D files in this repo.
   GZ_CAMERA_UPDATE_RATE: ${GZ_CAMERA_UPDATE_RATE:-}

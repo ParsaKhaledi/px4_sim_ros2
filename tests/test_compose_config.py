@@ -86,7 +86,18 @@ CAMERA_ENV = {
     "CAM_X": "0.12",
     "CAM_Y": "0.03",
     "CAM_Z": "0.242",
+    "VISION_PROFILE": "full",
 }
+
+OPTIONAL_VISION_ENV = (
+    "CAM_RATE_HZ",
+    "CAM_STEREO_WIDTH",
+    "CAM_STEREO_HEIGHT",
+    "CAM_COLOR_WIDTH",
+    "CAM_COLOR_HEIGHT",
+    "IMU_RATE_HZ",
+    "VISION_MIN_ODOM_HZ",
+)
 
 
 def _config_env(*files, profiles=(), env=None):
@@ -119,6 +130,8 @@ def test_cpu_and_gpu_pass_the_same_camera_env():
             env = rendered["services"][name]["environment"]
             for key, value in CAMERA_ENV.items():
                 assert str(env[key]) == value, (files, name, key, env.get(key))
+            for key in OPTIONAL_VISION_ENV:
+                assert env.get(key) in (None, ""), (files, name, key, env.get(key))
 
 
 def test_camera_env_follows_the_shell():
@@ -130,6 +143,10 @@ def test_camera_env_follows_the_shell():
         "CAM_Z": "0.3",
         "RTABMAPVIZ": "false",
         "CameraType": "stereo",
+        "VISION_PROFILE": "cpu",
+        "CAM_RATE_HZ": "10",
+        "CAM_COLOR_WIDTH": "320",
+        "VISION_MIN_ODOM_HZ": "5",
     })
     for files in (("docker-compose-px4.yml",), ("docker-compose-px4-GPU.yml",)):
         rendered = _config_env(*files, profiles=("slam",), env=env)
@@ -138,8 +155,14 @@ def test_camera_env_follows_the_shell():
         assert str(px4["CAM_X"]) == "0.2"
         assert str(px4["RTABMAPVIZ"]) == "false"
         assert px4["CameraType"] == "stereo"
+        assert px4["VISION_PROFILE"] == "cpu"
+        assert str(px4["CAM_RATE_HZ"]) == "10"
+        assert str(px4["CAM_COLOR_WIDTH"]) == "320"
+        assert str(px4["VISION_MIN_ODOM_HZ"]) == "5"
+        assert px4.get("CAM_STEREO_WIDTH") in (None, "")
         publisher = rendered["services"]["StatePublisher"]["environment"]
         assert str(publisher["CAM_Z"]) == "0.3"
+        assert publisher["VISION_PROFILE"] == "cpu"
 
 
 def test_xvfb_override_replaces_the_empty_display():
