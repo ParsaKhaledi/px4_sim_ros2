@@ -5,19 +5,29 @@ HOME=/home/${USER_NAME}
 WORKDIR=/home/${USER_NAME}/ws_px4
 source /opt/ros/$ROS_DISTRO/setup.bash
 
+RTABMAPVIZ="${RTABMAPVIZ:-false}"
+case "${RTABMAPVIZ}" in
+  true|TRUE|True|1|yes|YES) RTABMAPVIZ=true ;;
+  *) RTABMAPVIZ=false ;;
+esac
+
 export CamerType=$1
 if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      echo "Run Rtabmap with $CamerType camera"
+     python3 "${HOME}/volume/includes/gz/oakd_s2/stereo_info_relay.py" &
+     RELAY_PID=$!
+     trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
      ros2 launch rtabmap_launch rtabmap.launch.py \
           args:="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10  --Kp/DetectorStrategy 10  \
           --Grid/MapFrameProjection true  --NormalsSegmentation false --Grid/MaxGroundHeight 1.0 \
           --Grid/MaxObstacleHeight 2.0 --RGBD/StartAtOrigin true --MaxFeatures 200" \
           stereo:=true  \
           left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
-          right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info   \
-          imu_topic:=/imu   \
+          right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
+          imu_topic:=/imu  frame_id:=base_link  \
           approx_sync:=true  wait_imu_to_init:=true  approx_sync_max_interval:=0.001  \
-          qos:=2  rtabmapviz:=true  rviz:=false #  frame_id:=camera_rgb_frame
+          use_sim_time:=true \
+          qos:=2  rtabmapviz:=${RTABMAPVIZ}  rviz:=false
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      echo "Run Rtabmap with $CamerType camera"
      ros2 launch rtabmap_launch rtabmap.launch.py   \
@@ -25,8 +35,8 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           --NormalsSegmentation false --Grid/MaxGroundHeight 0.0  --Grid/MaxObstacleHeight 3.0 --RGBD/StartAtOrigin true         \
           --MaxFeatures 100 --Grid/RayTracing true --Grid/3D true  --Grid/FlatObstacleDetected true                            ' \
           rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \
-          imu_topic:=/imu approx_sync:=true    \
-          use_sim_time:=true  qos:=2    rtabmapviz:=true     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
+          imu_topic:=/imu  frame_id:=base_link  approx_sync:=true    \
+          use_sim_time:=true  qos:=2    rtabmapviz:=${RTABMAPVIZ}     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
 else
     echo "Invalid CameraType"
     exit 1

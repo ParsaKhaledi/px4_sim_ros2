@@ -33,6 +33,10 @@ services:
         CameraType: ${CameraType:-rgbd}
         World: ${World:-default}
         XRCE_DDS_AGENT_IP: "10.20.10.7"
+        CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+        CAM_X: ${CAM_X:-0.12}
+        CAM_Y: ${CAM_Y:-0.03}
+        CAM_Z: ${CAM_Z:-0.242}
           
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
@@ -77,7 +81,12 @@ services:
       # environment:
       #   DISPLAY: ${DISPLAY}
       #   XAUTHORITY: ${XAUTH}
-          
+      environment:
+        CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+        CAM_X: ${CAM_X:-0.12}
+        CAM_Y: ${CAM_Y:-0.03}
+        CAM_Z: ${CAM_Z:-0.242}
+
       volumes:
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
         - ./includes/gz/:/home/px4/volume/includes/gz/
@@ -226,6 +235,7 @@ services:
         - DISPLAY=${DISPLAY}
         - XAUTHORITY=${XAUTH}
         - CameraType=${CameraType}
+        - RTABMAPVIZ=${RTABMAPVIZ:-false}
 
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/

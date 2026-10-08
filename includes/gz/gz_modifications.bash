@@ -8,6 +8,10 @@ echo "param set-default COM_RC_LOSS_T 35.0" >> $WORKDIR/PX4-Autopilot/ROMFS/px4f
 echo "param set-default NAV_RCL_ACT 1" >> $WORKDIR/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/px4-rc.params
 # Camera Modifications:
 echo "Selected Camera Type: $input"
+# Render SDF and URDF from CAM_PITCH_DEG / CAM_X / CAM_Y / CAM_Z before the
+# stereo-or-rgbd folder swap, so Gazebo and TF see the same mount.
+GZ_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+python3 "${GZ_DIR}/oakd_s2/render_oakd.py" || exit 1
 
 if [ "$input" = Stereo ] || [ "$input" = stereo ]; then
     rm -rf $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
@@ -24,4 +28,13 @@ elif [ "$input" = rgbd ] || [ "$input" = RGBD ] ; then
 else
     echo "Invalid input, please try again."
     exit 1
+fi
+
+# PX4's x500_depth include is what actually places the camera in Gazebo.
+# The URDF camera_joint was rendered above to the same pose.
+X500_SDF="$WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/x500_depth/model.sdf"
+if [ -f "$X500_SDF" ]; then
+    python3 "${GZ_DIR}/oakd_s2/render_oakd.py" --patch-x500 "$X500_SDF" || exit 1
+else
+    echo "x500_depth model not found at $X500_SDF; URDF mount was still rendered"
 fi

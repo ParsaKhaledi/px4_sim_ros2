@@ -1,0 +1,365 @@
+"""OAK-D S2 geometry shared by Gazebo, the URDF, and the stereo baseline fix.
+
+The numbers here are the only place camera size, intrinsics, and the stereo
+baseline are defined. ``render_oakd.py`` turns them into SDF and URDF so the
+two descriptions cannot drift apart.
+
+Frame convention inside the camera link (REP-103, same as Gazebo):
+x forward out of the glass, y left, z up. Gazebo cameras look along +x.
+Image headers use the optical child frame (z forward, x right, y down),
+reached by rpy = (-pi/2, 0, -pi/2).
+"""
+
+from __future__ import annotations
+
+import math
+import os
+from dataclasses import dataclass
+
+
+# Housing from the OAK-D S2 datasheet: 97 x 29.5 x 22.9 mm, 91 g.
+# https://docs.luxonis.com/hardware/products/OAK-D%20S2
+# Shop page and the older hardware manual both list the mass as 91 g.
+HOUSING_DEPTH_M = 0.0229
+HOUSING_WIDTH_M = 0.097
+HOUSING_HEIGHT_M = 0.0295
+MASS_KG = 0.091
+
+# Fixed stereo baseline. Luxonis' current product page says "75cm"; that is a
+# typo. The shop page, the older manual, and depthai-ros all say 7.5 cm.
+BASELINE_M = 0.075
+
+# Lenses sit on the front glass. The link origin is the housing center, which
+# is the same idea as depthai_descriptions (cameras share one origin, split
+# only by the baseline) plus this glass offset.
+FRONT_X_M = HOUSING_DEPTH_M / 2.0
+
+# PX4 x500_depth includes model://OakD-Lite at this pose, with no rotation.
+# The link inside that model is camera_link (the fixed joint's child).
+DEFAULT_CAM_X = 0.12
+DEFAULT_CAM_Y = 0.03
+DEFAULT_CAM_Z = 0.242
+# 17 deg is the old 0.3 rad downward pitch, now applied to the whole mount.
+DEFAULT_PITCH_DEG = 17.0
+
+# Real S2 calibration at 640x400, from
+# includes/gazebo_classic/Params/OAK-D Calibration Files/oak-s2/.
+# The nominal datasheet HFOV is 80 deg. These intrinsics are narrower
+# (about 76.4 deg). The sim follows the calibration and sets horizontal_fov
+# from fx so the rendered image and camera_info describe the same pinhole.
+LEFT_INTRINSICS = {
+    "width": 640,
+    "height": 400,
+    "fx": 406.6239117362143,
+    "fy": 406.080036476775,
+    "cx": 305.77686139278046,
+    "cy": 204.52975717455422,
+}
+RIGHT_INTRINSICS = {
+    "width": 640,
+    "height": 400,
+    "fx": 407.2771382926294,
+    "fy": 407.13351237406044,
+    "cx": 304.9249183482313,
+    "cy": 203.90584453159025,
+}
+
+# Center color camera, auto-focus variant (IMX378). Datasheet FOV 78/66/54.
+# The fixed-focus variant is 82/69/55. AF is the variant in the datasheet's
+# "center color camera" table. 640x480 keeps the 4:3 sensor aspect.
+COLOR_WIDTH = 640
+COLOR_HEIGHT = 480
+COLOR_HFOV_DEG = 66.0
+# Datasheet vertical FOV. Not used to build the pinhole; see color_intrinsics.
+COLOR_VFOV_DEG = 54.0
+
+CAMERA_HZ = 30
+IMU_HZ = 200
+
+# Ogre's image noise pass is in normalized intensity. 0.007 is about two
+# counts on an 8-bit image, enough to not be a perfect render.
+IMAGE_NOISE_STDDEV = 0.007
+
+# BNO086 is a fused part and does not publish a raw Gaussian. The densities
+# below are the BMI270-class figures from earlier OAK boards (gyro
+# 0.008 deg/s/sqrt(Hz), accel 160 ug/sqrt(Hz)), sampled at IMU_HZ with a
+# noise bandwidth of rate/2. They are a stand-in so the sim is not noiseless.
+GYRO_DENSITY_DPS_SQRT_HZ = 0.008
+ACCEL_DENSITY_G_SQRT_HZ = 160e-6
+GRAVITY_M_S2 = 9.80665
+
+# RTAB-Map's default Vis/MinInliers. Below this the odometry is treated as lost.
+TRACKING_MIN_INLIERS = 20
+
+OPTICAL_RPY = (-math.pi / 2.0, 0.0, -math.pi / 2.0)
+
+LINK_NAME = "camera_link"
+IMU_FRAME = "imu_link"
+BASE_FRAME = "base_link"
+
+STEREO_LEFT_OPTICAL = "stereo_left_camera_optical_frame"
+STEREO_RIGHT_OPTICAL = "stereo_right_camera_optical_frame"
+RGB_OPTICAL = "camera_rgb_optical_frame"
+
+RIGHT_INFO_IN = "/camera/stereo/right/camera_info"
+RIGHT_INFO_OUT = "/camera/stereo/right/camera_info_baseline"
+IMU_TOPIC = "/imu"
+
+
+def gyro_stddev_rad_s() -> float:
+    bandwidth_hz = IMU_HZ / 2.0
+    return math.radians(GYRO_DENSITY_DPS_SQRT_HZ * math.sqrt(bandwidth_hz))
+
+
+def accel_stddev_m_s2() -> float:
+    bandwidth_hz = IMU_HZ / 2.0
+    return ACCEL_DENSITY_G_SQRT_HZ * GRAVITY_M_S2 * math.sqrt(bandwidth_hz)
+
+
+def stereo_tx(fx: float, baseline_m: float = BASELINE_M) -> float:
+    """OpenCV stereo Tx. Right camera sits at +x in the left optical frame,
+    and the projection matrix stores that as Tx = -fx * baseline.
+    """
+    if fx <= 0.0:
+        raise ValueError(f"fx must be positive, got {fx}")
+    if baseline_m <= 0.0:
+        raise ValueError(f"baseline must be positive, got {baseline_m}")
+    return -fx * baseline_m
+
+
+def corrected_projection(p, k, baseline_m: float = BASELINE_M):
+    """Return a 12-element P with Tx set from this camera's fx.
+
+    Two separate Gazebo cameras each publish Tx = 0. Harmonic does copy
+    ``<projection><tx>`` into P[3] (gz-sensors CameraSensor::PopulateInfo),
+    but a relay still overwrites P[3] so a build that leaves it at 0 is fixed.
+    Returns None when fx cannot be recovered.
+    """
+    values = [float(v) for v in p]
+    if len(values) != 12:
+        raise ValueError("camera_info P has 12 elements")
+    k_values = [float(v) for v in k]
+    fx = k_values[0] if k_values[0] else values[0]
+    fy = k_values[4] if len(k_values) > 4 and k_values[4] else values[5]
+    cx = k_values[2] if len(k_values) > 2 and k_values[2] else values[2]
+    cy = k_values[5] if len(k_values) > 5 and k_values[5] else values[6]
+    if fx <= 0.0 or fy <= 0.0:
+        return None
+    if values[0] == 0.0:
+        values[0] = fx
+        values[2] = cx
+        values[5] = fy
+        values[6] = cy
+        values[10] = 1.0
+    values[3] = stereo_tx(fx, baseline_m)
+    return values
+
+
+def hfov_from_intrinsics(intrinsics: dict) -> float:
+    """Horizontal field of view in radians that matches fx."""
+    half_width = intrinsics["width"] / 2.0
+    return 2.0 * math.atan(half_width / intrinsics["fx"])
+
+
+def vfov_from_intrinsics(intrinsics: dict) -> float:
+    half_height = intrinsics["height"] / 2.0
+    return 2.0 * math.atan(half_height / intrinsics["fy"])
+
+
+def color_intrinsics() -> dict:
+    """Square-pixel pinhole from the AF datasheet HFOV at 640x480.
+
+    The datasheet also lists VFOV 54 deg and DFOV 78 deg. Those three angles
+    are not one pinhole on a 4:3 sensor (66 by 54 would be about 79 deg on
+    the diagonal). HFOV is the number this sim is pinned to, and square
+    pixels then imply about 52 deg vertical and 78 deg diagonal.
+    """
+    hfov = math.radians(COLOR_HFOV_DEG)
+    fx = (COLOR_WIDTH / 2.0) / math.tan(hfov / 2.0)
+    return {
+        "width": COLOR_WIDTH,
+        "height": COLOR_HEIGHT,
+        "fx": fx,
+        "fy": fx,
+        "cx": COLOR_WIDTH / 2.0,
+        "cy": COLOR_HEIGHT / 2.0,
+    }
+
+
+def diagonal_fov_deg(hfov_deg: float, vfov_deg: float) -> float:
+    """Diagonal field of view for a rectilinear lens, in degrees."""
+    th = math.tan(math.radians(hfov_deg) / 2.0)
+    tv = math.tan(math.radians(vfov_deg) / 2.0)
+    return math.degrees(2.0 * math.atan(math.sqrt(th * th + tv * tv)))
+
+
+def box_inertia(mass: float, size_x: float, size_y: float, size_z: float):
+    """Diagonal inertia of a solid box about its center."""
+    factor = mass / 12.0
+    ixx = factor * (size_y * size_y + size_z * size_z)
+    iyy = factor * (size_x * size_x + size_z * size_z)
+    izz = factor * (size_x * size_x + size_y * size_y)
+    return ixx, iyy, izz
+
+
+@dataclass(frozen=True)
+class Mount:
+    """Pose of the camera link on the drone body, in FLU metres and degrees.
+
+    Positive pitch points the glass down. In both SDF and URDF, rpy is
+    Rz(yaw) Ry(pitch) Rx(roll), and Ry(+pitch) rotates +x toward -z.
+    """
+
+    x: float = DEFAULT_CAM_X
+    y: float = DEFAULT_CAM_Y
+    z: float = DEFAULT_CAM_Z
+    pitch_deg: float = DEFAULT_PITCH_DEG
+
+    @property
+    def pitch_rad(self) -> float:
+        return math.radians(self.pitch_deg)
+
+    def pose_text(self) -> str:
+        return pose_text(self.x, self.y, self.z, 0.0, self.pitch_rad, 0.0)
+
+
+def _env_float(env: dict, name: str, default: float) -> float:
+    raw = env.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return float(raw)
+
+
+def mount_from_env(env: dict | None = None) -> Mount:
+    source = os.environ if env is None else env
+    return Mount(
+        x=_env_float(source, "CAM_X", DEFAULT_CAM_X),
+        y=_env_float(source, "CAM_Y", DEFAULT_CAM_Y),
+        z=_env_float(source, "CAM_Z", DEFAULT_CAM_Z),
+        pitch_deg=_env_float(source, "CAM_PITCH_DEG", DEFAULT_PITCH_DEG),
+    )
+
+
+def pose_text(x: float, y: float, z: float, roll: float, pitch: float, yaw: float) -> str:
+    return f"{x:.6f} {y:.6f} {z:.6f} {roll:.6f} {pitch:.6f} {yaw:.6f}"
+
+
+def rot_y(pitch_rad: float):
+    """Right-handed rotation about y, as a tuple of rows."""
+    c = math.cos(pitch_rad)
+    s = math.sin(pitch_rad)
+    return ((c, 0.0, s), (0.0, 1.0, 0.0), (-s, 0.0, c))
+
+
+def matvec(matrix, vector):
+    return tuple(
+        matrix[row][0] * vector[0] + matrix[row][1] * vector[1] + matrix[row][2] * vector[2]
+        for row in range(3)
+    )
+
+
+def matmul(a, b):
+    return tuple(
+        tuple(sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3))
+        for i in range(3)
+    )
+
+
+def rpy_matrix(roll: float, pitch: float, yaw: float):
+    """URDF/SDF rpy: R = Rz(yaw) Ry(pitch) Rx(roll)."""
+    cr, sr = math.cos(roll), math.sin(roll)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    rx = ((1.0, 0.0, 0.0), (0.0, cr, -sr), (0.0, sr, cr))
+    ry = ((cp, 0.0, sp), (0.0, 1.0, 0.0), (-sp, 0.0, cp))
+    rz = ((cy, -sy, 0.0), (sy, cy, 0.0), (0.0, 0.0, 1.0))
+    return matmul(rz, matmul(ry, rx))
+
+
+def optical_rotation():
+    return rpy_matrix(*OPTICAL_RPY)
+
+
+def _add(a, b):
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def sensor_layouts() -> dict:
+    """Sensor origins in the camera link, before the mount pitch.
+
+    Left is +y (FLU left). The color camera and the aligned depth sensor
+    share the center of the front glass.
+    """
+    return {
+        "stereo_left": (FRONT_X_M, BASELINE_M / 2.0, 0.0),
+        "stereo_right": (FRONT_X_M, -BASELINE_M / 2.0, 0.0),
+        "rgb": (FRONT_X_M, 0.0, 0.0),
+        "imu": (0.0, 0.0, 0.0),
+    }
+
+
+def optical_origin_in_base(sensor: str, mount: Mount | None = None):
+    """Origin of a sensor optical frame expressed in base_link.
+
+    The optical joint has zero translation, so this is also the camera-frame
+    origin. The mount pitch rotates the housing, then the offset is added.
+    """
+    mount = mount or Mount()
+    offset = sensor_layouts()[sensor]
+    rotated = matvec(rot_y(mount.pitch_rad), offset)
+    return _add((mount.x, mount.y, mount.z), rotated)
+
+
+def right_in_left_optical():
+    """Where the right optical frame sits in the left optical frame.
+
+    Expect about (+baseline, 0, 0): image-right, same distance as the hardware.
+    """
+    left = sensor_layouts()["stereo_left"]
+    right = sensor_layouts()["stereo_right"]
+    delta = (right[0] - left[0], right[1] - left[1], right[2] - left[2])
+    rotation = optical_rotation()
+    transposed = tuple(tuple(rotation[row][col] for row in range(3)) for col in range(3))
+    return matvec(transposed, delta)
+
+
+def optical_rotation_in_base(mount: Mount | None = None):
+    """Orientation of an optical frame in base_link. Same for every sensor,
+    because they share the mount pitch and the optical joint has no extra yaw.
+    """
+    mount = mount or Mount()
+    return matmul(rot_y(mount.pitch_rad), optical_rotation())
+
+
+def rotation_to_quaternion(matrix):
+    """Quaternion (x, y, z, w) for a rotation matrix."""
+    trace = matrix[0][0] + matrix[1][1] + matrix[2][2]
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        w = 0.25 * s
+        x = (matrix[2][1] - matrix[1][2]) / s
+        y = (matrix[0][2] - matrix[2][0]) / s
+        z = (matrix[1][0] - matrix[0][1]) / s
+    elif matrix[0][0] > matrix[1][1] and matrix[0][0] > matrix[2][2]:
+        s = math.sqrt(1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]) * 2.0
+        w = (matrix[2][1] - matrix[1][2]) / s
+        x = 0.25 * s
+        y = (matrix[0][1] + matrix[1][0]) / s
+        z = (matrix[0][2] + matrix[2][0]) / s
+    elif matrix[1][1] > matrix[2][2]:
+        s = math.sqrt(1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]) * 2.0
+        w = (matrix[0][2] - matrix[2][0]) / s
+        x = (matrix[0][1] + matrix[1][0]) / s
+        y = 0.25 * s
+        z = (matrix[1][2] + matrix[2][1]) / s
+    else:
+        s = math.sqrt(1.0 + matrix[2][2] - matrix[0][0] - matrix[1][1]) * 2.0
+        w = (matrix[1][0] - matrix[0][1]) / s
+        x = (matrix[0][2] + matrix[2][0]) / s
+        y = (matrix[1][2] + matrix[2][1]) / s
+        z = 0.25 * s
+    return (x, y, z, w)
+
+
+def optical_quaternion_in_base(mount: Mount | None = None):
+    return rotation_to_quaternion(optical_rotation_in_base(mount))

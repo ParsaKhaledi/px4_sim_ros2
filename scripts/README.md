@@ -6,6 +6,7 @@ Helper scripts for launching the simulation stack locally and validating Docker 
 |--------|---------|
 | [up.sh](up.sh) | Start the Compose stack with profiles, camera, and world selection |
 | [smoke_test.sh](smoke_test.sh) | Headless SITL health check for a given image (used in GitHub Actions) |
+| [eval_slam_accuracy.py](eval_slam_accuracy.py) | `evo_ape` / `evo_rpe` on two TUM files, SE(3) alignment only |
 
 ---
 
@@ -43,8 +44,11 @@ COMPOSE_PROFILES=gcs,slam,nav CameraType=stereo World=husarion_office ./scripts/
 | `World` | `default` | SDF filename stem under `includes/gz/worlds/` |
 | `COMPOSE_PROFILES` | `gcs,slam,nav` | Comma-separated Compose profiles (empty = core only) |
 | `COMPOSE_FILE` | `docker-compose-px4.yml` | Alternate compose file path |
+| `CAM_PITCH_DEG` | `17` | Downward camera pitch in degrees |
+| `CAM_X`, `CAM_Y`, `CAM_Z` | `0.12`, `0.03`, `0.242` | Camera mount on `base_link`, metres |
+| `RTABMAPVIZ` | `false` | RTAB-Map viewer (`true` needs a display) |
 
-Values from `.env` (`registry`, `px4TAG`) are sourced automatically. `CameraType` and `World` can also be set in `.env` or on the command line (command line wins).
+Values from `.env` (`registry`, `px4TAG`, and the `CAM_*` mount) are sourced automatically. `CameraType`, `World`, `CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, `CAM_Z`, and `RTABMAPVIZ` can also be set on the command line (command line wins).
 
 ### Compose profiles
 

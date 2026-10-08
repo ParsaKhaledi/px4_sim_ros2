@@ -1,98 +1,76 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<robot name="x500_depth" xmlns:xacro="http://ros.org/wiki/xacro">
-  <link name="base_link">
-    <!-- Base link parameters can be added here -->
-  </link>
-
-  <!-- OakD-Lite camera module -->
-  <link name="OakD-Lite/base_link">
+<?xml version="1.0"?>
+<!-- Generated from includes/gz/oakd_s2. camera_joint matches PX4 x500_depth: 0.120000 0.030000 0.242000 0.000000 0.296706 0.000000. -->
+<robot name="x500_depth">
+  <link name="base_link"/>
+  <link name="camera_link">
     <inertial>
-      <origin xyz="0.00358 -0.03 .014" rpy="0 0 0"/>
-      <mass value="0.061"/>
-      <inertia ixx="0.0000460804" ixy="0" ixz="0" iyy="0.0000055421" iyz="0" izz="0.0000436519"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.091"/>
+      <inertia ixx="7.795097916666666e-05" ixy="0" ixz="0" iyy="1.057617166666667e-05" iyz="0" izz="7.532835916666667e-05"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://OakD-Lite/meshes/OakDLite.dae" scale="1 1 1"/>
+        <box size="0.0229 0.097 0.0295"/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0.00358 -0.03 .014" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.0175 0.091 0.028"/>
+        <box size="0.0229 0.097 0.0295"/>
       </geometry>
     </collision>
   </link>
-
-  <!-- Joint connecting base_link to camera module -->
   <joint name="camera_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="OakD-Lite/base_link"/>
-    <origin xyz="0.12 0.03 0.242" rpy="-1.85 0.0 0"/>
+    <child link="camera_link"/>
+    <origin xyz="0.120000 0.030000 0.242000" rpy="0.000000 0.296706 0.000000"/>
   </joint>
 
-  <!-- Sensors on the OakD-Lite camera module -->
-  <link name="camera_rgb_frame"/>
-  <joint name="camera_rgb_joint" type="fixed">
-    <parent link="OakD-Lite/base_link"/>
-    <child link="camera_rgb_frame"/>
-    <origin xyz="0.01233 -0.03 .01878" rpy="0 0 0"/>
-  </joint>
-  <joint name="camera_rgb_optical_joint" type="fixed">
-    <origin xyz="0 0 0" rpy="-1.57 0 -1.57"/>
-    <parent link="camera_rgb_frame"/>
-    <child link="camera_rgb_optical_frame"/>
-  </joint>
-  <link name="camera_rgb_optical_frame"/>
-
-
-  <link name="depth_camera_frame"/>
-  <joint name="depth_camera_joint" type="fixed">
-    <parent link="OakD-Lite/base_link"/>
-    <child link="depth_camera_frame"/>
-    <origin xyz="0.01233 -0.03 .01878" rpy="0 0 0"/>
-  </joint>
-  <joint name="depth_camera_optical_joint" type="fixed">
-    <origin xyz="0 0 0" rpy="-1.5707 0 -1.57"/>
-    <parent link="depth_camera_frame"/>
-    <child link="depth_camera_optical_frame"/>
-  </joint>
-  <link name="depth_camera_optical_frame"/>
-
-  <link name="stereo_right_camera_frame"/>
-  <joint name="stereo_right_camera_joint" type="fixed">
-    <parent link="OakD-Lite/base_link"/>
-    <child link="stereo_right_camera_frame"/>
-    <origin xyz="0.01233 -0.05 0.013" rpy="0 0 0"/>
-  </joint>
-  <joint name="stereo_right_camera_optical_joint" type="fixed">
-    <origin xyz="0 0 0" rpy="-1.5707 0 -1.57"/>
-    <parent link="stereo_right_camera_frame"/>
-    <child link="stereo_right_camera_optical_frame"/>
-  </joint>
-  <link name="stereo_right_camera_optical_frame"/>
-
-  <link name="stereo_left_camera_frame"/>
   <joint name="stereo_left_camera_joint" type="fixed">
-    <parent link="OakD-Lite/base_link"/>
+    <parent link="camera_link"/>
     <child link="stereo_left_camera_frame"/>
-    <origin xyz="0.01233 0.05 0.013" rpy="0 0 0"/>
+    <origin xyz="0.011450 0.037500 0.000000" rpy="0.000000 0.000000 0.000000"/>
   </joint>
-  <joint name="stereo_left_camera_optical_joint" type="fixed">
-    <origin xyz="0 0 0" rpy="-1.5707 0 -1.57"/>
+  <link name="stereo_left_camera_frame"/>
+  <joint name="stereo_left_camera_optical_frame_joint" type="fixed">
     <parent link="stereo_left_camera_frame"/>
     <child link="stereo_left_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
   </joint>
   <link name="stereo_left_camera_optical_frame"/>
 
-  <!-- IMU sensor -->
-  <link name="imu_link"/>
-  <joint name="imu_joint" type="fixed">
-    <parent link="OakD-Lite/base_link"/>
-    <child link="imu_link"/>
-    <origin xyz="0.01233 -0.03 .01878" rpy="1.57 3.14 1.57"/>
+  <joint name="stereo_right_camera_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="stereo_right_camera_frame"/>
+    <origin xyz="0.011450 -0.037500 0.000000" rpy="0.000000 0.000000 0.000000"/>
   </joint>
+  <link name="stereo_right_camera_frame"/>
+  <joint name="stereo_right_camera_optical_frame_joint" type="fixed">
+    <parent link="stereo_right_camera_frame"/>
+    <child link="stereo_right_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
+  </joint>
+  <link name="stereo_right_camera_optical_frame"/>
 
+  <joint name="camera_rgb_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_rgb_frame"/>
+    <origin xyz="0.011450 0.000000 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="camera_rgb_frame"/>
+  <joint name="camera_rgb_optical_frame_joint" type="fixed">
+    <parent link="camera_rgb_frame"/>
+    <child link="camera_rgb_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
+  </joint>
+  <link name="camera_rgb_optical_frame"/>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="imu_link"/>
 
 </robot>

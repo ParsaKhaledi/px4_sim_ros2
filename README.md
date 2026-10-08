@@ -40,6 +40,11 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `World` | Gazebo world filename stem | `default` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
+| `CAM_PITCH_DEG` | Downward camera pitch in degrees (positive looks down) | `17` |
+| `CAM_X`, `CAM_Y`, `CAM_Z` | Camera link origin on `base_link`, metres | `0.12`, `0.03`, `0.242` |
+| `RTABMAPVIZ` | Open the RTAB-Map viewer | `false` |
+| `SLAM_APE_RMS_MAX` | Pass/fail APE RMSE for `scripts/eval_slam_accuracy.py`, metres | `0.50` |
+| `SLAM_DRIFT_PER_M_MAX` | Pass/fail drift per metre (RPE over 1 m) | `0.10` |
 
 CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-latest_GPU`). Update `px4TAG` in `.env` after pulling a new build.
 
@@ -146,6 +151,29 @@ docker logs px4_sim 2>&1 | grep mavlink
 Bridge config: [includes/gz/config_gz_bridge.yaml](includes/gz/config_gz_bridge.yaml)
 
 CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
+
+## Camera and vision
+
+The simulated camera is a Luxonis OAK-D S2. Gazebo still loads it as `model://OakD-Lite`, because that is the name PX4's `x500_depth` includes. `CameraType=stereo` swaps in the OV9282 pair. `CameraType=rgbd` swaps in the IMX378 color camera with depth aligned to that same optical frame.
+
+`includes/gz/oakd_s2/geometry.py` is the only copy of the intrinsics, the 7.5 cm baseline, and the mount. Container start renders the SDF and the URDF from it, and patches the `x500_depth` include so Gazebo and TF use one pose. Defaults match PX4: `0.12 0.03 0.242` plus 17 degrees down. Set `CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, and `CAM_Z` in `.env`, then recreate the PX4 and StatePublisher containers.
+
+Stereo RTAB-Map reads `/camera/stereo/right/camera_info_baseline`. That topic is the right `camera_info` with `P[3] = -fx * 0.075`. The SDF also sets `<projection><tx>` to the same number. Both launches use `use_sim_time:=true`, `frame_id:=base_link`, and `imu_topic:=/imu`. `RTABMAPVIZ` defaults to false so a headless run does not open a window.
+
+Frame-by-frame explanation, including what used to disagree: [docs/frames.md](docs/frames.md). Generator details: [includes/gz/oakd_s2/README.md](includes/gz/oakd_s2/README.md).
+
+```bash
+# Tracking loss, inliers, and loop closures as JSONL. --fail-on-loss exits 1 after a loss.
+python3 HealthCheck/rtabmap_health_log.py --output /tmp/rtabmap_health.jsonl
+
+# Topics, baseline Tx, IMU, and TF. Needs a running stack. Not run in CI yet.
+python3 HealthCheck/check_vision_pipeline.py --mode stereo --output /tmp/vision_check.jsonl
+
+# Any two TUM files. -a only, so scale error is not hidden.
+python3 scripts/eval_slam_accuracy.py ground_truth.tum rtabmap.tum
+```
+
+`SLAM_APE_RMS_MAX` and `SLAM_DRIFT_PER_M_MAX` are the gates for that last script. The checked-in defaults are starting values, not a number measured on a flight.
 
 ## Health checks
 

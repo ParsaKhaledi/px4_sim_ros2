@@ -15,7 +15,8 @@ Runtime simulation assets mounted into Docker containers from the host repo. Cha
 |------|---------|
 | `gz_modifications.bash` | PX4 container — patches camera model and copies custom worlds/models into PX4-Autopilot |
 | `worlds/*.sdf` | World selection via `World=<filename_stem>` |
-| `models/` | Custom GZ models (Oak-D rgbd/stereo, apt, furniture, etc.) |
+| `models/` | Custom GZ models (OAK-D S2 rgbd/stereo, apt, furniture, etc.) |
+| `oakd_s2/` | OAK-D S2 geometry, SDF/URDF renderer, stereo baseline relay |
 | `config_gz_bridge.yaml` | ros_gz bridge topic mapping |
 | `Params/nav2/` | Nav2 and RViz configuration |
 | `startFiles/` | Per-service launch scripts referenced from Compose |

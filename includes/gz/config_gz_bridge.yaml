@@ -18,6 +18,12 @@
   gz_type_name:   "gz.msgs.Image"
   direction:      "GZ_TO_ROS"
 
+- ros_topic_name: "/camera/depth/camera_info"
+  gz_topic_name:  "/camera/depth/camera_info"
+  ros_type_name:  "sensor_msgs/msg/CameraInfo"
+  gz_type_name:   "gz.msgs.CameraInfo"
+  direction:      "GZ_TO_ROS"
+
 # Stereo Cameras
 - ros_topic_name: "/camera/stereo/right/image_raw"
   gz_topic_name:  "/camera/stereo/right/image_raw"
@@ -41,6 +47,14 @@
   gz_topic_name:  "/camera/stereo/left/camera_info"
   ros_type_name:  "sensor_msgs/msg/CameraInfo"
   gz_type_name:   "gz.msgs.CameraInfo"
+  direction:      "GZ_TO_ROS"
+
+# BNO086 on the camera. The SDF topic is absolute (/imu) so Gazebo does not
+# prefix it with the model scope. RTAB-Map's imu_topic is this same name.
+- ros_topic_name: "/imu"
+  gz_topic_name:  "/imu"
+  ros_type_name:  "sensor_msgs/msg/Imu"
+  gz_type_name:   "gz.msgs.IMU"
   direction:      "GZ_TO_ROS"
 
 - ros_topic_name: "/clock"
