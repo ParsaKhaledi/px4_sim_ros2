@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
+import os
+
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 
 from px4_control.drone import Drone
 
@@ -22,7 +25,11 @@ def run(drone: Drone) -> None:
 
 def main() -> None:
     rclpy.init()
-    node = Node('out_and_back')
+    use_sim = os.environ.get('USE_SIM_TIME', 'true').lower() not in ('0', 'false', 'no')
+    node = Node(
+        'out_and_back',
+        parameter_overrides=[Parameter('use_sim_time', Parameter.Type.BOOL, use_sim)],
+    )
     try:
         run(Drone(node))
     finally:

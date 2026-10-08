@@ -35,13 +35,13 @@ After takeoff the vehicle holds position. It then accepts a `GoTo` goal or `/cmd
 
 `land` descends to half a metre below the altitude recorded at takeoff, and it does not succeed when the setpoint merely reaches the ground. Success waits for `vehicle_land_detected.landed`. A position hold on the surface keeps hover thrust on, and PX4 then answers disarm with `TEMPORARILY_REJECTED` ("not landed"). That ack is retried until the detector latches or the disarm budget runs out.
 
-Timeouts in `config/px4_control.yaml` are on the node clock. With `use_sim_time` the action waiter allows up to 10× that budget in wall time (at least 120 s, at most 900 s) so a real-time factor around 0.3–0.6 can finish. The `Drone` client timeouts are wall-clock and already generous.
+Timers, settle windows, action timeouts, and the vision staleness check use the node clock. With `use_sim_time` that clock is `/clock`, so a real-time factor of 0.004 or 0.5 does not change the mission. The `Drone` client uses the same clock. `out_and_back` sets `use_sim_time` from `USE_SIM_TIME` (default true) and needs `/clock`. The 20 Hz setpoint timer is a ROS timer, so it is also sim time.
 
 ## Topics, services, actions
 
 PX4 QoS is best-effort, volatile, keep-last 5. `/cmd_vel` and the vision odometry use the default reliable QoS.
 
-uXRCE appends `_v<MESSAGE_VERSION>` when that constant is not zero. In px4_msgs v1.17.0, `VehicleStatus` is version 1, so the live topic is `/fmu/out/vehicle_status_v1`. The node subscribes and publishes both the versioned name and the base name, and logs which subscription is actually receiving data. `VehicleOdometry`, `TrajectorySetpoint`, `OffboardControlMode`, and `VehicleCommand` are unversioned.
+Topic names are in `ros2_ws/src/px4_control/config/topics.yaml`, checked against px4_msgs v1.17.0. `VehicleStatus` and `VehicleLocalPosition` are `MESSAGE_VERSION` 1, so the live topics are `/fmu/out/vehicle_status_v1` and `/fmu/out/vehicle_local_position_v1`. `VehicleOdometry`, `VehicleAttitude`, `VehicleCommandAck`, `VehicleLandDetected`, `TrajectorySetpoint`, and `VehicleCommand` are version 0 and keep the bare name. `FailsafeFlags` and `OffboardControlMode` have no `MESSAGE_VERSION`. Subscribers and publishers on `/fmu` use best-effort QoS. The node also subscribes to the unversioned base name when the configured name has a `_vN` suffix, and logs which one delivers data. The pose source is `vehicle_odometry`, not `vehicle_local_position`.
 
 | Direction | Name |
 |-----------|------|
@@ -99,7 +99,7 @@ Publishing stops on any of:
 - zero quaternion
 - negative, non-finite, or huge variance (`vision_max_variance`, default 25)
 - optional `rtabmap_msgs/OdomInfo.lost` when that package is installed
-- no sample for `vision_timeout_s` (default 0.3 s)
+- no sample for `vision_timeout_s` (default 0.3 s on the node clock, which is sim time)
 
 The bridge keeps the odometry header stamp and copies it, in microseconds, onto `VehicleOdometry.timestamp` and `timestamp_sample`. It does not re-stamp the last pose and it does not read the wall clock. `reset_counter` increments once when tracking returns after a loss or a timeout, and once when a pose jumps farther than the motion predicted since the previous sample (`vision_reset_jump_m`, default 0.75 m). A jump on the recovering sample counts as one re-anchor, not two.
 
@@ -111,11 +111,15 @@ While vision is lost the setpoint brakes to a stop, latches position, and takes 
 
 ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. Default is `vision`.
 
-`includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites one marked block in `ROMFS/px4fmu_common/init.d-posix/px4-rc.params`. PX4 v1.17 does not source that file on its own (the previous `>>` append never ran). The installer also inserts one source of it into `rcS`, after the airframe and immediately before `ekf2 start`, and adds `px4-rc.params` to the posix ROMFS file list so the SITL rootfs actually contains it. Re-running it does not stack lines. Values are `param set`, so a later start overrides a value stored from a previous run. The mode is expanded when the container starts, so the PX4 shell does not need the variable itself.
+`includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites `PX4-Autopilot/px4_control_params.env`. `gz_start_px4_gz_sim.sh` sources that file. Stock PX4 v1.17 `rcS` applies every `PX4_PARAM_<NAME>` before the airframe and before `ekf2 start` (`ROMFS/px4fmu_common/init.d-posix/rcS`). Appending `param set` to `px4-rc.params` does not: that file is not sourced, which is why a flight log can still show `NAV_RCL_ACT` 2 after the old append. Re-running the installer replaces the env file. `param set` inside rcS overrides a value stored from a previous run.
 
-Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, and `UXRCE_DDS_SYNCT 0`.
+After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
 
-`UXRCE_DDS_SYNCT` defaults to 1 in v1.17: the client measures the offset between the agent OS clock and PX4 time and rewrites message stamps. In this stack every clock is `/clock`. Syncing to the agent would turn those stamps into wall time, so the installer forces 0. The client starts after the params block, which is what the reboot-required flag needs.
+Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, `NAV_DLL_ACT 0`, and `UXRCE_DDS_SYNCT 0`.
+
+`NAV_DLL_ACT` 0 is sim-only. The x500 airframe default is 2, and then PX4 refuses to arm with "No connection to the GCS" when headless SITL has no QGroundControl. The prearm text names that cause. Do not put `NAV_DLL_ACT` 0 on a real vehicle.
+
+`UXRCE_DDS_SYNCT` defaults to 1 in v1.17: the client measures the offset between the agent OS clock and PX4 time and rewrites message stamps. In this stack every clock is `/clock`. Syncing to the agent would turn those stamps into wall time, so the profile forces 0. The client starts after the `PX4_PARAM_*` loop, which is what the reboot-required flag needs.
 
 ### vision (indoor default)
 
@@ -169,7 +173,9 @@ These are read by the params installer and `gz_start_px4_control.sh`. They are n
 
 `/px4_control/arm` calls `/sim/preflight_check` when that service exists and its type is `std_srvs/Trigger`. If the service is missing, the type does not match, or the call times out, the node logs a warning and continues with PX4 checks. A failed trigger returns that service's message unchanged.
 
-PX4 must then report `pre_flight_checks_pass` and not be in failsafe. Informational bits such as `manual_control_signal_lost` do not block arming on their own. When the checks fail, the response lists the true `FailsafeFlags` boolean names plus `pre_flight_checks_pass is false`.
+PX4 must then report `pre_flight_checks_pass` and not be in failsafe. Informational bits such as `manual_control_signal_lost` do not block arming on their own. When the checks fail, the response lists the true `FailsafeFlags` boolean names plus `pre_flight_checks_pass is false`. If `gcs_connection_lost` is one of those bits, the text says arming is blocked because `NAV_DLL_ACT` defaults to 2 and no QGroundControl heartbeat is present, and that the sim profile sets `NAV_DLL_ACT` 0.
+
+The parameter read-back has to match before arming. A mismatch is returned as the arm failure.
 
 ## Walls
 
@@ -200,15 +206,17 @@ Start it on the same DDS domain as the Micro-XRCE-DDS agent, after the clock bri
 This change does not edit Compose files, Dockerfiles, or CI.
 
 1. Colcon-build `ros2_ws/src/px4_control` and `px4_control_interfaces` in the image after `px4_msgs` v1.17.0. Image workspace `/home/px4/ws_px4`; optional overlay `/home/px4/ws_control`.
-2. Pass `ESTIMATION_MODE` into the PX4 service environment so `gz_modifications.bash` bakes it. Optional, listed in the Environment section above: `EKF2_EV_DELAY`, `EKF2_EV_CTRL`, `PX4_MAX_YAW_RATE_DEG_S`, `PX4_WALL_SEGMENTS_FILE`, and `USE_SIM_TIME`.
+2. Pass `ESTIMATION_MODE` into the PX4 service environment so `gz_modifications.bash` writes `px4_control_params.env` before `gz_start_px4_gz_sim.sh`. Optional, listed in the Environment section above: `EKF2_EV_DELAY`, `EKF2_EV_CTRL`, `PX4_MAX_YAW_RATE_DEG_S`, `PX4_WALL_SEGMENTS_FILE`, and `USE_SIM_TIME`. Set `PX4_IMAGE=alienkh/px4_sim:1.17.0_121` for a live run. `px4_sim:1.17.0_01` is not published.
 3. Start `includes/gz/startFiles/gz_start_px4_control.sh` on the same DDS domain as the XRCE agent, after the bridge so `/clock` exists. `use_sim_time` defaults to true.
 4. Simulation: `/sim/preflight_check` as `std_srvs/Trigger`, wall files at `includes/gz/worlds/walls/<World>.txt`, and `/ground_truth/odom` in ENU at about 50 Hz.
 5. Leave the GPS sensor and `/fmu/out/vehicle_gps_position` in place.
 
 GPU image builds are out of scope here.
 
-## Headless flight with the camera
+## Headless flight
 
-The airframe is `x500_depth` (OakD-Lite, PX4 airframe 4002, make target `gz_x500_depth`). `gz_start_px4_gz_sim.sh` already sets `MODEL=x500_depth`. Do not drop the camera to save CPU unless software rendering fails.
+The default airframe in `gz_start_px4_gz_sim.sh` is still `x500_depth`. On PX4 v1.17 that model fails to spawn when the OakD-Lite link is no longer named `camera_link`. That spawn fix is a separate change. A plain `x500` GPS flight (`make px4_sitl gz_x500`, airframe 4001) is the first live proof when the depth camera does not spawn or CPU rendering drops the real-time factor to a few thousandths and camera frames reach ROS at 0–2 Hz. Do not commit a local copy of the camera model to work around the spawn failure.
 
-Headless Gazebo should use Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`) under `HEADLESS=1`, with Xvfb if the render path needs an X server. A real-time factor around 0.3–0.6 is expected. The plain `x500` model is only a fallback when the depth camera fails to render. Confirm `/camera/rgb/image_raw` and `/camera/depth/image_raw` while the camera model is active (`CameraType=rgbd` overlays `includes/gz/models/OakD-Lite-rgbd`).
+Headless Gazebo should use Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`) under `HEADLESS=1`, with Xvfb if the render path needs an X server.
+
+The image tag `px4_sim:1.17.0_01` is not on Docker Hub. Live runs use `PX4_IMAGE=alienkh/px4_sim:1.17.0_121`. That pin stays out of `.env` here so it does not collide with the DevOps change.

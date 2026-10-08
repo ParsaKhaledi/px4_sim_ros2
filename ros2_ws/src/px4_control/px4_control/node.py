@@ -8,6 +8,7 @@ a second. Vision samples keep the SLAM stamp and are dropped on tracking loss.
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 
@@ -47,10 +48,12 @@ from px4_control.geofence import (
     max_speed_along,
     path_rejection,
 )
+from px4_control.mavlink_params import read_params
 from px4_control.mode_switch import NAV_NAMES, OffboardStreamGate, parse_mode
 from px4_control.motion import Limits, MotionExecutive, Phase, Snapshot
 from px4_control.params_loader import estimation_mode_from_env, normalize_estimation_mode, yaw_rate_from_env
-from px4_control.topics import message_version, topic_candidates
+from px4_control.px4_params import READBACK_PARAMS, expected_sim_params, readback_mismatch
+from px4_control.topics import load_px4_topics, subscription_names
 from px4_control.vision_bridge import OdomSample, VisionOdometryBridge
 from px4_control_interfaces.action import GoTo, Hold, Land, Takeoff
 from px4_control_interfaces.msg import VehicleState
@@ -142,17 +145,25 @@ class Px4ControlNode(Node):
         self._live_topics: dict[str, str] = {}
         self._preflight_client = None
         self._warned_vision_loss = False
+        self._topics = load_px4_topics()
+        self._param_report: str | None = None
+        self._expected_params = expected_sim_params(
+            self._estimation_mode,
+            ev_ctrl=float(os.environ.get('EKF2_EV_CTRL', '11')),
+            ev_delay=float(os.environ.get('EKF2_EV_DELAY', '50')),
+        )
 
         qos = _px4_qos()
-        self._offboard_pubs = self._make_publishers(OffboardControlMode, '/fmu/in/offboard_control_mode', qos)
-        self._traj_pubs = self._make_publishers(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos)
-        self._cmd_pubs = self._make_publishers(VehicleCommand, '/fmu/in/vehicle_command', qos)
-        self._ev_pubs = self._make_publishers(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', qos)
-        self._subscribe_px4(VehicleStatus, '/fmu/out/vehicle_status', self._on_status, qos)
-        self._subscribe_px4(VehicleOdometry, '/fmu/out/vehicle_odometry', self._on_odometry, qos)
-        self._subscribe_px4(FailsafeFlags, '/fmu/out/failsafe_flags', self._on_flags, qos)
-        self._subscribe_px4(VehicleLandDetected, '/fmu/out/vehicle_land_detected', self._on_land, qos)
-        self._subscribe_px4(VehicleCommandAck, '/fmu/out/vehicle_command_ack', self._on_ack, qos)
+        self._offboard_pubs = self._make_publishers(OffboardControlMode, self._topics['offboard_control_mode'], qos)
+        self._traj_pubs = self._make_publishers(TrajectorySetpoint, self._topics['trajectory_setpoint'], qos)
+        self._cmd_pubs = self._make_publishers(VehicleCommand, self._topics['vehicle_command'], qos)
+        self._ev_pubs = self._make_publishers(VehicleOdometry, self._topics['vehicle_visual_odometry'], qos)
+        self._subscribe_px4(VehicleStatus, self._topics['vehicle_status'], self._on_status, qos)
+        self._subscribe_px4(VehicleOdometry, self._topics['vehicle_odometry'], self._on_odometry, qos)
+        self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
+        self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
+        self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
+        threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
 
         cmd_qos = QoSProfile(depth=10)
         self.create_subscription(
@@ -234,16 +245,14 @@ class Px4ControlNode(Node):
             if not self.has_parameter(name):
                 self.declare_parameter(name, value)
 
-    def _make_publishers(self, msg_type, base: str, qos: QoSProfile):
-        pubs = []
-        for name in topic_candidates(base, msg_type):
-            pubs.append(self.create_publisher(msg_type, name, qos))
-        version = message_version(msg_type)
-        self.get_logger().info(f'publishing {base} candidates {topic_candidates(base, msg_type)} (MESSAGE_VERSION={version})')
+    def _make_publishers(self, msg_type, configured: str, qos: QoSProfile):
+        names = subscription_names(configured)
+        pubs = [self.create_publisher(msg_type, name, qos) for name in names]
+        self.get_logger().info(f'publishing {configured} on {names} (best_effort)')
         return pubs
 
-    def _subscribe_px4(self, msg_type, base: str, callback, qos: QoSProfile) -> None:
-        for name in topic_candidates(base, msg_type):
+    def _subscribe_px4(self, msg_type, configured: str, callback, qos: QoSProfile) -> None:
+        for name in subscription_names(configured):
             self.create_subscription(msg_type, name, lambda msg, topic=name, cb=callback: self._mark_and_call(topic, msg, cb), qos, callback_group=self._cb)
 
     def _mark_and_call(self, topic: str, msg, callback) -> None:
@@ -535,8 +544,8 @@ class Px4ControlNode(Node):
             self.get_logger().warning(f'{name} did not respond; continuing with PX4 pre-arm checks only')
             return None
         future = self._preflight_client.call_async(Trigger.Request())
-        deadline = time.monotonic() + 3.0
-        while not future.done() and time.monotonic() < deadline:
+        deadline = self._deadline(3.0)
+        while not future.done() and not self._expired(deadline):
             time.sleep(0.02)
         if not future.done() or future.result() is None:
             self.get_logger().warning(f'{name} timed out; continuing with PX4 pre-arm checks only')
@@ -544,21 +553,16 @@ class Px4ControlNode(Node):
         response = future.result()
         return sim_preflight_decision(True, True, bool(response.success), str(response.message))
 
-    def _wall_limit(self, budget_s: float) -> float:
-        """Wall seconds allowed for a node-clock budget.
+    def _deadline(self, timeout: float) -> float:
+        """Node-clock deadline. Sim time when use_sim_time is set."""
+        return self._now_s() + float(timeout)
 
-        Timeouts in the parameter file are on the node clock. With
-        ``use_sim_time`` a real-time factor of about 0.3 needs several
-        times that many wall seconds. The multiplier is capped so a
-        stalled ``/clock`` cannot wait forever.
-        """
-        if bool(self.get_parameter('use_sim_time').value):
-            return min(max(budget_s * 10.0, 120.0), 900.0)
-        return budget_s
+    def _expired(self, deadline: float) -> bool:
+        return self._now_s() >= deadline
 
     def _wait_until(self, predicate, timeout: float) -> bool:
-        deadline = time.monotonic() + self._wall_limit(timeout)
-        while time.monotonic() < deadline:
+        deadline = self._deadline(timeout)
+        while not self._expired(deadline):
             if predicate():
                 return True
             time.sleep(0.05)
@@ -581,9 +585,9 @@ class Px4ControlNode(Node):
                 with self._lock:
                     reason = prearm_block_reason(self._status, self._flags)
                 return ArmDecision(False, reason or 'pre_flight_checks_pass is false')
-        deadline = time.monotonic() + self._wall_limit(timeout)
+        deadline = self._deadline(timeout)
         command = self._arm_command()
-        while time.monotonic() < deadline:
+        while not self._expired(deadline):
             self._send_command(command, 1.0 if arm else 0.0)
             time.sleep(0.2)
             with self._lock:
@@ -605,8 +609,8 @@ class Px4ControlNode(Node):
     def _ensure_offboard(self, timeout: float):
         from px4_control.arming import ArmDecision
 
-        deadline = time.monotonic() + self._wall_limit(timeout)
-        while time.monotonic() < deadline:
+        deadline = self._deadline(timeout)
+        while not self._expired(deadline):
             with self._lock:
                 ready = self._gate.ready(self._now_s())
                 reason = self._gate.reason(self._now_s())
@@ -619,8 +623,8 @@ class Px4ControlNode(Node):
         else:
             return ArmDecision(False, reason or 'offboard stream is not warm')
         mode = parse_mode('OFFBOARD')
-        send_until = time.monotonic() + self._wall_limit(timeout)
-        while time.monotonic() < send_until:
+        send_until = self._deadline(timeout)
+        while not self._expired(send_until):
             self._send_command(int(VehicleCommand.VEHICLE_CMD_DO_SET_MODE), mode.param1, mode.param2, mode.param3)
             time.sleep(0.2)
             with self._lock:
@@ -666,17 +670,47 @@ class Px4ControlNode(Node):
     def _cancel(self, _goal):
         return CancelResponse.ACCEPT
 
+    def _read_back_params(self) -> None:
+        """Log EKF and arming parameters and refuse to fly if they are wrong."""
+        expected = self._expected_params
+        names = list(READBACK_PARAMS)
+        host = os.environ.get('PX4_MAVLINK_HOST', '127.0.0.1')
+        port = int(os.environ.get('PX4_MAVLINK_PORT', '18570'))
+        try:
+            actual = read_params(names, host=host, port=port)
+        except OSError as exc:
+            message = f'could not read PX4 parameters on {host}:{port}: {exc}'
+            self.get_logger().error(message)
+            self._param_report = message
+            return
+        for name in names:
+            if name in actual:
+                self.get_logger().info(f'param {name}={actual[name]:g} expected {expected[name]:g}')
+            else:
+                self.get_logger().error(f'param {name} had no MAVLink reply')
+        mismatch = readback_mismatch(actual, expected)
+        if mismatch:
+            self.get_logger().error(mismatch)
+            self._param_report = mismatch
+            return
+        self.get_logger().info('PX4 parameter read-back matches the sim profile')
+        self._param_report = ''
+
     def _prepare_flight(self, timeout: float):
         from px4_control.arming import ArmDecision
 
+        if not self._wait_until(lambda: self._param_report is not None, min(float(timeout), 20.0)):
+            return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF)')
+        if self._param_report:
+            return ArmDecision(False, self._param_report)
         armed = self._do_arm(True, timeout)
         if not armed.success:
             return armed
         return self._ensure_offboard(timeout)
 
     def _wait_goal(self, goal_handle, goal_id: int, timeout: float, feedback_builder):
-        deadline = time.monotonic() + self._wall_limit(timeout)
-        while rclpy.ok() and time.monotonic() < deadline:
+        deadline = self._deadline(timeout)
+        while rclpy.ok() and not self._expired(deadline):
             if goal_handle.is_cancel_requested:
                 with self._lock:
                     self._motion.abort('canceled')
@@ -785,11 +819,11 @@ class Px4ControlNode(Node):
             result.message = 'no vehicle_odometry received'
             goal_handle.abort()
             return result
-        started = time.monotonic()
+        started = self._now_s()
 
         def feedback(_snap):
             msg = Hold.Feedback()
-            msg.elapsed_sec = float(time.monotonic() - started)
+            msg.elapsed_sec = float(self._now_s() - started)
             return msg
 
         timeout = max(30.0, duration + 60.0)

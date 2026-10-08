@@ -9,15 +9,13 @@ A script looks like the old MAVROS helpers::
     drone.turn(180.0)
     drone.land()
 
-``turn`` is positive counter-clockwise when viewed from above. Timeouts use
-wall time so a slow simulator does not expire the client early; the vehicle
-itself settles on the control node's clock.
+``turn`` is positive counter-clockwise when viewed from above. Timeouts
+use the node clock, which is sim time when ``use_sim_time`` is set.
 """
 
 from __future__ import annotations
 
 import math
-import time
 from typing import TypeVar
 
 import rclpy
@@ -136,9 +134,13 @@ class Drone:
             message = '' if result is None else result.message
             raise RuntimeError(message or 'action failed')
 
+    def _now_s(self) -> float:
+        """Node clock. Sim time when the node was started with use_sim_time."""
+        return self._node.get_clock().now().nanoseconds * 1e-9
+
     def _wait_future(self, future, timeout: float, label: str) -> None:
-        deadline = time.monotonic() + timeout
+        deadline = self._now_s() + timeout
         while rclpy.ok() and not future.done():
             rclpy.spin_once(self._node, timeout_sec=0.05)
-            if time.monotonic() > deadline:
+            if self._now_s() >= deadline:
                 raise TimeoutError(f'timed out waiting for {label}')

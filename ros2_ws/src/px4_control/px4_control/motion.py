@@ -447,6 +447,11 @@ class MotionExecutive:
         if self._ground_d is not None and self._p is not None:
             self._target = np.array([float(self._p[0]), float(self._p[1]), self._ground_d + 0.5], dtype=float)
         self._tick_path(time_s, dt, snap, vertical=True, complete=False)
+        # LNDMC_Z_VEL_MAX defaults to 0.25 m/s. Ground contact requires the
+        # trajectory velocity[2] (down) to stay finite and at least 1.1 times
+        # that, or PX4 never reports landed and disarm is rejected.
+        if self._v is not None:
+            self._v[2] = max(float(self._v[2]), 0.40)
 
     def _tick_yaw(self, time_s: float, dt: float, snap: Snapshot | None) -> None:
         assert self._p is not None and self._yaw_goal is not None

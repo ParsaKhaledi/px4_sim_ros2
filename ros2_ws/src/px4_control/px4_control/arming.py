@@ -90,6 +90,9 @@ def prearm_block_reason(status: object | None, flags: object | None) -> str | No
     Informational failsafe bits are included only when the pre-flight checks
     have not passed or the commander is already in failsafe. A healthy SITL
     vehicle can report ``manual_control_signal_lost`` and still be armable.
+    ``gcs_connection_lost`` is spelled out: with the airframe default
+    ``NAV_DLL_ACT`` of 2, headless SITL cannot arm until a GCS heartbeat
+    arrives. The sim profile sets ``NAV_DLL_ACT`` to 0.
     """
     if status is None:
         return 'no vehicle_status received'
@@ -98,6 +101,13 @@ def prearm_block_reason(status: object | None, flags: object | None) -> str | No
     if checks_pass and not in_failsafe:
         return None
     reasons = failsafe_reasons(flags)
+    if 'gcs_connection_lost' in reasons:
+        reasons = [item for item in reasons if item != 'gcs_connection_lost']
+        reasons.append(
+            'No connection to the GCS. NAV_DLL_ACT defaults to 2 and then '
+            'blocks arming without a QGroundControl heartbeat. The sim '
+            'profile sets NAV_DLL_ACT 0'
+        )
     if not checks_pass:
         reasons.append('pre_flight_checks_pass is false')
     if in_failsafe:

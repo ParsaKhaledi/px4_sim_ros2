@@ -1,0 +1,25 @@
+# Topic names for px4_msgs v1.17.0.
+#
+# MESSAGE_VERSION in that tag:
+#   VehicleStatus 1, VehicleLocalPosition 1
+#   VehicleOdometry 0, VehicleAttitude 0, VehicleCommandAck 0,
+#   VehicleLandDetected 0, TrajectorySetpoint 0, VehicleCommand 0,
+#   VehicleGlobalPosition 0
+#   FailsafeFlags, OffboardControlMode, SensorGps: no MESSAGE_VERSION
+#
+# PX4 appends _vN only when MESSAGE_VERSION is not zero, so the live
+# status and local-position topics are the _v1 names. Subscribers on
+# /fmu/out use best-effort QoS.
+
+vehicle_status: /fmu/out/vehicle_status_v1
+vehicle_local_position: /fmu/out/vehicle_local_position_v1
+vehicle_odometry: /fmu/out/vehicle_odometry
+vehicle_attitude: /fmu/out/vehicle_attitude
+vehicle_command_ack: /fmu/out/vehicle_command_ack
+failsafe_flags: /fmu/out/failsafe_flags
+vehicle_land_detected: /fmu/out/vehicle_land_detected
+vehicle_gps_position: /fmu/out/vehicle_gps_position
+offboard_control_mode: /fmu/in/offboard_control_mode
+trajectory_setpoint: /fmu/in/trajectory_setpoint
+vehicle_command: /fmu/in/vehicle_command
+vehicle_visual_odometry: /fmu/in/vehicle_visual_odometry

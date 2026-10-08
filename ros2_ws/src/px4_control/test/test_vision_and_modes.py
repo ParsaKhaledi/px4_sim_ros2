@@ -79,6 +79,15 @@ def test_prearm_reports_the_flag_and_ignores_healthy_vehicles():
     assert 'local_position_invalid' in reason
     assert 'pre_flight_checks_pass is false' in reason
 
+    class GcsFlags:
+        gcs_connection_lost = True
+        battery_warning = 0
+
+    gcs = prearm_block_reason(Status(), GcsFlags())
+    assert gcs is not None
+    assert 'No connection to the GCS' in gcs
+    assert 'NAV_DLL_ACT' in gcs
+
     class Healthy:
         pre_flight_checks_pass = True
         failsafe = False
@@ -131,6 +140,13 @@ def test_vision_covariance_is_positive_and_reset_bumps_on_a_jump():
     assert recovered is not None
     assert recovered.reset_counter == 2
     assert recovered.stamp_sec == pytest.approx(1.5)
+
+
+def test_vision_staleness_follows_the_caller_clock():
+    bridge = VisionOdometryBridge(timeout_s=0.3)
+    assert bridge.push(_sample(10.0, (0.0, 0.0, 1.0))) is not None
+    assert bridge.current(10.2) is not None
+    assert bridge.current(10.4) is None
 
 
 def test_vision_does_not_restamp_a_stale_pose():

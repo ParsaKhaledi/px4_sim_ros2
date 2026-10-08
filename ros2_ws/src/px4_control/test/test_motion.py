@@ -171,6 +171,7 @@ def test_land_keeps_descending_until_the_detector_says_landed():
     for index in range(1, 250):
         setpoint = executive.update(0.05 + index * 0.05, state)
         assert not executive.poll(land_id).done
+        assert float(setpoint.velocity[2]) >= 0.30
         state = Snapshot(setpoint.position.copy(), np.zeros(3), setpoint.yaw, 0.0, False)
     assert setpoint is not None
     assert float(setpoint.position[2]) > 0.2
