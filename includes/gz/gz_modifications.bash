@@ -1,4 +1,5 @@
 #!/bin/bash
+# Overlay camera models, or leave the stock PX4 model for a flight-only start.
 
 echo "Start Modifications for running Simulation"
 input=$1
@@ -9,7 +10,9 @@ echo "param set-default NAV_RCL_ACT 1" >> $WORKDIR/PX4-Autopilot/ROMFS/px4fmu_co
 # Camera Modifications:
 echo "Selected Camera Type: $input"
 
-if [ "$input" = Stereo ] || [ "$input" = stereo ]; then
+if [ "$input" = none ] || [ "$input" = flight ]; then
+    echo "Flight-only start. Stock PX4 model, no camera overlay."
+elif [ "$input" = Stereo ] || [ "$input" = stereo ]; then
     rm -rf $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/OakD-Lite
     cp -rv $WORKDIR/volume/includes/gz/models/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/models/
     cp -rv $WORKDIR/volume/includes/gz/worlds/* $WORKDIR/PX4-Autopilot/Tools/simulation/gz/worlds/

@@ -37,16 +37,29 @@ fi
 mkdir -p "${ROOT}/logs/health" "${ROOT}/logs/flights"
 chmod 777 "${ROOT}/logs" "${ROOT}/logs/health" "${ROOT}/logs/flights" || true
 
+# Optional space-separated service list. Empty means the whole project.
+SERVICES=()
+if [ -n "${COMPOSE_SERVICES:-}" ]; then
+  read -r -a SERVICES <<< "${COMPOSE_SERVICES}"
+fi
+
 cd "${ROOT}"
 case "${ACTION}" in
   up)
     if ! docker image inspect "${PX4_IMAGE}" >/dev/null 2>&1; then
       docker pull "${PX4_IMAGE}"
     fi
-    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${SMOKE_TEST_TIMEOUT:-900}"
+    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${SMOKE_TEST_TIMEOUT:-900}" "${SERVICES[@]}"
     ;;
   down)
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" down --remove-orphans
+    ;;
+  recreate)
+    # Stop and recreate the sim containers. A Gazebo world reset leaves
+    # PX4's estimator in the crashed state, so the container has to go.
+    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" stop "${SERVICES[@]}" || true
+    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" rm -f "${SERVICES[@]}" || true
+    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${SMOKE_TEST_TIMEOUT:-900}" "${SERVICES[@]}"
     ;;
   logs)
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" logs --no-color > "${ROOT}/logs/smoke-containers.log" || true
@@ -55,7 +68,7 @@ case "${ACTION}" in
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" ps
     ;;
   *)
-    echo "usage: $0 up|down|logs|ps" >&2
+    echo "usage: $0 up|down|recreate|logs|ps" >&2
     exit 2
     ;;
 esac

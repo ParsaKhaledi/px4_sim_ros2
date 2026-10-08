@@ -165,7 +165,13 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 ## CI and local tests
 
-Lint, an empty-workspace colcon build, and the image build run on pull requests. The image build does not push to Docker Hub from a pull request. Gazebo smoke and the out-and-back mission are manual or nightly: a GitHub-hosted runner has no GPU, and camera topics need a renderer.
+Pull requests run lint, colcon, the CPU image build, the GPU image build, and a headless flight. Nothing is pushed from a pull request. The GPU job stops after the image contents check. It does not start Gazebo.
+
+The pull-request flight uses the plain `x500` model (`CameraType=none`, `PX4_GZ_MODEL=x500`) so physics can run without a camera renderer. It takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. Grading uses the Gazebo model pose when `/ground_truth/odom` is absent, and the log includes the PX4 `vehicle_local_position` error against that pose. If `px4_control.Drone` imports, that API flies the same mission.
+
+A crash (tilt past about 60°, a ground impact, an unexpected disarm, failsafe, or land, pose far from the setpoint, or a few seconds without odometry) records the reason and restarts the PX4 container. `E2E_MAX_RETRIES` (default 2) is how many restarts are allowed after the first try. The run fails when every attempt crashes. Thresholds are the `E2E_*` keys in `.env`.
+
+Nightly keeps the 1.0 m leg and the depth-camera model (`x500_depth`) on a self-hosted runner. Camera smoke still needs a machine that can render.
 
 ```bash
 # Static checks
@@ -173,11 +179,14 @@ Lint, an empty-workspace colcon build, and the image build run on pull requests.
 docker compose -f docker-compose-px4.yml config -q
 docker compose -f docker-compose-px4-GPU.yml config -q
 
-# Headless smoke against a local or pulled image
+# Headless smoke against a local or pulled image. Needs a renderer for cameras.
 HEADLESS=1 RTABMAPVIZ=false ./scripts/smoke_test.sh "${PX4_IMAGE}"
 
-# Out-and-back. Skips until px4_control.Drone imports.
-E2E_LEG_LENGTH_M=0.3 ./scripts/run_e2e.sh
+# Flight-only out-and-back, same shape as the pull-request job.
+CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
+
+# Full camera model. Needs a renderer.
+CameraType=rgbd PX4_GZ_MODEL=x500_depth E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
 ```
 
 See [scripts/README.md](scripts/README.md).

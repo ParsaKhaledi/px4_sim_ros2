@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Out-and-back mission scored on /ground_truth/odom.
+"""Out-and-back flight.
 
-The Drone class lands with the control packages. Until that package imports,
-this script exits 0 and records a skip so CI can stay green.
+Uses px4_control.Drone when that package imports. Otherwise flies with
+the PX4 offboard topics in px4_offboard.py. A missing package is not a
+skip. Crash rules and the sim restart live around this one attempt.
 """
 
 from __future__ import annotations
@@ -11,18 +12,15 @@ import importlib
 import json
 import os
 import sys
-import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests" / "e2e"))
 
-from grading import grade_mission, load_thresholds, yaw_from_quat  # noqa: E402
-
-
-class SkipMission(Exception):
-    pass
+from crash_monitor import load_crash_thresholds  # noqa: E402
+from grading import load_thresholds  # noqa: E402
+from px4_offboard import FlightCrash, FlightSetupError, FlightWatch, run_px4_mission  # noqa: E402
 
 
 DRONE_CANDIDATES = (
@@ -44,6 +42,12 @@ def import_drone():
     return None
 
 
+def driver_name() -> str:
+    if import_drone() is None:
+        return "px4_offboard"
+    return "px4_control"
+
+
 def _call(obj, names, *args, **kwargs):
     for name in names:
         func = getattr(obj, name, None)
@@ -53,7 +57,7 @@ def _call(obj, names, *args, **kwargs):
             return func(*args, **kwargs)
         except TypeError:
             continue
-    raise SkipMission(f"Drone API has no usable method among {names}")
+    raise FlightSetupError(f"Drone API has no usable method among {names}")
 
 
 def _result_path() -> Path:
@@ -72,160 +76,118 @@ def _write(payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-class GroundTruthTrace:
-    """Background sampler. No-op until start() and rclpy are available."""
-
-    def __init__(self):
-        self.samples = []
-        self.phase = "start"
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread = None
-
-    def set_phase(self, phase: str) -> None:
-        with self._lock:
-            self.phase = phase
-
-    def start(self, timeout_s: float = 20.0) -> None:
-        try:
-            import rclpy
-            from nav_msgs.msg import Odometry
-            from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-        except ImportError as exc:
-            raise SkipMission(f"rclpy or nav_msgs is not importable ({exc})") from exc
-
-        rclpy.init(args=None)
-        node = rclpy.create_node("e2e_ground_truth")
-        qos = QoSProfile(
-            history=HistoryPolicy.KEEP_LAST,
-            depth=50,
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE,
-        )
-
-        def on_msg(msg):
-            pose = msg.pose.pose
-            quat = pose.orientation
-            row = {
-                "x": pose.position.x,
-                "y": pose.position.y,
-                "z": pose.position.z,
-                "yaw": yaw_from_quat(quat.x, quat.y, quat.z, quat.w),
-            }
-            with self._lock:
-                row["phase"] = self.phase
-                self.samples.append(row)
-
-        node.create_subscription(Odometry, "/ground_truth/odom", on_msg, qos)
-
-        def spin():
-            while not self._stop.is_set() and rclpy.ok():
-                rclpy.spin_once(node, timeout_sec=0.1)
-
-        self._thread = threading.Thread(target=spin, daemon=True)
-        self._thread.start()
-        self._node = node
-        self._rclpy = rclpy
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
-            with self._lock:
-                if self.samples:
-                    return
-            time.sleep(0.2)
-        required = os.environ.get("E2E_REQUIRE_GROUND_TRUTH", "0") == "1"
-        if required:
-            raise RuntimeError("/ground_truth/odom published no samples")
-        raise SkipMission(
-            "/ground_truth/odom is not publishing. The ground-truth bridge is a separate change."
-        )
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-        node = getattr(self, "_node", None)
-        rclpy = getattr(self, "_rclpy", None)
-        if node is not None:
-            node.destroy_node()
-        if rclpy is not None and rclpy.ok():
-            rclpy.shutdown()
+def _dump(thresholds) -> dict:
+    return {
+        "takeoff_height_m": thresholds.takeoff_height_m,
+        "hover_s": thresholds.hover_s,
+        "leg_length_m": thresholds.leg_length_m,
+        "hover_drift_m": thresholds.hover_drift_m,
+        "leg_tolerance_m": thresholds.leg_tolerance_m,
+        "yaw_tolerance_deg": thresholds.yaw_tolerance_deg,
+        "yaw_settle_deg": thresholds.yaw_settle_deg,
+        "return_tolerance_m": thresholds.return_tolerance_m,
+        "height_tolerance_m": thresholds.height_tolerance_m,
+        "max_retries": load_crash_thresholds().max_retries,
+    }
 
 
-def run_mission() -> dict:
-    drone_cls = import_drone()
-    if drone_cls is None:
-        raise SkipMission(
-            "px4_control.Drone is not importable. The control package is added separately."
-        )
-    thresholds = load_thresholds()
-    trace = GroundTruthTrace()
+def run_drone_mission(drone_cls, thresholds) -> dict:
+    """Fly with the control package, and still watch for a crash."""
+
+    watch = FlightWatch(thresholds=thresholds, commanding=False)
+    watch.start()
     drone = drone_cls()
     try:
-        trace.start()
-        trace.set_phase("start")
+        watch.set_phase("start")
+        time.sleep(1.0)
         if hasattr(drone, "preflight"):
             _call(drone, ("preflight",))
+        watch.set_phase("arm")
         _call(drone, ("arm",))
+        watch.raise_if_crashed()
+        watch.set_phase("takeoff")
         try:
             _call(drone, ("takeoff",), thresholds.takeoff_height_m)
-        except SkipMission:
+        except FlightSetupError:
             _call(drone, ("takeoff",), height_m=thresholds.takeoff_height_m)
-        trace.set_phase("hover")
+        watch.set_phase("hover")
         if hasattr(drone, "hold"):
             try:
                 _call(drone, ("hold",), thresholds.hover_s)
-            except SkipMission:
+            except FlightSetupError:
                 time.sleep(thresholds.hover_s)
         else:
             time.sleep(thresholds.hover_s)
-        trace.set_phase("leg1")
+        watch.raise_if_crashed()
+        watch.set_phase("leg1")
         try:
             _call(drone, ("move_forward",), thresholds.leg_length_m)
-        except SkipMission:
+        except FlightSetupError:
             _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
-        trace.set_phase("yaw")
+        watch.set_phase("yaw")
         try:
             _call(drone, ("turn",), 180.0)
-        except SkipMission:
+        except FlightSetupError:
             _call(drone, ("turn",), degrees=180.0)
-        trace.set_phase("leg2")
+        watch.raise_if_crashed()
+        watch.set_phase("leg2")
         try:
             _call(drone, ("move_forward",), thresholds.leg_length_m)
-        except SkipMission:
+        except FlightSetupError:
             _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
-        trace.set_phase("land")
+        watch.set_phase("land")
         _call(drone, ("land",))
         if hasattr(drone, "disarm"):
+            watch.set_phase("disarm")
             _call(drone, ("disarm",))
         time.sleep(1.0)
+        watch.raise_if_crashed()
     finally:
-        trace.stop()
-    graded = grade_mission(trace.samples, thresholds)
-    graded["status"] = "passed" if graded["passed"] else "failed"
-    graded["samples"] = len(trace.samples)
+        watch.stop()
+    graded = watch._result(crashed=False)
+    graded["driver"] = "px4_control"
+    graded["thresholds"] = _dump(thresholds)
     return graded
 
 
-def test_e2e_out_and_back():
-    pytest = __import__("pytest")
-    try:
-        result = run_mission()
-    except SkipMission as exc:
-        pytest.skip(str(exc))
-    assert result["passed"], result
+def run_mission() -> dict:
+    thresholds = load_thresholds()
+    drone_cls = import_drone()
+    if drone_cls is None:
+        result = run_px4_mission(thresholds)
+        result["thresholds"] = _dump(thresholds)
+        return result
+    return run_drone_mission(drone_cls, thresholds)
 
 
 def main() -> int:
     try:
         result = run_mission()
-    except SkipMission as exc:
-        payload = {"status": "skipped", "reason": str(exc)}
+    except FlightCrash as exc:
+        payload = exc.payload(load_thresholds(), driver_name())
         _write(payload)
-        print(f"SKIP: {exc}")
-        return 0
+        print(json.dumps({"status": "crashed", "crash_reason": exc.reason, "snapshot": exc.snapshot}, indent=2))
+        return 2
+    except FlightSetupError as exc:
+        payload = {"status": "failed", "passed": False, "driver": driver_name(), "reason": str(exc)}
+        _write(payload)
+        print(f"SETUP: {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:
+        payload = {"status": "failed", "passed": False, "driver": driver_name(), "reason": str(exc)}
+        _write(payload)
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
     _write(result)
-    print(json.dumps({key: result[key] for key in ("status", "passed", "checks")}, indent=2))
-    return 0 if result["passed"] else 1
+    summary = {
+        "status": result.get("status"),
+        "passed": result.get("passed"),
+        "driver": result.get("driver"),
+        "checks": result.get("checks"),
+        "px4_position_error_m": result.get("px4_position_error_m"),
+    }
+    print(json.dumps(summary, indent=2))
+    return 0 if result.get("passed") else 1
 
 
 if __name__ == "__main__":

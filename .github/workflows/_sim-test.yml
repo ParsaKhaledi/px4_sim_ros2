@@ -38,6 +38,9 @@ jobs:
           HEADLESS: "1"
           RTABMAPVIZ: "false"
           DISPLAY: ""
+          CameraType: rgbd
+          World: default
+          PX4_GZ_MODEL: x500_depth
           E2E_LEG_LENGTH_M: ${{ inputs.leg_length }}
           SMOKE_TEST_TIMEOUT: "900"
         run: |

@@ -17,6 +17,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_flight:
+        description: Fly the out-and-back mission on the loaded CPU image
+        required: false
+        type: boolean
+        default: false
     outputs:
       image_ref:
         description: Image reference that was tested
@@ -35,8 +40,9 @@ permissions:
 
 jobs:
   build:
+    name: ${{ inputs.run_flight && 'flight_test' || 'build' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: ${{ inputs.run_flight && 240 || 180 }}
     outputs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_digest: ${{ steps.meta.outputs.image_digest }}
@@ -145,3 +151,27 @@ jobs:
         uses: ./.github/actions/collect-artifacts
         with:
           name: smoke-${{ inputs.variant }}-${{ github.sha }}
+
+      # Plain x500, no cameras. The GPU job never sets run_flight.
+      - name: Flight test
+        if: inputs.run_flight && inputs.variant == 'no-gpu'
+        env:
+          PX4_IMAGE: px4_sim:ci-${{ github.sha }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: none
+          World: default
+          PX4_GZ_MODEL: x500
+          COMPOSE_PROFILES: ""
+          COMPOSE_SERVICES: PX4
+          E2E_LEG_LENGTH_M: "0.3"
+          E2E_MAX_RETRIES: "2"
+          SMOKE_TEST_TIMEOUT: "900"
+        run: ./scripts/run_e2e.sh
+
+      - name: Flight artifacts
+        if: always() && inputs.run_flight && inputs.variant == 'no-gpu'
+        uses: ./.github/actions/collect-artifacts
+        with:
+          name: flight-${{ github.sha }}

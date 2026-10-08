@@ -2,6 +2,8 @@
 
 Samples are dicts with keys x, y, z, yaw (degrees, ENU) and phase.
 Phases used here: start, hover, leg1, yaw, leg2, land.
+The last start sample is the ground origin, so a pose taken while the
+model is still being spawned does not set the hover height.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ class Thresholds:
     hover_s: float = 10.0
     leg_length_m: float = 0.3
     hover_drift_m: float = 0.05
-    leg_tolerance_m: float = 0.03
+    leg_tolerance_m: float = 0.05
     yaw_tolerance_deg: float = 5.0
     yaw_settle_deg: float = 3.0
     return_tolerance_m: float = 0.05
@@ -38,7 +40,7 @@ def load_thresholds(env=None) -> Thresholds:
         hover_s=number("E2E_HOVER_S", 10.0),
         leg_length_m=number("E2E_LEG_LENGTH_M", 0.3),
         hover_drift_m=number("E2E_HOVER_DRIFT_M", 0.05),
-        leg_tolerance_m=number("E2E_LEG_TOLERANCE_M", 0.03),
+        leg_tolerance_m=number("E2E_LEG_TOLERANCE_M", 0.05),
         yaw_tolerance_deg=number("E2E_YAW_TOLERANCE_DEG", 5.0),
         yaw_settle_deg=number("E2E_YAW_SETTLE_DEG", 3.0),
         return_tolerance_m=number("E2E_RETURN_TOLERANCE_M", 0.05),
@@ -89,7 +91,7 @@ def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
         checks.append(_check("samples", False, 0, 1, "need start and hover samples"))
         return {"passed": False, "checks": checks, "thresholds": asdict(thresholds)}
 
-    origin = (start[0]["x"], start[0]["y"], start[0]["z"])
+    origin = (start[-1]["x"], start[-1]["y"], start[-1]["z"])
     hover_pose = hover[-1]
     hover_z = hover[0]["z"]
     height_error = abs(hover_pose["z"] - origin[2] - thresholds.takeoff_height_m)

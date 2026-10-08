@@ -6,10 +6,10 @@ Helpers for launching the stack, checking health, and running the headless tests
 |--------|---------|
 | [up.sh](up.sh) | Start Compose with profiles, camera, world, and spawn pose |
 | [smoke_test.sh](smoke_test.sh) | Headless compose smoke test. Camera rates run first |
-| [run_e2e.sh](run_e2e.sh) | Out-and-back mission. Skips if `px4_control.Drone` is missing |
+| [run_e2e.sh](run_e2e.sh) | Out-and-back flight, with a sim restart after a crash |
 | [record_flight.sh](record_flight.sh) | Rosbag of the grading topics plus the newest PX4 ULog |
 | [health_report.sh](health_report.sh) | Latest JSONL status per service |
-| [compose_stack.sh](compose_stack.sh) | `up` / `down` / `logs` for the headless override |
+| [compose_stack.sh](compose_stack.sh) | `up` / `down` / `recreate` / `logs` for the headless override |
 | [image_assert.sh](image_assert.sh) | Check binaries inside an image without starting Gazebo |
 | [check_versions.sh](check_versions.sh) | Dockerfile pins match `versions.env` |
 | [check_fuel_refs.sh](check_fuel_refs.sh) | Warn when worlds reference fuel.gazebosim.org |
@@ -40,14 +40,28 @@ GitHub-hosted runners are a poor place for this. They have no GPU, and the camer
 ## run_e2e.sh and record_flight.sh
 
 ```bash
-E2E_LEG_LENGTH_M=0.3 ./scripts/run_e2e.sh
-# nightly distance
-E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
+# Pull-request shape: plain quad, no cameras, CPU only.
+CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
+
+# Nightly shape: depth camera and a 1 m leg. Needs a renderer.
+CameraType=rgbd PX4_GZ_MODEL=x500_depth E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
 ```
 
-The mission is takeoff to 2 m, hold 10 s, forward `E2E_LEG_LENGTH_M`, yaw 180 deg, forward the same distance, land, disarm. Thresholds are the `E2E_*` keys in `.env`. Grading uses `/ground_truth/odom` relative to the takeoff point. If the Drone class or that topic is missing, the script exits 0 and writes `logs/flights/trajectory.json` with `"status": "skipped"`.
+The mission is preflight and arm, takeoff to 2 m, hover 10 s, forward `E2E_LEG_LENGTH_M`, yaw 180°, forward the same distance, land, disarm. `px4_control.Drone` is used when it imports. Otherwise the script talks to PX4 with `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand`.
 
-`record_flight.sh start|stop` stores a rosbag and `flight.ulg` under `logs/flights/`. `run_e2e.sh` calls it around the mission.
+Grading uses `/ground_truth/odom` when that topic is publishing. Otherwise it uses the Gazebo model pose on `/world/<world>/pose/info`. Each sample also stores how far PX4 `vehicle_local_position` is from that pose. Pass limits are the `E2E_*` keys in `.env`: hover drift 5 cm, legs 30 cm ± 5 cm, yaw ± 5°, return 5 cm, height ± 10 cm.
+
+While the vehicle should be airborne, the attempt ends early on any of these:
+
+- tilt over `E2E_CRASH_TILT_DEG` (60°)
+- height under `E2E_CRASH_MIN_HEIGHT_M`, or a fast impact near the ground
+- an unexpected disarm, failsafe, or land detection
+- ground truth farther than `E2E_CRASH_DIVERGENCE_M` from the setpoint
+- no odometry for `E2E_ODOM_TIMEOUT_S` seconds
+
+The reason, container log, health JSONL, rosbag, and ULog are saved under `logs/flights/attempt-<n>/`. The script then recreates the PX4 container (`./scripts/compose_stack.sh recreate`) and waits until the health check passes. `E2E_MAX_RETRIES` defaults to 2, so the first try plus two restarts is the budget. `logs/flights/trajectory.json` lists every attempt. The run fails if the last attempt does not pass.
+
+`record_flight.sh start|stop` stores a rosbag and `flight.ulg`. `run_e2e.sh` calls it on every attempt.
 
 ## health_report.sh
 

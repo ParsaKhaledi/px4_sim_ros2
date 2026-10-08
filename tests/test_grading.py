@@ -45,6 +45,14 @@ def test_leg_length_from_env():
     assert result["passed"], result["checks"]
 
 
+def test_origin_is_the_last_start_sample():
+    rows = [_sample("start", 0.0, 0.0, 4.0, 0.0)]
+    rows.extend(_perfect())
+    result = grade_mission(rows)
+    height = next(item for item in result["checks"] if item["name"] == "height")
+    assert height["passed"], height
+
+
 def test_short_leg_fails_default_threshold():
     result = grade_mission(_perfect(leg=0.1))
     leg = next(item for item in result["checks"] if item["name"] == "leg1")

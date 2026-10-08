@@ -154,9 +154,19 @@ jobs:
       run_smoke: ${{ github.event_name == 'workflow_dispatch' && inputs.run_smoke }}
     secrets: inherit
 
-  # Same events as the CPU build, including pull requests. This job
-  # compiles the image and runs the contents check. It never starts
-  # Gazebo, smoke, or the out-and-back flight. Those stay on nightly.yml.
+  # Separate runner, so it builds the CPU image again from the cache
+  # and loads it locally. No push. Plain x500, no camera render, no GPU.
+  flight_test:
+    needs: build
+    uses: ./.github/workflows/_build.yml
+    with:
+      variant: no-gpu
+      push: false
+      run_smoke: false
+      run_flight: true
+    secrets: inherit
+
+  # Image and contents check only. No Gazebo, smoke, or flight.
   build_gpu:
     needs: lint
     uses: ./.github/workflows/_build.yml

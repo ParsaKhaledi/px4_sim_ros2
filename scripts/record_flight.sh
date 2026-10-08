@@ -8,7 +8,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="${2:-${ROOT}/logs/flights/${STAMP}}"
 CONTAINER="${PX4_CONTAINER:-px4_sim}"
 BAG_DIR="/home/px4/volume/logs/flights/current"
-TOPICS_RE='^/clock$|^/fmu/out/vehicle_odometry$|^/fmu/out/vehicle_status$|^/fmu/out/vehicle_status_v1$|^/ground_truth/odom$|^/rtabmap/odom$|^/tf$|^/tf_static$|^/camera/rgb/image_raw$|^/camera/depth/image_raw$|^/camera/stereo/left/image_raw$|^/camera/stereo/right/image_raw$'
+TOPICS_RE='^/clock$|^/fmu/out/vehicle_odometry$|^/fmu/out/vehicle_local_position$|^/fmu/out/vehicle_status$|^/fmu/out/vehicle_status_v1$|^/fmu/out/vehicle_land_detected$|^/fmu/in/trajectory_setpoint$|^/ground_truth/odom$|^/rtabmap/odom$|^/tf$|^/tf_static$|^/camera/rgb/image_raw$|^/camera/depth/image_raw$|^/camera/stereo/left/image_raw$|^/camera/stereo/right/image_raw$'
 
 if ! docker inspect "${CONTAINER}" >/dev/null 2>&1; then
   echo "Container ${CONTAINER} is not running. Start the stack before recording." >&2

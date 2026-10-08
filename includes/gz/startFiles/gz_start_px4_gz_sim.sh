@@ -7,7 +7,9 @@ WORKDIR=/home/${USER_NAME}/ws_px4
 source /opt/ros/$ROS_DISTRO/setup.bash
 
 WORLD="${1:-default}"
-MODEL="x500_depth"
+# x500 is the plain quad. x500_depth is the camera airframe.
+# Flight CI sets PX4_GZ_MODEL=x500 so Gazebo does not have to render.
+MODEL="${PX4_GZ_MODEL:-x500_depth}"
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
