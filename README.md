@@ -1,3 +1,21 @@
+# Legacy snapshot
+
+> This branch is a frozen snapshot of v3.0 (commit [`5eb5fde`](../../../commit/5eb5fde), tag [`V3.0`](../../../tree/V3.0)), kept for reference and reproducibility. It gets no fixes or new features.
+
+Active development happens on [`main`](../../../tree/main), with integration work on [`dev/px4-upgrade`](../../../tree/dev/px4-upgrade).
+
+To run this version, check out this branch or tag `V3.0` and use the matching Docker image `alienkh/px4_sim:v3.0.0`, not `latest`. [docker-compose-px4.yml](docker-compose-px4.yml) selects `${registry}/px4_sim:${px4TAG}`. [.env.example](.env.example) sets `registry=docker.io/alienkh` and `px4TAG=v3.0.0`, which is `docker.io/alienkh/px4_sim:v3.0.0`. Copy `.env.example` to `.env` before starting: the `.env` committed on this snapshot still sets `px4TAG=1.17.0_01`.
+
+### Known limitations
+
+- Compose uses fixed `container_name`s (`px4_sim`, `statePublisher`, `qground`, `rtabmap`, `nav2`, `nav2_rviz`), so two stacks cannot run on one host.
+- The PX4 container runs `make px4_sitl` at every start (`includes/gz/startFiles/gz_start_px4_gz_sim.sh`).
+- Several start scripts under `includes/gz/startFiles/` are unused: `gz_start_rtabmap_rgbd.sh`, `gz_start_rtabmap_stereo.sh`, `start_explore.sh`, `start_mission.sh`, `start_realsense.sh`, and `start_state_publisher.sh`.
+- Gazebo Classic files remain under `includes/gazebo_classic/`.
+- Nav2 is started with inconsistent `use_sim_time` settings: `includes/gz/Params/nav2/nav2_params.yaml` sets `use_sim_time: True`, while Compose starts RViz through `includes/gz/startFiles/start_nav2_rviz.sh` with `use_sim_time:=False`. `includes/gz/startFiles/start_nav2.sh` also passes `use_sim_time:=False` and loads that params file.
+
+---
+
 # PX4 Simulation with ROS 2
 
 Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. Pull a pre-built image from [Docker Hub](https://hub.docker.com/r/alienkh/px4_sim) and launch with Docker Compose.
