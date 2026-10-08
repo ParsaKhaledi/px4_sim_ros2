@@ -75,6 +75,12 @@ def _threshold_dump(thresholds) -> dict:
         "yaw_settle_deg",
         "return_tolerance_m",
         "height_tolerance_m",
+        "overshoot_m",
+        "settle_tolerance_m",
+        "settle_hold_s",
+        "settle_timeout_s",
+        "hover_height_band_m",
+        "hover_height_hold_s",
     ):
         if hasattr(thresholds, field):
             data[field] = getattr(thresholds, field)
@@ -204,6 +210,7 @@ class FlightWatch:
             self._arm()
             self._engage_offboard()
             self._takeoff()
+            # Height has already held. This wait is the hover clock, not a settle.
             self.set_phase("hover")
             self._wait_sim(self.thresholds.hover_s, max(60.0, self.thresholds.hover_s * 8.0))
             self._leg("leg1")
@@ -673,19 +680,73 @@ class FlightWatch:
         if not ok:
             raise FlightCrash("offboard_timeout", dict(self.snapshot), list(self.samples))
 
+    def _height_m(self):
+        gz = self._gz
+        if gz is None or self._origin is None:
+            return None
+        return gz["z"] - self._origin[2]
+
+    def _position_error_m(self):
+        gz = self._gz
+        if gz is None or self._origin is None:
+            return None
+        expected = setpoint_world(self.sp_n, self.sp_e, self.sp_d, self._origin)
+        return math.dist((gz["x"], gz["y"], gz["z"]), expected)
+
+    def _yaw_error_deg(self):
+        if self.heading is None:
+            return None
+        return abs(math.degrees(wrap_pi(self.heading - self.yaw_sp)))
+
+    def _wait_hold(self, inside, hold_s: float, sim_timeout: float, wall_timeout: float, label: str) -> bool:
+        """Stay inside `inside` for hold_s of sim time. A miss restarts the hold."""
+
+        hold_start = None
+
+        def held():
+            nonlocal hold_start
+            if not inside():
+                hold_start = None
+                return False
+            now = self._sim_s()
+            if hold_start is None:
+                hold_start = now
+            return (now - hold_start) >= hold_s
+
+        ok = self._wait_until(held, sim_timeout=sim_timeout, wall_timeout=wall_timeout)
+        if not ok:
+            print(f"phase={self.phase} {label} not settled", flush=True)
+        return ok
+
+    def _wait_step_settle(self, error_fn, tolerance: float) -> bool:
+        hold = self.thresholds.settle_hold_s
+        timeout = self.thresholds.settle_timeout_s
+
+        def inside():
+            error = error_fn()
+            return error is not None and error <= tolerance
+
+        return self._wait_hold(inside, hold, timeout, max(45.0, timeout * 10.0), "settle")
+
     def _takeoff(self) -> None:
         self.set_phase("takeoff")
         print("phase=takeoff", flush=True)
         self.sp_d = self.ground_down - self.thresholds.takeoff_height_m
-        target = self.thresholds.takeoff_height_m - self.thresholds.height_tolerance_m
+        band = self.thresholds.hover_height_band_m
+        target = self.thresholds.takeoff_height_m
 
-        def climbed():
-            if not self.samples:
-                return False
-            height = self.samples[-1].get("height_m")
-            return height is not None and height >= target
+        def at_height():
+            height = self._height_m()
+            return height is not None and abs(height - target) <= band
 
-        self._wait_until(climbed, sim_timeout=30.0, wall_timeout=150.0)
+        # Climb is not a 4 s step. The hover clock starts after this hold.
+        self._wait_hold(
+            at_height,
+            self.thresholds.hover_height_hold_s,
+            sim_timeout=40.0,
+            wall_timeout=180.0,
+            label="height",
+        )
 
     def _leg(self, phase: str) -> None:
         self.set_phase(phase)
@@ -694,29 +755,13 @@ class FlightWatch:
         distance = self.thresholds.leg_length_m
         self.sp_n += distance * math.cos(heading)
         self.sp_e += distance * math.sin(heading)
-        tolerance = self.thresholds.leg_tolerance_m
-
-        def arrived():
-            if not self.px4_valid:
-                return False
-            along = math.hypot(self.px4_n - self.sp_n, self.px4_e - self.sp_e)
-            return along <= tolerance
-
-        self._wait_until(arrived, sim_timeout=25.0, wall_timeout=120.0)
+        self._wait_step_settle(self._position_error_m, self.thresholds.settle_tolerance_m)
 
     def _yaw_180(self) -> None:
         self.set_phase("yaw")
         print("phase=yaw", flush=True)
         self.yaw_sp = wrap_pi(self.yaw_sp + math.pi)
-        limit = math.radians(self.thresholds.yaw_tolerance_deg)
-
-        def turned():
-            if self.heading is None:
-                return False
-            return abs(wrap_pi(self.heading - self.yaw_sp)) <= limit
-
-        self._wait_until(turned, sim_timeout=20.0, wall_timeout=90.0)
-        self._wait_sim(1.0, 30.0)
+        self._wait_step_settle(self._yaw_error_deg, self.thresholds.yaw_settle_deg)
 
     def _land(self) -> None:
         self.set_phase("land")

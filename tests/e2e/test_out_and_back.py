@@ -87,6 +87,12 @@ def _dump(thresholds) -> dict:
         "yaw_settle_deg": thresholds.yaw_settle_deg,
         "return_tolerance_m": thresholds.return_tolerance_m,
         "height_tolerance_m": thresholds.height_tolerance_m,
+        "overshoot_m": thresholds.overshoot_m,
+        "settle_tolerance_m": thresholds.settle_tolerance_m,
+        "settle_hold_s": thresholds.settle_hold_s,
+        "settle_timeout_s": thresholds.settle_timeout_s,
+        "hover_height_band_m": thresholds.hover_height_band_m,
+        "hover_height_hold_s": thresholds.hover_height_hold_s,
         "max_retries": load_crash_thresholds().max_retries,
     }
 
