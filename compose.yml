@@ -24,6 +24,11 @@ x-ros-env: &ros-env
   GZ_HEADLESS_RENDERING: ${GZ_HEADLESS_RENDERING:-0}
   GZ_USE_XVFB: ${GZ_USE_XVFB:-0}
   CameraType: ${CameraType:-rgbd}
+  # OAK-D mount. Pitch is degrees, positive lens-down. 17 deg is 0.3 rad.
+  CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+  CAM_X: ${CAM_X:-0.12}
+  CAM_Y: ${CAM_Y:-0.03}
+  CAM_Z: ${CAM_Z:-0.242}
   World: ${World:-default}
   PX4_GZ_MODEL: ${PX4_GZ_MODEL:-x500_depth}
   PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}

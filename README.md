@@ -38,6 +38,8 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `px4TAG` | Tag inside `PX4_IMAGE` | `1.17.0_01` |
 | `PX4_GZ_MODEL_POSE` | Spawn pose `x,y,z,roll,pitch,yaw` | `-3,-1.6,0,0,0,3.14` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
+| `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
+| `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
 | `World` | Gazebo world filename stem | `default` |
 | `HEADLESS` | `1` skips the Gazebo GUI | `0` |
 | `RTABMAPVIZ` | RTAB-Map visualization | `true` |

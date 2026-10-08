@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -71,6 +72,69 @@ def test_ci_override_is_headless():
                 targets.append(volume.get("source", ""))
                 targets.append(volume.get("target", ""))
         assert not any(item in ("/dev", "/dev/", "/tmp/.X11-unix") or str(item).endswith("/dev") for item in targets)
+
+
+CAMERA_ENV = {
+    "RTABMAPVIZ": "true",
+    "CameraType": "rgbd",
+    "CAM_PITCH_DEG": "17",
+    "CAM_X": "0.12",
+    "CAM_Y": "0.03",
+    "CAM_Z": "0.242",
+}
+
+
+def _config_env(*files, profiles=(), env=None):
+    command = ["docker", "compose"]
+    for name in files:
+        command.extend(["-f", str(ROOT / name)])
+    for profile in profiles:
+        command.extend(["--profile", profile])
+    command.append("config")
+    completed = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env=env,
+    )
+    return yaml.safe_load(completed.stdout)
+
+
+def test_cpu_and_gpu_pass_the_same_camera_env():
+    stacks = (
+        ("docker-compose-px4.yml",),
+        ("docker-compose-px4-GPU.yml",),
+        ("compose.yml", "compose.gpu.yml"),
+    )
+    for files in stacks:
+        rendered = _config(*files, profiles=("slam",))
+        for name in ("PX4", "StatePublisher", "Rtabmap"):
+            env = rendered["services"][name]["environment"]
+            for key, value in CAMERA_ENV.items():
+                assert str(env[key]) == value, (files, name, key, env.get(key))
+
+
+def test_camera_env_follows_the_shell():
+    env = os.environ.copy()
+    env.update({
+        "CAM_PITCH_DEG": "21",
+        "CAM_X": "0.2",
+        "CAM_Y": "0.04",
+        "CAM_Z": "0.3",
+        "RTABMAPVIZ": "false",
+        "CameraType": "stereo",
+    })
+    for files in (("docker-compose-px4.yml",), ("docker-compose-px4-GPU.yml",)):
+        rendered = _config_env(*files, profiles=("slam",), env=env)
+        px4 = rendered["services"]["PX4"]["environment"]
+        assert str(px4["CAM_PITCH_DEG"]) == "21"
+        assert str(px4["CAM_X"]) == "0.2"
+        assert str(px4["RTABMAPVIZ"]) == "false"
+        assert px4["CameraType"] == "stereo"
+        publisher = rendered["services"]["StatePublisher"]["environment"]
+        assert str(publisher["CAM_Z"]) == "0.3"
 
 
 def test_xvfb_override_replaces_the_empty_display():

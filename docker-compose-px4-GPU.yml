@@ -6,6 +6,13 @@ x-gpu-image: &gpu-image ${PX4_GPU_IMAGE:-docker.io/alienkh/px4_sim:${px4GPUTAG:-
 x-gpu-env: &gpu-env
   NVIDIA_VISIBLE_DEVICES: all
   NVIDIA_DRIVER_CAPABILITIES: all
+  # Same camera knobs as compose.yml, so this wrapper does not drop them.
+  RTABMAPVIZ: ${RTABMAPVIZ:-true}
+  CameraType: ${CameraType:-rgbd}
+  CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+  CAM_X: ${CAM_X:-0.12}
+  CAM_Y: ${CAM_Y:-0.03}
+  CAM_Z: ${CAM_Z:-0.242}
 
 x-gpu-deploy: &gpu-deploy
   resources:
