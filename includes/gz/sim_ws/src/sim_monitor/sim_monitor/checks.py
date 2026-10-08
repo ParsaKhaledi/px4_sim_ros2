@@ -310,6 +310,50 @@ def parse_spawn_pose(text: str) -> tuple[float, float, float, float, float, floa
     return x, y, z, roll, pitch, yaw
 
 
+def lidar_down_enabled(environ: dict[str, str] | None = None) -> bool:
+    """True unless ``LIDAR_DOWN`` is 0, false, or no. Unset means on."""
+    env = os.environ if environ is None else environ
+    raw = env.get("LIDAR_DOWN", "1").strip().lower()
+    if raw == "":
+        raw = "1"
+    return raw in {"1", "true", "yes"}
+
+
+def distance_sensor_topic(names: list[str]) -> str | None:
+    """``/fmu/out/distance_sensor`` or the highest ``distance_sensor_vN`` on that prefix.
+
+    ``/fmu/in/distance_sensor`` is PX4's subscription and is ignored.
+    """
+    published = [name for name in names if "/fmu/out/" in name]
+    return match_versioned_topic(published, "distance_sensor")
+
+
+def distance_sensor_result(
+    *,
+    enabled: bool,
+    topic: str | None,
+    distance_m: float | None,
+) -> tuple[bool, str] | None:
+    """At-rest downward range, or None when ``LIDAR_DOWN`` is off.
+
+    A missing ``/fmu/out/distance_sensor`` is SKIP. PX4 v1.17's
+    ``dds_topics.yaml`` does not publish that topic. A reading passes when
+    it is within 0.1 m to 0.5 m.
+    """
+    if not enabled:
+        return None
+    if not topic:
+        return True, (
+            "SKIP distance_sensor: /fmu/out/distance_sensor is not in the ROS graph "
+            "(PX4 v1.17 dds_topics.yaml does not publish it)"
+        )
+    if distance_m is None:
+        return False, line(False, f"distance_sensor: {topic} has no message yet")
+    ok = 0.1 <= distance_m <= 0.5
+    relation = "within" if ok else "outside"
+    return ok, line(ok, f"distance_sensor: {distance_m:.3f} m {relation} 0.1-0.5 m")
+
+
 def match_versioned_topic(names: list[str], suffix: str) -> str | None:
     """Pick ``/fmu/out/<suffix>`` or the highest ``<suffix>_vN`` topic."""
     exact = []

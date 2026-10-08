@@ -14,7 +14,10 @@ from sim_monitor.checks import (
     default_min_rtf,
     expected_sensor_hz,
     gated_rate_hz,
+    distance_sensor_result,
+    distance_sensor_topic,
     ground_truth_leak_from_info,
+    lidar_down_enabled,
     gz_topic_publishers,
     match_versioned_topic,
     minimum_rate_hz,
@@ -151,6 +154,33 @@ Subscribers [Address, Message Type]:
     assert text.startswith("FAIL no ground-truth leak to PX4 vision")
     assert "has a publisher tcp://172.17.0.2:40001" in text
     assert "EKF2" in text
+
+
+def test_distance_sensor_check_reports_range_or_skips_when_unpublished():
+    assert lidar_down_enabled({}) is True
+    assert lidar_down_enabled({"LIDAR_DOWN": "0"}) is False
+    assert distance_sensor_result(enabled=False, topic=None, distance_m=None) is None
+    names = ["/fmu/in/distance_sensor", "/fmu/out/vehicle_status", "/fmu/out/distance_sensor_v1"]
+    assert distance_sensor_topic(["/fmu/in/distance_sensor"]) is None
+    assert distance_sensor_topic(names) == "/fmu/out/distance_sensor_v1"
+    ok, text = distance_sensor_result(enabled=True, topic=None, distance_m=None)
+    assert ok is True
+    assert text.startswith("SKIP distance_sensor")
+    assert "/fmu/out/distance_sensor" in text
+    assert "dds_topics.yaml" in text
+    ok, text = distance_sensor_result(enabled=True, topic="/fmu/out/distance_sensor", distance_m=0.2)
+    assert ok is True
+    assert text.startswith("PASS distance_sensor: 0.200 m within 0.1-0.5 m")
+    ok, text = distance_sensor_result(enabled=True, topic="/fmu/out/distance_sensor", distance_m=0.1)
+    assert ok is True
+    ok, text = distance_sensor_result(enabled=True, topic="/fmu/out/distance_sensor", distance_m=0.5)
+    assert ok is True
+    ok, text = distance_sensor_result(enabled=True, topic="/fmu/out/distance_sensor", distance_m=0.05)
+    assert ok is False
+    assert "0.050 m outside 0.1-0.5 m" in text
+    ok, text = distance_sensor_result(enabled=True, topic="/fmu/out/distance_sensor", distance_m=None)
+    assert ok is False
+    assert "no message yet" in text
 
 
 def test_ground_truth_leak_check_skips_without_gz(monkeypatch):

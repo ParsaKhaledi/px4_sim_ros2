@@ -133,9 +133,22 @@ Unit tests cover the frame conversions, the geodetic conversion, alignment, and 
 python3 -m pytest
 ```
 
+## Downward lidar
+
+`LIDAR_DOWN=1` (the default) makes `patch_x500_lidar_down.py` add a single-ray downward lidar to `x500_depth` before SITL starts. `LIDAR_DOWN=0` leaves that sensor off. The block matches PX4 v1.17 `x500_lidar_down`:
+
+* `model://LW20` included at pose `0 0 -0.079 0 1.57 0` relative to `base_link`
+* fixed joint `lidar_model_joint` from `base_link` to `lw20_link`
+* fixed joint `lidar_sensor_joint` from `base_link` to `lidar_sensor_link`
+* link `lidar_sensor_link` at pose `0 0 -0.05 0 1.57 0` relative to `base_link`, mass `0.001`
+* sensor `lidar`, type `gpu_lidar`, `gz_frame_id` `lidar_sensor_link`, sensor pose `0 0 0 3.14 0 0`
+* one horizontal sample and one vertical sample (minimum and maximum angle 0), range 0.1 m to 100 m, resolution 0.01, `always_on` 1, `visualize` false
+
+`LIDAR_DOWN_RATE_HZ` (default 30) is the sensor `update_rate`. The world file is not changed. The rendering `Sensors` system already in the world produces the `gpu_lidar` scan. PX4's GZBridge subscribes to `/world/<world>/model/<model>/link/lidar_sensor_link/sensor/lidar/scan` and sets the distance sensor downward when that sensor's world orientation is quaternion (0, 1, 0, 0). The link name and the sensor name are what make that subscription match.
+
 ## Preflight
 
-`sim_monitor.preflight_check` serves `/sim/preflight_check` (`std_srvs/Trigger`). `success` is true only when every line passes. `message` is the reason list, one check per line, each starting with `PASS` or `FAIL`.
+`sim_monitor.preflight_check` serves `/sim/preflight_check` (`std_srvs/Trigger`). `success` is true when every check passed. `message` is the reason list, one check per line, each starting with `PASS`, `FAIL`, or `SKIP`. A `SKIP` line means that check did not run and does not fail the service.
 
 Checks:
 
@@ -144,6 +157,7 @@ Checks:
 * RTAB-Map `/rtabmap/odom_info` has `lost=false`, and the RTAB-Map pose relative to its start is within `PREFLIGHT_MAX_POSE_ERR_M` (default 0.10 m) of ground truth relative to its start
 * PX4 `pre_flight_checks_pass` on `vehicle_status` or `vehicle_status_vN` (highest version)
 * EKF2 external-vision fusion: any of `cs_ev_pos`, `cs_ev_vel`, `cs_ev_hgt`, `cs_ev_yaw` on `estimator_status_flags` or a versioned name
+* When `LIDAR_DOWN=1`, downward distance: read `/fmu/out/distance_sensor` (or `distance_sensor_vN`) and pass when `current_distance` is within 0.1 m to 0.5 m. PX4 v1.17 `dds_topics.yaml` does not publish `/fmu/out/distance_sensor` (the file only subscribes to `/fmu/in/distance_sensor`), so the check reports SKIP until that topic is in the ROS graph. `LIDAR_DOWN=0` omits the check.
 * TF pairs in `PREFLIGHT_TF_PAIRS` (default `world:spawn`, `world:base_link_gt`, `base_link:imu_link`, and `base_link:camera_rgb_frame`, or `base_link:stereo_left_camera_frame` when `CameraType=stereo`)
 
 Thresholds are environment variables, listed in `.env.example` and forwarded by Compose. The bridge script starts the service next to the real-time-factor publisher and the spawn frame.

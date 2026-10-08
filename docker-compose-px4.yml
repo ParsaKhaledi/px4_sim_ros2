@@ -39,6 +39,8 @@ services:
         HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}
         HEADLESS_SOFTWARE: ${HEADLESS_SOFTWARE:-0}
         PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:-}
+        LIDAR_DOWN: ${LIDAR_DOWN:-1}
+        LIDAR_DOWN_RATE_HZ: ${LIDAR_DOWN_RATE_HZ:-30}
         USE_SIM_TIME: ${USE_SIM_TIME:-true}
         # Empty lets the preflight node pick 0.15 under HEADLESS_SOFTWARE, else 0.8.
         PREFLIGHT_MIN_RTF: ${PREFLIGHT_MIN_RTF:-}

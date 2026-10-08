@@ -22,8 +22,11 @@ from sim_monitor.checks import (
     check_rate,
     default_min_rtf,
     gated_rate_hz,
+    distance_sensor_result,
+    distance_sensor_topic,
     ground_truth_leak_from_info,
     header_stamp_s,
+    lidar_down_enabled,
     line,
     match_versioned_topic,
     minimum_rate_hz,
@@ -198,6 +201,9 @@ def main() -> None:
             self.vision_flags = None
             self.status_topic = None
             self.flags_topic = None
+            self.lidar_down = lidar_down_enabled()
+            self.distance_topic = None
+            self.distance_m = None
             self.imu_frame_id = ""
             self._subscribed = set()
             self.type_errors: dict[str, str] = {}
@@ -223,6 +229,11 @@ def main() -> None:
                 if flags:
                     self.flags_topic = flags
                     self._subscribe(names_and_types, flags)
+                if self.lidar_down:
+                    distance = distance_sensor_topic(names)
+                    if distance:
+                        self.distance_topic = distance
+                        self._subscribe(names_and_types, distance)
             except Exception as exc:
                 self.get_logger().error(f"topic discovery failed: {exc}")
 
@@ -275,6 +286,10 @@ def main() -> None:
                     "cs_ev_hgt": bool(getattr(msg, "cs_ev_hgt", False)),
                     "cs_ev_yaw": bool(getattr(msg, "cs_ev_yaw", False)),
                 }
+            elif self.distance_topic and topic == self.distance_topic:
+                value = getattr(msg, "current_distance", None)
+                if value is not None:
+                    self.distance_m = float(value)
 
         def _handle(self, _request, response):
             now = time.monotonic()
@@ -300,6 +315,9 @@ def main() -> None:
             results.append(check_ground_truth_vision_leak())
             results.extend(self._rtabmap())
             results.extend(self._px4())
+            reading = self._distance_sensor()
+            if reading is not None:
+                results.append(reading)
             results.extend(self._tf())
             response.success, response.message = summarize(results)
             self.get_logger().info("preflight %s\n%s" % ("OK" if response.success else "FAILED", response.message))
@@ -372,6 +390,18 @@ def main() -> None:
                 detail = ",".join(active) if active else "none"
                 lines.append((ok, line(ok, f"ekf2 external vision: fusing {detail}")))
             return lines
+
+        def _distance_sensor(self):
+            if self.distance_topic and self.distance_topic in self.type_errors:
+                return False, line(
+                    False,
+                    f"distance_sensor: message type unavailable ({self.type_errors[self.distance_topic]})",
+                )
+            return distance_sensor_result(
+                enabled=self.lidar_down,
+                topic=self.distance_topic,
+                distance_m=self.distance_m,
+            )
 
         def _tf(self):
             lines = []
