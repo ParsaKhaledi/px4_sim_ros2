@@ -1,0 +1,6 @@
+# Descend to the recorded ground height, then disarm.
+---
+bool success
+string message
+---
+float32 altitude

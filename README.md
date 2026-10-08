@@ -147,6 +147,10 @@ Bridge config: [includes/gz/config_gz_bridge.yaml](includes/gz/config_gz_bridge.
 
 CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
+### Offboard control
+
+The PX4 offboard stack lives in `ros2_ws/src/px4_control` and `ros2_ws/src/px4_control_interfaces`. `includes/gz/startFiles/start_mission.sh` starts `gz_start_px4_control.sh`. Set `ESTIMATION_MODE=vision` (default, vision primary, GPS still publishing) or `ESTIMATION_MODE=gps`. Details, topics, and the example mission are in [docs/px4_control.md](docs/px4_control.md).
+
 ## Health checks
 
 The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. RTAB-Map checks `/rtabmap/odom`. Scripts live in [HealthCheck/](HealthCheck/).

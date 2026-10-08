@@ -1,0 +1,32 @@
+px4_control:
+  ros__parameters:
+    estimation_mode: vision
+    setpoint_rate_hz: 20.0
+    offboard_min_hz: 2.0
+    offboard_warmup_s: 1.0
+    cmd_vel_timeout_s: 0.5
+    cmd_vel_topic: /cmd_vel
+    vision_odom_topic: /rtabmap/odom
+    vision_odom_info_topic: /rtabmap/odom_info
+    vision_timeout_s: 0.3
+    vision_reset_jump_m: 0.75
+    vision_max_variance: 25.0
+    max_horizontal_speed: 1.0
+    max_vertical_speed: 0.6
+    max_accel: 1.0
+    a_brake: 1.0
+    max_yaw_rate_deg_s: 30.0
+    max_yaw_accel_deg_s2: 60.0
+    settle_position_m: 0.20
+    settle_yaw_deg: 8.0
+    settle_time_s: 0.4
+    drone_radius_m: 0.35
+    wall_margin_m: 0.40
+    # Empty until Simulation adds includes/gz/worlds/walls/<World>.txt
+    wall_segments_file: ""
+    preflight_service: /sim/preflight_check
+    arm_timeout_s: 25.0
+    offboard_timeout_s: 10.0
+    takeoff_timeout_s: 90.0
+    land_timeout_s: 90.0
+    goto_timeout_s: 120.0

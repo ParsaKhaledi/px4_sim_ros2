@@ -1,0 +1,6 @@
+# Arm or disarm. The server calls /sim/preflight_check when that service
+# exists, then checks PX4 pre-arm flags. message is the failure reason.
+bool arm
+---
+bool success
+string message

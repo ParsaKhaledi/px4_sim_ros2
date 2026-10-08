@@ -1,0 +1,17 @@
+# Move to a pose. yaw is used only when yaw_valid is true; otherwise yaw is held.
+# FRAME_BODY is level and yaw-only: x forward, y left, z up, relative to the
+# pose at the moment the goal is accepted. It does not use roll or pitch.
+uint8 FRAME_LOCAL_ENU=0
+uint8 FRAME_BODY=1
+uint8 frame
+float64 x
+float64 y
+float64 z
+float64 yaw
+bool yaw_valid
+---
+bool success
+string message
+---
+float32 distance_remaining
+float32 yaw_error_rad
