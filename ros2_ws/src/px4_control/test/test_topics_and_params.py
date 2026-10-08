@@ -81,4 +81,13 @@ def test_param_request_round_trip(tmp_path):
         thread.join(timeout=1.0)
         server.close()
     assert values['EKF2_EV_CTRL'] == 11.0
-    assert param_request_read('EKF2_EV_CTRL', 0).startswith(bytes((0xFE,)))
+    assert param_request_read('EKF2_EV_CTRL', 0).startswith(bytes((0xFD,)))
+
+
+def test_vision_timeout_default_covers_three_cpu_frames():
+    text = (
+        __import__('pathlib').Path(__file__).resolve().parents[1] / 'config' / 'px4_control.yaml'
+    ).read_text(encoding='utf-8')
+    line = next(item for item in text.splitlines() if item.strip().startswith('vision_timeout_s:'))
+    value = float(line.split(':', 1)[1])
+    assert value >= 0.3

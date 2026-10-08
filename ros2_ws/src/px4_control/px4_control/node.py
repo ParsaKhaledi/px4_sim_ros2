@@ -676,7 +676,7 @@ class Px4ControlNode(Node):
         expected = self._expected_params
         names = list(READBACK_PARAMS)
         host = os.environ.get('PX4_MAVLINK_HOST', '127.0.0.1')
-        port = int(os.environ.get('PX4_MAVLINK_PORT', '18570'))
+        port = int(os.environ.get('PX4_MAVLINK_PORT', '14580'))
         try:
             actual = read_params(names, host=host, port=port)
         except OSError as exc:

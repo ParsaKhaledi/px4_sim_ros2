@@ -152,6 +152,8 @@ It is not on the uXRCE topic list. In the PX4 shell, or in the log, read uORB `e
 
 Use the value that leaves the innovation near zero and uncorrelated with acceleration. One 30 Hz camera frame is about 33 ms. RTAB-Map's processing is often 50 to 100 ms. Height uses `estimator_aid_src_ev_hgt` the same way. `estimator_aid_src_ev_vel` stays empty while bit 2 is off.
 
+`vision_timeout_s` sits next to that delay. It is the gap, on the node clock, after which a missing vision sample is tracking loss and the vehicle holds. Default 0.3 s. With `use_sim_time` that is 0.3 s of sim time, not wall time, so a low real-time factor does not by itself trip the hold. `VISION_PROFILE=cpu` runs the cameras at 10 Hz, and RTAB-Map odometry then arrives at about 7–10 Hz in sim time. 0.3 s is about three missed frames at 10 Hz, so a CPU run does not hold on every late frame. Raise the parameter if the odometry rate is closer to 7 Hz.
+
 ### gps
 
 Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. `UXRCE_DDS_SYNCT 0` still applies.
