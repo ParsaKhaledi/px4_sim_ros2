@@ -96,6 +96,64 @@ def test_prearm_reports_the_flag_and_ignores_healthy_vehicles():
     assert prearm_block_reason(None, None) == 'no vehicle_status received'
 
 
+def test_prearm_names_a_missing_or_failed_magnetometer():
+    class Status:
+        pre_flight_checks_pass = False
+        failsafe = False
+
+    class Flags:
+        battery_warning = 0
+
+    class Estimator:
+        cs_mag_fault = False
+        fs_bad_mag_x = False
+        fs_bad_mag_y = False
+        fs_bad_mag_z = False
+        fs_bad_mag_decl = False
+        cs_mag_hdg = False
+        cs_mag_3d = False
+        cs_mag = False
+        cs_ev_yaw = False
+        cs_yaw_align = False
+
+    missing = prearm_block_reason(Status(), Flags(), Estimator())
+    assert missing is not None
+    assert 'Magnetometer missing' in missing
+    assert 'Compass Sensor missing' in missing
+
+    fault = Estimator()
+    fault.cs_mag_fault = True
+    fault.cs_yaw_align = True
+    failed = prearm_block_reason(Status(), Flags(), fault)
+    assert failed is not None
+    assert 'Magnetometer failed' in failed
+    assert 'cs_mag_fault' in failed
+
+    bad = Estimator()
+    bad.fs_bad_mag_y = True
+    bad.cs_ev_yaw = True
+    fusion = prearm_block_reason(Status(), Flags(), bad)
+    assert fusion is not None
+    assert 'Magnetometer fusion failed' in fusion
+    assert 'fs_bad_mag_y' in fusion
+
+    vision_yaw = Estimator()
+    vision_yaw.cs_ev_yaw = True
+    quiet = prearm_block_reason(Status(), Flags(), vision_yaw)
+    assert quiet is not None
+    assert 'Magnetometer' not in quiet
+
+    aligned = Estimator()
+    aligned.cs_yaw_align = True
+    assert 'Magnetometer' not in prearm_block_reason(Status(), Flags(), aligned)
+
+    class Healthy:
+        pre_flight_checks_pass = True
+        failsafe = False
+
+    assert prearm_block_reason(Healthy(), Flags(), Estimator()) is None
+
+
 def test_sim_preflight_failure_is_returned_verbatim():
     assert sim_preflight_decision(False, True, False, 'nope') is None
     decision = sim_preflight_decision(True, True, False, 'battery disconnected')

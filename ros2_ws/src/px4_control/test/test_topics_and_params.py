@@ -15,6 +15,7 @@ def test_topic_config_uses_v1_only_where_px4_msgs_does():
     assert topics['vehicle_attitude'] == '/fmu/out/vehicle_attitude'
     assert topics['vehicle_command_ack'] == '/fmu/out/vehicle_command_ack'
     assert topics['failsafe_flags'] == '/fmu/out/failsafe_flags'
+    assert topics['estimator_status_flags'] == '/fmu/out/estimator_status_flags'
     assert topics['vehicle_land_detected'] == '/fmu/out/vehicle_land_detected'
     assert topics['vehicle_visual_odometry'] == '/fmu/in/vehicle_visual_odometry'
     assert subscription_names(topics['vehicle_status']) == [
@@ -28,10 +29,13 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     expected = expected_sim_params('vision')
     assert expected['NAV_DLL_ACT'] == 0.0
     assert expected['EKF2_EV_CTRL'] == 11.0
+    assert expected['EKF2_MAG_TYPE'] == 5.0
+    assert expected_sim_params('gps')['EKF2_MAG_TYPE'] == 0.0
     actual = {
         'EKF2_EV_CTRL': 0.0,
         'EKF2_GPS_CTRL': 7.0,
         'EKF2_HGT_REF': 1.0,
+        'EKF2_MAG_TYPE': 0.0,
         'NAV_RCL_ACT': 2.0,
         'NAV_DLL_ACT': 2.0,
         'UXRCE_DDS_SYNCT': 1.0,
@@ -39,11 +43,12 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     message = readback_mismatch(actual, expected)
     assert message is not None
     assert 'EKF2_EV_CTRL=0' in message
+    assert 'EKF2_MAG_TYPE=0' in message
     assert 'NAV_RCL_ACT=2' in message
     assert 'NAV_DLL_ACT=2' in message
     assert readback_mismatch(
         {name: expected[name] for name in (
-            'EKF2_EV_CTRL', 'EKF2_GPS_CTRL', 'EKF2_HGT_REF',
+            'EKF2_EV_CTRL', 'EKF2_GPS_CTRL', 'EKF2_HGT_REF', 'EKF2_MAG_TYPE',
             'NAV_RCL_ACT', 'NAV_DLL_ACT', 'UXRCE_DDS_SYNCT',
         )},
         expected,

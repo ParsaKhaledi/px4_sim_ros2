@@ -84,7 +84,46 @@ def failsafe_reasons(flags: object | None) -> list[str]:
     return reasons
 
 
-def prearm_block_reason(status: object | None, flags: object | None) -> str | None:
+def _magnetometer_arming_text(estimator: object | None) -> str | None:
+    """Spell out a missing or failed compass. ``None`` when the estimator is quiet."""
+    if estimator is None:
+        return None
+    if bool(getattr(estimator, 'cs_mag_fault', False)):
+        return (
+            'Magnetometer failed (estimator cs_mag_fault). The compass is '
+            'unhealthy, so arming is denied while a magnetometer is required.'
+        )
+    bad = [
+        name
+        for name in ('fs_bad_mag_x', 'fs_bad_mag_y', 'fs_bad_mag_z', 'fs_bad_mag_decl')
+        if bool(getattr(estimator, name, False))
+    ]
+    if bad:
+        return (
+            'Magnetometer fusion failed (' + ', '.join(bad) + '). Arming is '
+            'denied while the compass measurement is unusable.'
+        )
+    fused = any(
+        bool(getattr(estimator, name, False))
+        for name in ('cs_mag_hdg', 'cs_mag_3d', 'cs_mag')
+    )
+    yaw_from_vision = bool(getattr(estimator, 'cs_ev_yaw', False))
+    yaw_aligned = bool(getattr(estimator, 'cs_yaw_align', False))
+    if fused or yaw_from_vision or yaw_aligned:
+        return None
+    return (
+        'Magnetometer missing. No compass fusion is active and yaw is not '
+        'aligned. PX4 denies arming when the world has no magnetometer plugin '
+        '(Preflight Fail: Compass Sensor missing, No valid data from Compass, '
+        'or Found 0 compass).'
+    )
+
+
+def prearm_block_reason(
+    status: object | None,
+    flags: object | None,
+    estimator: object | None = None,
+) -> str | None:
     """Why PX4 should not be armed, or ``None`` when the commander looks ready.
 
     Informational failsafe bits are included only when the pre-flight checks
@@ -108,6 +147,9 @@ def prearm_block_reason(status: object | None, flags: object | None) -> str | No
             'blocks arming without a QGroundControl heartbeat. The sim '
             'profile sets NAV_DLL_ACT 0'
         )
+    mag = _magnetometer_arming_text(estimator)
+    if mag:
+        reasons.append(mag)
     if not checks_pass:
         reasons.append('pre_flight_checks_pass is false')
     if in_failsafe:

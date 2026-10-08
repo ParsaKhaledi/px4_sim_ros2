@@ -113,7 +113,7 @@ ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. D
 
 `includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites `PX4-Autopilot/px4_control_params.env`. `gz_start_px4_gz_sim.sh` sources that file. Stock PX4 v1.17 `rcS` applies every `PX4_PARAM_<NAME>` before the airframe and before `ekf2 start` (`ROMFS/px4fmu_common/init.d-posix/rcS`). Appending `param set` to `px4-rc.params` does not: that file is not sourced, which is why a flight log can still show `NAV_RCL_ACT` 2 after the old append. Re-running the installer replaces the env file. `param set` inside rcS overrides a value stored from a previous run.
 
-After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
+After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `EKF2_MAG_TYPE`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
 
 Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, `NAV_DLL_ACT 0`, and `UXRCE_DDS_SYNCT 0`.
 
@@ -128,6 +128,7 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 | Parameter | Value | Meaning |
 |-----------|-------|---------|
 | `EKF2_EV_CTRL` | 11 | horizontal position, vertical position, yaw. Not velocity |
+| `EKF2_MAG_TYPE` | 5 | None. Magnetometer fusion is off |
 | `EKF2_HGT_REF` | 3 | height from vision |
 | `EKF2_EV_DELAY` | 50 | ms, from `EKF2_EV_DELAY` if set. Read at EKF start |
 | `EKF2_EV_NOISE_MD` | 0 | use the variances on the message |
@@ -138,6 +139,8 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 | `UXRCE_DDS_SYNCT` | 0 | do not sync PX4 time to the agent OS clock |
 
 `EKF2_EV_CTRL` in v1.17 is a bitmask: bit 0 horizontal position, bit 1 vertical position, bit 2 3D velocity, bit 3 yaw. 11 is `0b1011`. 15 is `0b1111` and adds velocity.
+
+Vision mode disables magnetometer fusion (`EKF2_MAG_TYPE` 5, None in `src/modules/ekf2/EKF/common.h`). Yaw comes from external vision (`EKF2_EV_CTRL` bit 3), and an indoor magnetometer would fight that heading. The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe does the same. GPS mode leaves `EKF2_MAG_TYPE` at the firmware default 0 (Automatic) and does not export it.
 
 The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe uses 11. RTAB-Map's twist is body velocity with a covariance that is often too small or not a real velocity uncertainty, so fusing it pulls the EKF off the pose. Velocity fusion stays off unless `EKF2_EV_CTRL=15` is set in the environment before the params installer runs. The bridge still fills the velocity fields; EKF2 ignores them while bit 2 is clear.
 
@@ -156,7 +159,7 @@ Use the value that leaves the innovation near zero and uncorrelated with acceler
 
 ### gps
 
-Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. `UXRCE_DDS_SYNCT 0` still applies.
+Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. Magnetometer fusion stays at the firmware default `EKF2_MAG_TYPE` 0 (Automatic); this profile does not export it. `UXRCE_DDS_SYNCT 0` still applies.
 
 ## Environment
 
@@ -176,6 +179,8 @@ These are read by the params installer and `gz_start_px4_control.sh`. They are n
 `/px4_control/arm` calls `/sim/preflight_check` when that service exists and its type is `std_srvs/Trigger`. If the service is missing, the type does not match, or the call times out, the node logs a warning and continues with PX4 checks. A failed trigger returns that service's message unchanged.
 
 PX4 must then report `pre_flight_checks_pass` and not be in failsafe. Informational bits such as `manual_control_signal_lost` do not block arming on their own. When the checks fail, the response lists the true `FailsafeFlags` boolean names plus `pre_flight_checks_pass is false`. If `gcs_connection_lost` is one of those bits, the text says arming is blocked because `NAV_DLL_ACT` defaults to 2 and no QGroundControl heartbeat is present, and that the sim profile sets `NAV_DLL_ACT` 0.
+
+A missing or failed magnetometer is named the same way, from `estimator_status_flags`. `cs_mag_fault` says the compass is unhealthy. `fs_bad_mag_x`, `fs_bad_mag_y`, `fs_bad_mag_z`, or `fs_bad_mag_decl` says fusion failed. If none of `cs_mag`, `cs_mag_hdg`, or `cs_mag_3d` is set and yaw is not aligned (`cs_yaw_align` and `cs_ev_yaw` both clear), the text says the magnetometer is missing. That is the `apt_world` case: no Gazebo magnetometer plugin, so PX4 denies arming with `Preflight Fail: Compass Sensor missing`, `No valid data from Compass`, or `Found 0 compass`.
 
 The parameter read-back has to match before arming. A mismatch is returned as the arm failure.
 

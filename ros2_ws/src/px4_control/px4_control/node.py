@@ -59,6 +59,7 @@ from px4_control_interfaces.action import GoTo, Hold, Land, Takeoff
 from px4_control_interfaces.msg import VehicleState
 from px4_control_interfaces.srv import Arm, SetMode
 from px4_msgs.msg import (
+    EstimatorStatusFlags,
     FailsafeFlags,
     OffboardControlMode,
     TrajectorySetpoint,
@@ -135,6 +136,7 @@ class Px4ControlNode(Node):
         self._landed = False
         self._status = None
         self._flags = None
+        self._estimator = None
         self._armed = False
         self._nav_state = -1
         self._last_ack = None
@@ -161,6 +163,7 @@ class Px4ControlNode(Node):
         self._subscribe_px4(VehicleStatus, self._topics['vehicle_status'], self._on_status, qos)
         self._subscribe_px4(VehicleOdometry, self._topics['vehicle_odometry'], self._on_odometry, qos)
         self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
+        self._subscribe_px4(EstimatorStatusFlags, self._topics['estimator_status_flags'], self._on_estimator, qos)
         self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
         self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
@@ -294,6 +297,13 @@ class Px4ControlNode(Node):
     def _on_flags(self, msg: FailsafeFlags) -> None:
         with self._lock:
             self._flags = msg
+
+    def _on_estimator(self, msg: EstimatorStatusFlags) -> None:
+        with self._lock:
+            self._estimator = msg
+
+    def _block_reason(self) -> str | None:
+        return prearm_block_reason(self._status, self._flags, self._estimator)
 
     def _on_land(self, msg: VehicleLandDetected) -> None:
         with self._lock:
@@ -477,7 +487,7 @@ class Px4ControlNode(Node):
         state.offboard = self._nav_state == int(VehicleStatus.NAVIGATION_STATE_OFFBOARD)
         state.pre_flight_checks_pass = False if self._status is None else bool(self._status.pre_flight_checks_pass)
         state.failsafe = False if self._status is None else bool(self._status.failsafe)
-        state.failsafe_reason = prearm_block_reason(self._status, self._flags) or ''
+        state.failsafe_reason = self._block_reason() or ''
         state.pose_enu.position.x = float(enu[0])
         state.pose_enu.position.y = float(enu[1])
         state.pose_enu.position.z = float(enu[2])
@@ -579,12 +589,12 @@ class Px4ControlNode(Node):
             if not self._wait_until(lambda: self._pos is not None and self._status is not None, timeout):
                 return ArmDecision(False, 'no vehicle_status or vehicle_odometry received')
             ready = self._wait_until(
-                lambda: prearm_block_reason(self._status, self._flags) is None,
+                lambda: self._block_reason() is None,
                 timeout,
             )
             if not ready:
                 with self._lock:
-                    reason = prearm_block_reason(self._status, self._flags)
+                    reason = self._block_reason()
                 return ArmDecision(False, reason or 'pre_flight_checks_pass is false')
         deadline = self._deadline(timeout)
         command = self._arm_command()
@@ -594,7 +604,7 @@ class Px4ControlNode(Node):
             with self._lock:
                 armed = self._armed
                 ack = self._last_ack
-                reason = prearm_block_reason(self._status, self._flags)
+                reason = self._block_reason()
             if arm and armed:
                 return ArmDecision(True, 'armed')
             if not arm and not armed and self._status is not None:
@@ -604,7 +614,7 @@ class Px4ControlNode(Node):
                 if failure and not (arm and armed):
                     return ArmDecision(False, combine_failure(failure, reason))
         with self._lock:
-            reason = prearm_block_reason(self._status, self._flags)
+            reason = self._block_reason()
         return ArmDecision(False, reason or ('timed out waiting to arm' if arm else 'timed out waiting to disarm'))
 
     def _ensure_offboard(self, timeout: float):
@@ -701,7 +711,7 @@ class Px4ControlNode(Node):
         from px4_control.arming import ArmDecision
 
         if not self._wait_until(lambda: self._param_report is not None, min(float(timeout), 20.0)):
-            return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF)')
+            return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF, EKF2_MAG_TYPE)')
         if self._param_report:
             return ArmDecision(False, self._param_report)
         armed = self._do_arm(True, timeout)

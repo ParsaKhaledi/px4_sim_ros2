@@ -17,6 +17,7 @@ READBACK_PARAMS = (
     'EKF2_EV_CTRL',
     'EKF2_GPS_CTRL',
     'EKF2_HGT_REF',
+    'EKF2_MAG_TYPE',
     'NAV_RCL_ACT',
     'NAV_DLL_ACT',
     'UXRCE_DDS_SYNCT',
@@ -47,10 +48,14 @@ def expected_sim_params(
             'EKF2_GPS_CTRL': 7.0,
             'EKF2_GPS_P_NOISE': 0.5,
             'EKF2_GPS_V_NOISE': 0.3,
+            # Firmware default. Automatic. The gps profile does not export it.
+            'EKF2_MAG_TYPE': 0.0,
         })
     else:
         values.update({
             'EKF2_EV_CTRL': float(ev_ctrl),
+            # None. common.h MagFuseType::NONE. Yaw comes from external vision.
+            'EKF2_MAG_TYPE': 5.0,
             'EKF2_HGT_REF': 3.0,
             'EKF2_EV_DELAY': float(ev_delay),
             'EKF2_EV_NOISE_MD': 0.0,

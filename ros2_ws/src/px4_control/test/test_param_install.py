@@ -20,6 +20,7 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     second = _install(env_file, 'vision')
     assert second == first
     assert 'export PX4_PARAM_EKF2_EV_CTRL=11' in second
+    assert 'export PX4_PARAM_EKF2_MAG_TYPE=5' in second
     assert 'export PX4_PARAM_EKF2_HGT_REF=3' in second
     assert 'export PX4_PARAM_EKF2_EV_DELAY=50' in second
     assert 'export PX4_PARAM_EKF2_GPS_CTRL=5' in second
@@ -34,6 +35,7 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert 'export PX4_PARAM_EKF2_GPS_CTRL=7' in gps
     assert 'export PX4_PARAM_NAV_DLL_ACT=0' in gps
     assert 'export PX4_PARAM_EKF2_EV_CTRL=11' not in gps
+    assert 'EKF2_MAG_TYPE' not in gps
     assert 'EKF2_EV_DELAY' not in gps
 
 

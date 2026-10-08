@@ -71,6 +71,7 @@ install_px4_control_params() {
       echo "export PX4_PARAM_EKF2_GPS_V_NOISE=0.3"
     else
       echo "export PX4_PARAM_EKF2_EV_CTRL=${ev_ctrl}"
+      echo "export PX4_PARAM_EKF2_MAG_TYPE=5"
       echo "export PX4_PARAM_EKF2_HGT_REF=3"
       echo "export PX4_PARAM_EKF2_EV_DELAY=${ev_delay}"
       echo "export PX4_PARAM_EKF2_EV_NOISE_MD=0"
