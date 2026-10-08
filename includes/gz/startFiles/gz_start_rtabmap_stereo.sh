@@ -14,7 +14,7 @@ case "${RTABMAPVIZ}" in
 esac
 
 # Right camera_info from Gazebo has Tx = 0 unless <projection><tx> is honored.
-# The relay publishes P[3] = -fx * 0.075 either way, and it keeps header.stamp.
+# The relay publishes P[3] = -fx * BASELINE_M (7.5 cm) either way, and it keeps header.stamp.
 # Both cameras are stamped from the same Gazebo step, so exact sync matches
 # the pair plus both camera_info topics. The IMU is not in that synchronizer:
 # rtabmap_launch subscribes to it on its own, and wait_imu_to_init holds

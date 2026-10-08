@@ -2,7 +2,7 @@
 """Republish the right stereo camera_info as a rectified partner of the left.
 
 Both renders use the left calibration. This node writes that same K and P
-onto the right message, with P[3] = -fx * 0.075, and leaves header.stamp
+onto the right message, with P[3] = -fx * BASELINE_M (7.5 cm), and leaves header.stamp
 alone so exact sync still matches the image. The left camera_info stays the
 Gazebo topic; it is already that K with Tx = 0.
 """

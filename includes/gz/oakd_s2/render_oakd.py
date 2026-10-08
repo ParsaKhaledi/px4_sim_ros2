@@ -142,8 +142,8 @@ def _depth_sensor(xyz, intrinsics: dict, optical_frame: str, update_rate: float)
             <format>R_FLOAT32</format>
           </image>
           <clip>
-            <near>0.2</near>
-            <far>12</far>
+            <near>{fmt(geo.DEPTH_CLIP_NEAR_M)}</near>
+            <far>{fmt(geo.DEPTH_CLIP_FAR_M)}</far>
           </clip>
           <noise>
             <type>gaussian</type>
@@ -168,8 +168,8 @@ def _axis_noise(stddev: float, bias: float) -> str:
 
 def _imu_sensor(xyz, imu_hz: float) -> str:
     pose = geo.pose_text(xyz[0], xyz[1], xyz[2], 0.0, 0.0, 0.0)
-    gyro = _axis_noise(geo.gyro_stddev_rad_s(imu_hz), 1.0e-4)
-    accel = _axis_noise(geo.accel_stddev_m_s2(imu_hz), 1.0e-3)
+    gyro = _axis_noise(geo.gyro_stddev_rad_s(imu_hz), geo.GYRO_BIAS_STDDEV_RAD_S)
+    accel = _axis_noise(geo.accel_stddev_m_s2(imu_hz), geo.ACCEL_BIAS_STDDEV_M_S2)
     axes = "\n".join(f"          <{axis}>\n{gyro}\n          </{axis}>" for axis in "xyz")
     linear = "\n".join(f"          <{axis}>\n{accel}\n          </{axis}>" for axis in "xyz")
     # Without this element, gz-sim8 stores the spawn rotation as the IMU
@@ -222,8 +222,8 @@ def _housing(mount: geo.Mount) -> tuple[str, str, str]:
           </box>
         </geometry>
         <material>
-          <ambient>0.12 0.12 0.13 1</ambient>
-          <diffuse>0.2 0.2 0.22 1</diffuse>
+          <ambient>{" ".join(fmt(channel) for channel in geo.HOUSING_AMBIENT_RGBA)}</ambient>
+          <diffuse>{" ".join(fmt(channel) for channel in geo.HOUSING_DIFFUSE_RGBA)}</diffuse>
         </material>
       </visual>
       <collision name="housing">
@@ -271,8 +271,8 @@ def render_sdf(
                     "/camera/stereo/left/image_raw",
                     "/camera/stereo/left/camera_info",
                     geo.STEREO_LEFT_OPTICAL,
-                    0.2,
-                    30.0,
+                    geo.STEREO_CLIP_NEAR_M,
+                    geo.STEREO_CLIP_FAR_M,
                     0.0,
                     profile.camera_hz,
                 ),
@@ -284,8 +284,8 @@ def render_sdf(
                     "/camera/stereo/right/image_raw",
                     geo.RIGHT_INFO_IN,
                     geo.STEREO_RIGHT_OPTICAL,
-                    0.2,
-                    30.0,
+                    geo.STEREO_CLIP_NEAR_M,
+                    geo.STEREO_CLIP_FAR_M,
                     right_tx,
                     profile.camera_hz,
                 ),
@@ -304,8 +304,8 @@ def render_sdf(
                     "/camera/rgb/image_raw",
                     "/camera/rgb/camera_info",
                     geo.RGB_OPTICAL,
-                    0.08,
-                    50.0,
+                    geo.COLOR_CLIP_NEAR_M,
+                    geo.COLOR_CLIP_FAR_M,
                     0.0,
                     profile.camera_hz,
                 ),
