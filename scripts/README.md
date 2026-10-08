@@ -31,7 +31,7 @@ GPU=1 ./scripts/up.sh
 Brings the stack up with [compose.ci.yml](../compose.ci.yml): `HEADLESS=1`, `RTABMAPVIZ=false`, no X11 socket, no `/dev` bind, no host ports. Waits until healthchecks pass, checks camera rates, then the rest of the PX4 graph.
 
 ```bash
-./scripts/smoke_test.sh docker.io/alienkh/px4_sim:1.17.0_01
+./scripts/smoke_test.sh docker.io/alienkh/px4_sim:1.17.0_121
 SMOKE_KEEP_UP=1 SMOKE_TEST_TIMEOUT=900 ./scripts/smoke_test.sh px4_sim:ci
 ```
 
@@ -62,7 +62,7 @@ The mission is preflight and arm, takeoff to 2 m, hover 10 s, forward `E2E_LEG_L
 
 Grading uses `/ground_truth/odom` when that topic is publishing. Otherwise it uses the Gazebo model pose on `/world/<world>/pose/info`. Each sample also stores how far PX4 `vehicle_local_position` is from that pose. Pass limits are the `E2E_*` keys in `.env`: hover drift 5 cm, height ± 10 cm, legs 30 cm ± 3 cm, overshoot 3 cm, settle inside ± 2 cm for 1 s within 4 s of the step, yaw overshoot 5° and yaw settle ± 3° on that same hold, return to the start within 5 cm. The grade reads the track, so moving on without a real settle still fails the run.
 
-`E2E_CHECK_CAMERAS=1` subscribes to `/camera/rgb/image_raw` and `/camera/depth/image_raw`. A topic with no frames, or a frame whose pixel variance is under `E2E_CAMERA_MIN_VARIANCE` (default 1), fails the attempt. That is a rendering failure, not a crash restart. The summary then switches to Xvfb for one more set of attempts. `trajectory.json` records `gz_rtf` (mean, min, max) and each camera topic's rate, mean, and variance. `E2E_FLIGHT_DIR` must stay under `logs/` so the container bind mount can write the attempt files. The pull-request job uses `logs/flights/x500` and `logs/flights/camera`.
+`E2E_CHECK_CAMERAS=1` subscribes to `/camera/rgb/image_raw` and `/camera/depth/image_raw`. A topic with no frames, or a frame whose pixel variance is under `E2E_CAMERA_MIN_VARIANCE` (default 1), fails the attempt. That is a rendering failure, not a crash restart. The summary then switches to Xvfb for one more set of attempts. `trajectory.json` records `gz_rtf` (mean, min, max) and each camera topic's rate, mean, and variance. `E2E_FLIGHT_DIR` must stay under `logs/` so the container bind mount can write the attempt files. The pull-request job uses `logs/flights/x500` and `logs/flights/camera`. The plain `x500` flight is required. The `x500_depth` step is non-blocking and logs that it waits on PR #20's `camera_link` models. For that step only, `GZ_CAMERA_UPDATE_RATE=10` with `GZ_CAMERA_WIDTH=320` and `GZ_CAMERA_HEIGHT=240` rewrites the copied model, and `HEALTH_CAMERA_MIN_HZ=1` is the camera rate floor. The Oak-D SDF files in the repo are not edited.
 
 While the vehicle should be airborne, the attempt ends early on any of these:
 

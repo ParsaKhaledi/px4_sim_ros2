@@ -2,7 +2,7 @@
 # Local GUI: docker compose -f docker-compose-px4.yml up
 # (that file includes compose.gui.yml). Headless CI uses compose.ci.yml.
 
-x-image: &px4-image ${PX4_IMAGE:-docker.io/alienkh/px4_sim:${px4TAG:-1.17.0_01}}
+x-image: &px4-image ${PX4_IMAGE:-docker.io/alienkh/px4_sim:${px4TAG:-1.17.0_121}}
 
 x-logging: &logging
   driver: json-file

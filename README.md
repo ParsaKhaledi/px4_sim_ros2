@@ -34,8 +34,8 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `registry` / `PX4_IMAGE` | Image to run | `docker.io/alienkh/px4_sim:1.17.0_01` |
-| `px4TAG` | Tag inside `PX4_IMAGE` | `1.17.0_01` |
+| `registry` / `PX4_IMAGE` | Image to run | `docker.io/alienkh/px4_sim:1.17.0_121` |
+| `px4TAG` | Tag inside `PX4_IMAGE` | `1.17.0_121` |
 | `PX4_GZ_MODEL_POSE` | Spawn pose `x,y,z,roll,pitch,yaw` | `-3,-1.6,0,0,0,3.14` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
@@ -47,7 +47,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 Component versions (PX4, px4_msgs, XRCE agent, ROS distro) live in [versions.env](versions.env). `.env` only pins the image you pull and the runtime knobs.
 
-Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only and do not push it. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. Point `PX4_IMAGE` at a published tag when you want to run that build.
+Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only and do not push it. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. `.env` points `PX4_IMAGE` at the published CPU tag `1.17.0_121`. A pull-request flight does not pull that tag: it loads `px4_sim:ci-<sha>` from the build job. No `1.17` GPU tag is published. `px4GPUTAG` is the name a local GPU build uses.
 
 ### Compose profiles
 
@@ -169,7 +169,7 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 Pull requests run lint, colcon, the CPU image build, and two headless flights on that image. Nothing is pushed from a pull request. The GPU image is not built on a pull request. There is no GPU flight.
 
-The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). The second flight uses `x500_depth` with `CameraType=rgbd` and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. Both flights share one image load inside the `flight_test` job, because a second job would build the image again.
+The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). That flight is the required gate. The second flight uses `x500_depth` with `CameraType=rgbd` and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). It is non-blocking: the model link is still `OakD-Lite/base_link`, so the spawn waits on PR #20's `camera_link` models, and the step logs that before it runs. Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). That step also asks the copied model for 10 Hz at 320x240 (`GZ_CAMERA_UPDATE_RATE`, `GZ_CAMERA_WIDTH`, `GZ_CAMERA_HEIGHT`) and lowers the camera health floor to 1 Hz (`HEALTH_CAMERA_MIN_HZ`). The Oak-D files in the repo are not edited. If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. Both flights share one image load inside the `flight_test` job, because a second job would build the image again.
 
 Each flight takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. The hover clock starts only after height has held ±5 cm for 2 s. Each leg and the yaw wait until they settle: position inside ±2 cm for 1 s, and that hold finishing within 4 s of the step. Yaw settles inside ±3°. Grading uses the Gazebo track, so a step that overshoots (3 cm, or 5° in yaw) or never settles fails even if the driver moves on. Legs must finish at 30 cm ± 3 cm, and the landing must be within 5 cm of the start. The log includes the PX4 `vehicle_local_position` error against the Gazebo pose. `logs/flights/*/trajectory.json` also stores the Gazebo real-time factor and, for the camera flight, each camera topic's rate, mean, and variance. If `px4_control.Drone` imports, that API flies the same mission. The grade is the same either way.
 
