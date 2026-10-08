@@ -21,3 +21,7 @@ python3 -m trajectory_eval offline --ground-truth gt.tum --output /tmp/traj
 ```
 
 Spawn pose `PX4_GZ_MODEL_POSE` defaults to `-3,-1.6,0.15,0,0,3.14` (ENU, radians). Pose z is drop clearance above the floor. Static TF `world` -> `spawn` uses that x, y, and yaw with z = 0.
+
+## Sensor systems
+
+IMU, air pressure, magnetometer, and NavSat systems are added to PX4's `x500_base` model at startup. Worlds stay world-only: physics, scene, user commands, the scene broadcaster, and the rendering Sensors system. The same startup step removes those four sensor systems from the launched world and from `server.config` so each is loaded once. A second x500 in that world would load them again; multi-vehicle is out of scope.
