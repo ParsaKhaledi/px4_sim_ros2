@@ -492,6 +492,28 @@ def write_models(
     RGBD_SDF.write_text(render_sdf("rgbd", mount, profile), encoding="utf-8")
 
 
+def gazebo_startup_warnings(
+    profile: geo.VisionProfile,
+    *,
+    write_sdf: bool,
+    gpu_present: bool | None = None,
+) -> list[str]:
+    """Warnings for a render. The GPU line is only for the SDFs Gazebo draws.
+
+    The PX4 container writes those SDFs and has ``/dev``. The state publisher
+    writes the URDF only. RTAB-Map does not render.
+    """
+    lines: list[str] = []
+    if write_sdf:
+        gpu_warning = geo.no_gpu_warning(profile, gpu_present=gpu_present)
+        if gpu_warning:
+            lines.append(gpu_warning)
+    hd = geo.sub_hd_warning(profile)
+    if hd:
+        lines.append(hd)
+    return lines
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render the OAK-D S2 SDF and URDF.")
     parser.add_argument("--urdf-only", action="store_true")
@@ -505,9 +527,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     write_models(mount, urdf_only=args.urdf_only, profile=profile)
     what = "URDF" if args.urdf_only else "stereo SDF, RGB-D SDF, and URDF"
-    for warning in (geo.no_gpu_warning(profile), geo.sub_hd_warning(profile)):
-        if warning:
-            print(warning, file=sys.stderr)
+    for warning in gazebo_startup_warnings(profile, write_sdf=not args.urdf_only):
+        print(warning, file=sys.stderr)
     print(
         f"Wrote {what} for mount {mount.pose_text()} "
         f"profile {profile.name} stereo {profile.stereo_width}x{profile.stereo_height} "

@@ -125,11 +125,7 @@ def _rate_text(value: float) -> str:
     return str(value)
 
 
-def startup_log_lines(
-    profile: geo.VisionProfile,
-    camera: str,
-    gpu_present: bool | None = None,
-) -> list[str]:
+def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
     path, params = load_profile_ini(profile.name)
     slam, odom = camera_overrides(profile.name, camera)
     lines = [
@@ -141,9 +137,9 @@ def startup_log_lines(
             f"imu_hz={_rate_text(profile.imu_hz)} ini={path}"
         )
     ]
-    gpu_warning = geo.no_gpu_warning(profile, gpu_present=gpu_present)
-    if gpu_warning:
-        lines.append(gpu_warning)
+    # No GPU line here. This process runs in the Rtabmap container, which
+    # does not render and has no /dev. The PX4 container warns when it writes
+    # the SDFs Gazebo draws.
     warning = geo.sub_hd_warning(profile)
     if warning:
         lines.append(warning)

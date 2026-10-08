@@ -139,10 +139,12 @@ odometry node.
 
 ## Profiles
 
-`VISION_PROFILE` defaults to `cpu`. `full` and `hw` are opt-in. If either
-is selected and no `/dev/dri/renderD*` exists and `nvidia-smi` does not
-succeed, startup logs one warning and continues, suggesting
-`VISION_PROFILE=cpu`. Each profile has one ini file. The
+`VISION_PROFILE` defaults to `cpu`. `full` and `hw` are opt-in. Gazebo
+renders in the PX4 container. If either profile is selected and that
+container has no `/dev/dri/renderD*` and `nvidia-smi` does not succeed,
+the SDF render logs one warning and continues, suggesting
+`VISION_PROFILE=cpu`. The Rtabmap container does not render and does not
+print this warning. Each profile has one ini file. The
 launch passes it as `cfg:=`. At start, stderr logs the profile, stereo size,
 color size, camera rate, IMU rate, the ini path, and every parameter.
 `rtabmap_param source=ini` is the file. `rtabmap_param source=camera` is the

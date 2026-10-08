@@ -258,11 +258,20 @@ class GeometryTest(unittest.TestCase):
             self.assertIn(f"VISION_PROFILE={profile.name}", warning)
             self.assertIn("Set VISION_PROFILE=cpu", warning)
             self.assertIsNone(geo.no_gpu_warning(profile, gpu_present=True))
-            lines = rtab.startup_log_lines(profile, "stereo", gpu_present=False)
-            self.assertEqual(sum("no GPU" in line for line in lines), 1)
+            # RTAB-Map does not render. The warning is the PX4 SDF render only.
+            lines = rtab.startup_log_lines(profile, "stereo")
+            self.assertFalse(any("no GPU" in line for line in lines))
+            rendered = render.gazebo_startup_warnings(profile, write_sdf=True, gpu_present=False)
+            self.assertEqual(sum("no GPU" in line for line in rendered), 1)
+            urdf_only = render.gazebo_startup_warnings(profile, write_sdf=False, gpu_present=False)
+            self.assertFalse(any("no GPU" in line for line in urdf_only))
         self.assertIsNone(geo.no_gpu_warning(geo.CPU_PROFILE, gpu_present=False))
-        cpu_lines = rtab.startup_log_lines(geo.CPU_PROFILE, "stereo", gpu_present=False)
+        cpu_lines = rtab.startup_log_lines(geo.CPU_PROFILE, "stereo")
         self.assertFalse(any("no GPU" in line for line in cpu_lines))
+        cpu_render = render.gazebo_startup_warnings(geo.CPU_PROFILE, write_sdf=True, gpu_present=False)
+        self.assertFalse(any("no GPU" in line for line in cpu_render))
+        relay = (HERE / "stereo_info_relay.py").read_text(encoding="utf-8")
+        self.assertNotIn("no_gpu_warning", relay)
 
 
 class RenderTest(unittest.TestCase):

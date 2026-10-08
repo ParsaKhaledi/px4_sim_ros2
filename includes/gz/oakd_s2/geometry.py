@@ -341,7 +341,9 @@ def gpu_visible(dri_nodes: list[str] | None = None, nvidia_ok: bool | None = Non
 def no_gpu_warning(profile: VisionProfile, gpu_present: bool | None = None) -> str | None:
     """One warning when ``full`` or ``hw`` is selected and no GPU is visible.
 
-    This does not reject the profile. ``cpu`` does not warn.
+    This does not reject the profile. ``cpu`` does not warn. Call it from the
+    process that renders the Gazebo cameras (the PX4 container writing SDFs).
+    The Rtabmap container has no ``/dev`` and would always warn.
     """
     if profile.name not in ("full", "hw"):
         return None
