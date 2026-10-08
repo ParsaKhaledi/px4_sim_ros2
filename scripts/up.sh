@@ -55,7 +55,7 @@ _restore_or_default CAM_X 0.12
 _restore_or_default CAM_Y 0.03
 _restore_or_default CAM_Z 0.242
 _restore_or_default RTABMAPVIZ false
-_restore_or_default VISION_PROFILE full
+_restore_or_default VISION_PROFILE cpu
 # Empty means "use the profile". Do not invent a number here.
 _restore_if_caller_set CAM_RATE_HZ
 _restore_if_caller_set CAM_STEREO_RES

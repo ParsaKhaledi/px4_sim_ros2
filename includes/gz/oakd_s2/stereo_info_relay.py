@@ -30,9 +30,9 @@ def main() -> int:
         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
     )
     profile = geo.profile_from_env()
-    warning = geo.sub_hd_warning(profile)
-    if warning:
-        node.get_logger().warning(warning)
+    for warning in (geo.no_gpu_warning(profile), geo.sub_hd_warning(profile)):
+        if warning:
+            node.get_logger().warning(warning)
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
 
     def on_info(msg: CameraInfo) -> None:

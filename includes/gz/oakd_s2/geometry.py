@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import math
 import os
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 
 # Housing from the OAK-D S2 datasheet: 97 x 29.5 x 22.9 mm, 91 g.
@@ -159,9 +161,10 @@ def accel_stddev_m_s2(imu_hz: float | None = None) -> float:
 class VisionProfile:
     """Image size and sensor rate for one ``VISION_PROFILE``.
 
-    ``full`` is the default: native 1280x800 stereo for a GPU simulation.
-    ``cpu`` is 320x200 for CPU-only simulation and CI. ``hw`` is 1280x800 at
-    a lower rate for a real OAK-D S2 on a small onboard computer.
+    ``cpu`` is the default: 320x200 for CPU-only simulation and CI.
+    ``full`` is native 1280x800 stereo for a GPU simulation. ``hw`` is
+    1280x800 at a lower rate for a real OAK-D S2 on a small onboard computer.
+    ``full`` and ``hw`` are opt-in.
 
     Optional ``CAM_STEREO_RES`` (or ``CAM_STEREO_WIDTH`` and
     ``CAM_STEREO_HEIGHT``), ``CAM_RATE_HZ``, and the other ``CAM_*`` /
@@ -286,11 +289,11 @@ def _stereo_size(source: dict, base: VisionProfile) -> tuple[int, int]:
 def profile_from_env(env: dict | None = None) -> VisionProfile:
     """``VISION_PROFILE`` selects ``cpu``, ``full``, or ``hw``. Overrides win.
 
-    The default profile is ``full``. An empty ``VISION_PROFILE`` is ``full``.
+    The default profile is ``cpu``. An empty ``VISION_PROFILE`` is ``cpu``.
     """
     source = os.environ if env is None else env
-    raw = source.get("VISION_PROFILE", "full")
-    name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
+    raw = source.get("VISION_PROFILE", "cpu")
+    name = "cpu" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
     if name not in PROFILES:
         raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {raw}")
     base = PROFILES[name]
@@ -307,6 +310,48 @@ def profile_from_env(env: dict | None = None) -> VisionProfile:
         color_height=_env_int(source, "CAM_COLOR_HEIGHT", base.color_height),
         camera_hz=camera_hz,
         imu_hz=imu_hz,
+    )
+
+
+def _nvidia_smi_ok() -> bool:
+    """True when ``nvidia-smi`` runs and exits 0."""
+    try:
+        completed = subprocess.run(
+            ["nvidia-smi"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0
+
+
+def gpu_visible(dri_nodes: list[str] | None = None, nvidia_ok: bool | None = None) -> bool:
+    """A render node under ``/dev/dri`` or a working ``nvidia-smi`` counts."""
+    if dri_nodes is None:
+        dri = Path("/dev/dri")
+        dri_nodes = sorted(str(path) for path in dri.glob("renderD*")) if dri.is_dir() else []
+    if nvidia_ok is None:
+        nvidia_ok = _nvidia_smi_ok()
+    return bool(dri_nodes) or bool(nvidia_ok)
+
+
+def no_gpu_warning(profile: VisionProfile, gpu_present: bool | None = None) -> str | None:
+    """One warning when ``full`` or ``hw`` is selected and no GPU is visible.
+
+    This does not reject the profile. ``cpu`` does not warn.
+    """
+    if profile.name not in ("full", "hw"):
+        return None
+    present = gpu_visible() if gpu_present is None else gpu_present
+    if present:
+        return None
+    return (
+        f"warning: VISION_PROFILE={profile.name} expects a GPU or onboard hardware, "
+        f"but no GPU is visible (no /dev/dri/renderD* and nvidia-smi is not working). "
+        f"Set VISION_PROFILE=cpu on this machine."
     )
 
 

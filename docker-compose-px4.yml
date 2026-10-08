@@ -37,7 +37,7 @@ services:
         CAM_X: ${CAM_X:-0.12}
         CAM_Y: ${CAM_Y:-0.03}
         CAM_Z: ${CAM_Z:-0.242}
-        VISION_PROFILE: ${VISION_PROFILE:-full}
+        VISION_PROFILE: ${VISION_PROFILE:-cpu}
         # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
         CAM_STEREO_RES: ${CAM_STEREO_RES:-}
@@ -95,7 +95,7 @@ services:
         CAM_X: ${CAM_X:-0.12}
         CAM_Y: ${CAM_Y:-0.03}
         CAM_Z: ${CAM_Z:-0.242}
-        VISION_PROFILE: ${VISION_PROFILE:-full}
+        VISION_PROFILE: ${VISION_PROFILE:-cpu}
         # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
         CAM_STEREO_RES: ${CAM_STEREO_RES:-}
@@ -254,7 +254,7 @@ services:
         - XAUTHORITY=${XAUTH}
         - CameraType=${CameraType}
         - RTABMAPVIZ=${RTABMAPVIZ:-false}
-        - VISION_PROFILE=${VISION_PROFILE:-full}
+        - VISION_PROFILE=${VISION_PROFILE:-cpu}
         # Unset feature floor follows the profile: full 120 (not yet measured at 1280x800), cpu 40, hw 80 (not yet measured).
         - CAM_RATE_HZ=${CAM_RATE_HZ:-}
         - CAM_STEREO_RES=${CAM_STEREO_RES:-}

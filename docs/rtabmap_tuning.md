@@ -139,7 +139,10 @@ odometry node.
 
 ## Profiles
 
-`VISION_PROFILE` defaults to `full`. Each profile has one ini file. The
+`VISION_PROFILE` defaults to `cpu`. `full` and `hw` are opt-in. If either
+is selected and no `/dev/dri/renderD*` exists and `nvidia-smi` does not
+succeed, startup logs one warning and continues, suggesting
+`VISION_PROFILE=cpu`. Each profile has one ini file. The
 launch passes it as `cfg:=`. At start, stderr logs the profile, stereo size,
 color size, camera rate, IMU rate, the ini path, and every parameter.
 `rtabmap_param source=ini` is the file. `rtabmap_param source=camera` is the
@@ -149,9 +152,9 @@ stereo). Both camera modes load the same ini.
 
 | Profile | Stereo | Color | Rate | IMU | Intended machine |
 |---|---|---|---|---|---|
-| `cpu` | 320x200 | 320x240 | 10 Hz | 100 Hz | CPU-only simulation and CI. Not for a real OAK-D. |
-| `full` | 1280x800 | 640x480 | 30 Hz | 200 Hz | Simulation on a machine with a GPU. |
-| `hw` | 1280x800 | 640x480 | 15 Hz | 200 Hz | Real OAK-D S2 on a LattePanda or Jetson Orin NX. |
+| `cpu` (default) | 320x200 | 320x240 | 10 Hz | 100 Hz | CPU-only simulation and CI. Not for a real OAK-D. |
+| `full` | 1280x800 | 640x480 | 30 Hz | 200 Hz | Opt-in. Simulation on a machine with a GPU. |
+| `hw` | 1280x800 | 640x480 | 15 Hz | 200 Hz | Opt-in. Real OAK-D S2 on a LattePanda or Jetson Orin NX. |
 
 On a real OAK-D the stereo cameras compute depth on the device. `CameraType=rgbd`
 then uses that depth, which is the light path for the host. Host-side stereo

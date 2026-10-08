@@ -160,13 +160,13 @@ The simulated camera is a Luxonis OAK-D S2. Gazebo still loads it as `model://Oa
 
 Stereo RTAB-Map reads `/camera/stereo/right/camera_info_baseline`. Both cameras render the left calibration, and that topic carries the same K with `P[3] = -fx * 0.075`. `P[3] / P[0]` stays `-0.075` at every allowed stereo size, because fx scales with the width. Both launches use `use_sim_time:=true`, `frame_id:=base_link`, and `imu_topic:=/imu`. Stereo uses exact sync. RGB-D stays on approximate sync because color and depth are two sensors. The viewer flag is the launch argument `rtabmap_viz`, driven by `RTABMAPVIZ` (default false).
 
-`VISION_PROFILE` selects the stereo size, the sensor rate, and the RTAB-Map ini (`includes/gz/startFiles/rtabmap_profiles/`). The default is `full`. `CAM_STEREO_RES` (or `CAM_STEREO_WIDTH` with `CAM_STEREO_HEIGHT`) may only be `1280x800`, `640x400`, or `320x200`. `CAM_RATE_HZ` overrides the camera rate. Both `CameraType=stereo` and `CameraType=rgbd` use the same profile.
+`VISION_PROFILE` selects the stereo size, the sensor rate, and the RTAB-Map ini (`includes/gz/startFiles/rtabmap_profiles/`). The default is `cpu`. `full` and `hw` are opt-in. If either is selected and no GPU is visible (no `/dev/dri/renderD*` and `nvidia-smi` does not succeed), startup logs one warning and continues, suggesting `VISION_PROFILE=cpu`. `CAM_STEREO_RES` (or `CAM_STEREO_WIDTH` with `CAM_STEREO_HEIGHT`) may only be `1280x800`, `640x400`, or `320x200`. `CAM_RATE_HZ` overrides the camera rate. Both `CameraType=stereo` and `CameraType=rgbd` use the same profile.
 
 | Profile | Stereo | Rate | Intended machine |
 |---|---|---|---|
-| `cpu` | 320x200 | 10 Hz | CPU-only simulation and CI. Not for a real OAK-D. |
-| `full` | 1280x800 | 30 Hz | Simulation on a machine with a GPU. |
-| `hw` | 1280x800 | 15 Hz | Real OAK-D S2 on a LattePanda or Jetson Orin NX. RGB-D is the light host path, because the camera computes depth. |
+| `cpu` (default) | 320x200 | 10 Hz | CPU-only simulation and CI. Not for a real OAK-D. |
+| `full` | 1280x800 | 30 Hz | Opt-in. Simulation on a machine with a GPU. |
+| `hw` | 1280x800 | 15 Hz | Opt-in. Real OAK-D S2 on a LattePanda or Jetson Orin NX. RGB-D is the light host path, because the camera computes depth. |
 
 On an 8-core CPU-only machine, before `full` moved to 1280x800: `full` at 640x400 measured RTF 0.125, with stereo odometry at 30.3 Hz in sim time and 3.8 Hz on the wall (64 ms per frame). `cpu` measured RTF 0.43-0.46 and 10.0 Hz in sim time (4.3-4.6 Hz on the wall, 25-35 ms per frame). `CAM_RATE_HZ=15` on `cpu` measured RTF 0.31 and 15.2 Hz in sim time. Parameter files and the odometry checks are in [docs/rtabmap_tuning.md](docs/rtabmap_tuning.md).
 

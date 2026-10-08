@@ -15,8 +15,9 @@ The summary line scores five gates. Thresholds come from the environment
   frames elapse from that loss until the first frame that is not lost. The
   metric is the worst run. A run that never reaches a non-lost frame fails
   even when it is shorter than the cap.
-- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 120
-  (``full``). ``cpu`` uses 40 unless the variable is set. ``hw`` uses 80.
+- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Unset
+  ``VISION_PROFILE`` is ``cpu``, which uses 40. ``full`` uses 120 and
+  ``hw`` uses 80 unless the variable is set.
   40 was measured at 320x200. 120 was measured when full was 640x400 and
   has not been remeasured at 1280x800. 80 has not been measured.
 - ``VISION_MIN_INLIERS``: floor on frames that are not lost. Default 20
@@ -134,8 +135,8 @@ def _env_float(name: str, default: float) -> float:
 
 
 def profile_name_from_env() -> str:
-    raw = os.environ.get("VISION_PROFILE", "full")
-    name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
+    raw = os.environ.get("VISION_PROFILE", "cpu")
+    name = "cpu" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
     if name in ("full", "cpu", "hw"):
         return name
     raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {raw}")

@@ -250,8 +250,9 @@ def render_sdf(
     if variant not in ("stereo", "rgbd"):
         raise ValueError(variant)
     mount = mount or geo.Mount()
-    # Callers that omit the profile get FULL_PROFILE (1280x800 stereo). Container
-    # start passes profile_from_env() so VISION_PROFILE and the CAM_* overrides apply.
+    # Callers that omit the profile get FULL_PROFILE so the checked-in model
+    # stays 1280x800. Container start passes profile_from_env(). An unset
+    # VISION_PROFILE is cpu.
     profile = geo.FULL_PROFILE if profile is None else profile
     layouts = geo.sensor_layouts()
     inertial, visual, header = _housing(mount)
@@ -504,9 +505,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     write_models(mount, urdf_only=args.urdf_only, profile=profile)
     what = "URDF" if args.urdf_only else "stereo SDF, RGB-D SDF, and URDF"
-    warning = geo.sub_hd_warning(profile)
-    if warning:
-        print(warning, file=sys.stderr)
+    for warning in (geo.no_gpu_warning(profile), geo.sub_hd_warning(profile)):
+        if warning:
+            print(warning, file=sys.stderr)
     print(
         f"Wrote {what} for mount {mount.pose_text()} "
         f"profile {profile.name} stereo {profile.stereo_width}x{profile.stereo_height} "

@@ -125,7 +125,11 @@ def _rate_text(value: float) -> str:
     return str(value)
 
 
-def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
+def startup_log_lines(
+    profile: geo.VisionProfile,
+    camera: str,
+    gpu_present: bool | None = None,
+) -> list[str]:
     path, params = load_profile_ini(profile.name)
     slam, odom = camera_overrides(profile.name, camera)
     lines = [
@@ -137,6 +141,9 @@ def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
             f"imu_hz={_rate_text(profile.imu_hz)} ini={path}"
         )
     ]
+    gpu_warning = geo.no_gpu_warning(profile, gpu_present=gpu_present)
+    if gpu_warning:
+        lines.append(gpu_warning)
     warning = geo.sub_hd_warning(profile)
     if warning:
         lines.append(warning)

@@ -177,7 +177,17 @@ class GeometryTest(unittest.TestCase):
         self.assertEqual(mixed.camera_hz, 8)
         self.assertEqual(mixed.color_height, 240)
         self.assertEqual(mixed.imu_hz, 100)
-        full = geo.profile_from_env({})
+        unset = geo.profile_from_env({})
+        self.assertEqual(unset.name, "cpu")
+        self.assertEqual((unset.stereo_width, unset.stereo_height), (320, 200))
+        self.assertEqual(unset.camera_hz, 10)
+        self.assertEqual(unset.imu_hz, 100)
+        for raw in ("", "   ", None):
+            empty = geo.profile_from_env({"VISION_PROFILE": raw})
+            self.assertEqual(empty.name, "cpu")
+            self.assertEqual((empty.stereo_width, empty.stereo_height), (320, 200))
+            self.assertEqual(empty.camera_hz, 10)
+        full = geo.profile_from_env({"VISION_PROFILE": "full"})
         self.assertEqual(full.name, "full")
         self.assertEqual((full.stereo_width, full.stereo_height), (1280, 800))
         self.assertEqual(full.camera_hz, 30)
@@ -236,6 +246,22 @@ class GeometryTest(unittest.TestCase):
         self.assertIn("VISION_PROFILE=hw", geo.sub_hd_warning(hw_low))
         cpu_native = geo.profile_from_env({"VISION_PROFILE": "cpu", "CAM_STEREO_RES": "1280x800"})
         self.assertIsNone(geo.sub_hd_warning(cpu_native))
+
+    def test_no_gpu_warning_is_only_for_full_and_hw(self):
+        self.assertFalse(geo.gpu_visible(dri_nodes=[], nvidia_ok=False))
+        self.assertTrue(geo.gpu_visible(dri_nodes=["/dev/dri/renderD128"], nvidia_ok=False))
+        self.assertTrue(geo.gpu_visible(dri_nodes=[], nvidia_ok=True))
+        for profile in (geo.FULL_PROFILE, geo.HW_PROFILE):
+            warning = geo.no_gpu_warning(profile, gpu_present=False)
+            self.assertIn("no GPU", warning)
+            self.assertIn(f"VISION_PROFILE={profile.name}", warning)
+            self.assertIn("Set VISION_PROFILE=cpu", warning)
+            self.assertIsNone(geo.no_gpu_warning(profile, gpu_present=True))
+            lines = rtab.startup_log_lines(profile, "stereo", gpu_present=False)
+            self.assertEqual(sum("no GPU" in line for line in lines), 1)
+        self.assertIsNone(geo.no_gpu_warning(geo.CPU_PROFILE, gpu_present=False))
+        cpu_lines = rtab.startup_log_lines(geo.CPU_PROFILE, "stereo", gpu_present=False)
+        self.assertFalse(any("no GPU" in line for line in cpu_lines))
 
 
 class RenderTest(unittest.TestCase):
@@ -535,6 +561,23 @@ class HealthAndEvoTest(unittest.TestCase):
         cfg, args, odom = completed.stdout.splitlines()
         return {"RTAB_CFG": cfg, "RTAB_ARGS": args, "RTAB_ODOM": odom, "stderr": completed.stderr}
 
+    def test_unset_vision_profile_shell_is_cpu(self):
+        script = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profile.sh"
+        command = (
+            "set -euo pipefail; "
+            "unset VISION_PROFILE CAM_STEREO_RES CAM_STEREO_WIDTH CAM_STEREO_HEIGHT CAM_RATE_HZ "
+            "CAM_COLOR_WIDTH CAM_COLOR_HEIGHT IMU_RATE_HZ; "
+            f'source "{script}"; '
+            "rtabmap_profile_args stereo; "
+            'printf "%s\\n" "$VISION_PROFILE"'
+        )
+        completed = subprocess.run(["bash", "-c", command], check=True, text=True, capture_output=True)
+        self.assertEqual(completed.stdout.strip(), "cpu")
+        self.assertIn("vision profile=cpu", completed.stderr)
+        self.assertIn("stereo=320x200", completed.stderr)
+        self.assertIn("camera_hz=10", completed.stderr)
+        self.assertNotIn("no GPU", completed.stderr)
+
     def test_launch_scripts_use_real_parameter_names(self):
         root = Path(__file__).resolve().parents[1] / "startFiles"
         names = (
@@ -609,7 +652,8 @@ class HealthAndEvoTest(unittest.TestCase):
     def test_env_files_define_vision_gates(self):
         for name in (".env", ".env.example"):
             text = (REPO / name).read_text(encoding="utf-8")
-            self.assertIn("VISION_PROFILE=full", text)
+            self.assertRegex(text, r"(?m)^VISION_PROFILE=cpu$")
+            self.assertNotRegex(text, r"(?m)^VISION_PROFILE=full$")
             self.assertIn("VISION_MAX_LOST_STREAK=3", text)
             self.assertIn("VISION_MAX_RECOVERY_FRAMES=2", text)
             self.assertIn("VISION_MIN_ODOM_HZ=7", text)
@@ -619,6 +663,13 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("VISION_MIN_INLIERS=15", text)
             self.assertIn("VISION_MIN_MEDIAN_FEATURES=80", text)
             self.assertIn("not yet measured", text)
+        compose = (REPO / "docker-compose-px4.yml").read_text(encoding="utf-8")
+        self.assertEqual(compose.count("${VISION_PROFILE:-cpu}"), 3)
+        self.assertNotIn("${VISION_PROFILE:-full}", compose)
+        up = (REPO / "scripts" / "up.sh").read_text(encoding="utf-8")
+        self.assertIn("_restore_or_default VISION_PROFILE cpu", up)
+        shell = (REPO / "includes" / "gz" / "startFiles" / "rtabmap_profile.sh").read_text(encoding="utf-8")
+        self.assertIn('VISION_PROFILE="${VISION_PROFILE:-cpu}"', shell)
 
     def test_thresholds_from_env_and_file(self):
         saved = self._without_vision_env()
@@ -626,14 +677,16 @@ class HealthAndEvoTest(unittest.TestCase):
             for key in saved:
                 os.environ.pop(key, None)
             got = HEALTH.thresholds_from_env()
+            self.assertEqual(HEALTH.profile_name_from_env(), "cpu")
             self.assertEqual(got.max_lost_streak, 3)
             self.assertEqual(got.max_recovery_frames, 2)
-            self.assertEqual(got.min_median_features, 120)
-            self.assertEqual(got.min_inliers, 20)
+            self.assertEqual(got.min_median_features, 40)
+            self.assertEqual(got.min_inliers, 15)
             HEALTH.load_repo_env()
             filled = HEALTH.thresholds_from_env()
             self.assertEqual(filled.max_lost_streak, 3)
-            self.assertEqual(filled.min_inliers, 20)
+            self.assertEqual(filled.min_median_features, 40)
+            self.assertEqual(filled.min_inliers, 15)
             os.environ["VISION_MAX_LOST_STREAK"] = "9"
             os.environ["VISION_MAX_RECOVERY_FRAMES"] = "1"
             os.environ["VISION_MIN_MEDIAN_FEATURES"] = "100"
