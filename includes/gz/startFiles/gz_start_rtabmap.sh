@@ -17,7 +17,7 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
           right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info   \
           imu_topic:=/imu   \
           approx_sync:=true  wait_imu_to_init:=true  approx_sync_max_interval:=0.001  \
-          qos:=2  rtabmapviz:=${RTABMAPVIZ:-true}  rviz:=false #  frame_id:=camera_rgb_frame
+          qos:=2  rtabmapviz:=${RTABMAPVIZ:-false}  rviz:=false #  frame_id:=camera_rgb_frame
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      echo "Run Rtabmap with $CamerType camera"
      ros2 launch rtabmap_launch rtabmap.launch.py   \
@@ -26,7 +26,7 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           --MaxFeatures 100 --Grid/RayTracing true --Grid/3D true  --Grid/FlatObstacleDetected true                            ' \
           rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \
           imu_topic:=/imu approx_sync:=true    \
-          use_sim_time:=true  qos:=2    rtabmapviz:=${RTABMAPVIZ:-true}     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
+          use_sim_time:=true  qos:=2    rtabmapviz:=${RTABMAPVIZ:-false}     rviz:=false   subscribe_rgbd:=false    MaxFeatures:=75
 else
     echo "Invalid CameraType"
     exit 1

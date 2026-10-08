@@ -6,7 +6,7 @@ x-gpu-env: &gpu-env
   NVIDIA_VISIBLE_DEVICES: all
   NVIDIA_DRIVER_CAPABILITIES: all
   # Same camera knobs as compose.yml, so the NVIDIA override does not drop them.
-  RTABMAPVIZ: ${RTABMAPVIZ:-true}
+  RTABMAPVIZ: ${RTABMAPVIZ:-false}
   CameraType: ${CameraType:-rgbd}
   CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
   CAM_X: ${CAM_X:-0.12}
