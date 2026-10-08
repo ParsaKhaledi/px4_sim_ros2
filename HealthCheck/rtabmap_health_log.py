@@ -77,6 +77,8 @@ METRIC_NAMES = ("lost_streak", "recovery_frames", "median_features", "inliers", 
 
 @dataclass(frozen=True)
 class VisionThresholds:
+    """Five health-log gates. Feature and inlier floors follow the profile."""
+
     max_lost_streak: int = DEFAULT_MAX_LOST_STREAK
     max_recovery_frames: int = DEFAULT_MAX_RECOVERY_FRAMES
     min_median_features: float = DEFAULT_MIN_MEDIAN_FEATURES
@@ -85,18 +87,22 @@ class VisionThresholds:
 
 
 def stamp_seconds(stamp) -> float:
+    """ROS stamp as seconds."""
     return float(stamp.sec) + float(stamp.nanosec) * 1e-9
 
 
 def wall_now() -> str:
+    """UTC wall time, millisecond precision, for the JSONL clock."""
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def stats_dict(keys, values) -> dict:
+    """Pair ``/rtabmap/info`` stat keys and values into one dict."""
     return {str(key): float(value) for key, value in zip(keys, values)}
 
 
 def json_number(value):
+    """JSON number, with whole floats written as ints. ``None`` stays ``None``."""
     if value is None:
         return None
     number = float(value)
@@ -122,12 +128,14 @@ def load_env_file(path: Path) -> None:
 
 
 def load_repo_env() -> None:
+    """Load ``.env`` from the working directory, then from the repo root."""
     candidates = [Path.cwd() / ".env", Path(__file__).resolve().parents[1] / ".env"]
     for path in candidates:
         load_env_file(path)
 
 
 def _env_float(name: str, default: float) -> float:
+    """Float from the process environment. Empty uses ``default``."""
     raw = os.environ.get(name, "").strip()
     if not raw:
         return float(default)
@@ -135,6 +143,7 @@ def _env_float(name: str, default: float) -> float:
 
 
 def profile_name_from_env() -> str:
+    """``VISION_PROFILE`` as ``cpu``, ``full``, or ``hw``. Empty is ``cpu``."""
     raw = os.environ.get("VISION_PROFILE", "cpu")
     name = "cpu" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
     if name in ("full", "cpu", "hw"):
@@ -166,12 +175,14 @@ def thresholds_from_env() -> VisionThresholds:
 
 
 def fail_on_loss_enabled(flag: bool) -> bool:
+    """True when the flag or ``VISION_FAIL_ON_LOSS`` asks for a failing exit."""
     if flag:
         return True
     return os.environ.get("VISION_FAIL_ON_LOSS", "").lower() in ("1", "true", "yes")
 
 
 def pick_inliers(stats: dict):
+    """``(key, count)`` for the first inlier statistic, or ``(None, None)``."""
     for key in INLIER_KEYS:
         if key in stats:
             return key, float(stats[key])
@@ -198,6 +209,7 @@ def lost_from_stats(stats: dict, inliers, min_inliers: float):
 
 
 def median(values: list[float]):
+    """Median of the values, or ``None`` when the list is empty."""
     if not values:
         return None
     ordered = sorted(float(value) for value in values)
@@ -254,6 +266,7 @@ def inlier_gate_value(samples: list[dict], index: int):
 
 
 def score_samples(samples: list[dict], thresholds: VisionThresholds) -> dict:
+    """Score the five gates. ``pass`` is true only when every gate passes."""
     flags = [bool(sample["lost"]) for sample in samples]
     streak, episodes, open_frames = lost_runs(flags)
     recovery_value = max(episodes + ([open_frames] if open_frames else [0]))
@@ -336,7 +349,10 @@ def odom_hz_metric(samples: list[dict], min_hz: float) -> dict:
 
 
 class TrackingLog:
+    """One run of odometry samples, loop closures, and the summary gates."""
+
     def __init__(self, min_inliers: float = DEFAULT_MIN_INLIERS, thresholds: VisionThresholds | None = None):
+        """``min_inliers`` overrides only that field when it is not the default."""
         if thresholds is None:
             thresholds = VisionThresholds(min_inliers=min_inliers)
         elif min_inliers != DEFAULT_MIN_INLIERS:
@@ -382,6 +398,7 @@ class TrackingLog:
         )
 
     def update(self, stamp, wall, ref_id, loop_closure_id, proximity_id, stats) -> list:
+        """Record ``/rtabmap/info``. After the first odom sample, only loops count."""
         if self.odom_info_seen:
             return self._loop_events(stamp, wall, ref_id, loop_closure_id, proximity_id)
         key, inliers = pick_inliers(stats)
@@ -412,6 +429,7 @@ class TrackingLog:
         source="info",
         wall_s=None,
     ) -> list:
+        """Append one sample and the frame, loss, and loop events it produces."""
         self.samples.append(
             {
                 "lost": bool(lost_now),
@@ -455,6 +473,7 @@ class TrackingLog:
         return events
 
     def _loop_events(self, stamp, wall, ref_id, loop_closure_id, proximity_id) -> list:
+        """One loop-closure event per new ``(ref_id, loop_closure_id)`` pair."""
         if not loop_closure_id or (ref_id, int(loop_closure_id)) in self.seen_loops:
             return []
         self.seen_loops.add((ref_id, int(loop_closure_id)))
@@ -471,6 +490,7 @@ class TrackingLog:
         ]
 
     def _loss_end(self, stamp, wall, open_ended: bool) -> dict:
+        """Close the current loss. ``open`` marks a run that never recovered."""
         duration = None if self.loss_started is None else float(stamp) - float(self.loss_started)
         self.lost = False
         self.loss_started = None
@@ -484,12 +504,14 @@ class TrackingLog:
         }
 
     def finish(self, wall) -> list:
+        """Close a loss that is still open when the log stops."""
         if not self.lost:
             return []
         stamp = self.last_stamp if self.last_stamp is not None else 0.0
         return [self._loss_end(stamp, wall, open_ended=True)]
 
     def summary(self, wall) -> dict:
+        """Summary event: counts, the five metrics, and the overall pass bit."""
         scored = score_samples(self.samples, self.thresholds)
         return {
             "stamp": self.last_stamp,
@@ -504,11 +526,13 @@ class TrackingLog:
 
 
 def write_jsonl(handle, event: dict) -> None:
+    """Write one JSON object and flush so a crash keeps the last line."""
     handle.write(json.dumps(event, sort_keys=True) + "\n")
     handle.flush()
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """CLI for the output path, the inlier override, and ``--fail-on-loss``."""
     parser = argparse.ArgumentParser(description="Log RTAB-Map odometry health as JSONL.")
     parser.add_argument("--output", default="rtabmap_health.jsonl")
     parser.add_argument(
@@ -531,6 +555,7 @@ def thresholds_from_args(argv: list[str] | None = None) -> tuple[VisionThreshold
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Subscribe to odom info and map info until interrupted, then write the summary."""
     load_repo_env()
     thresholds, args = thresholds_from_args(argv)
     fail = fail_on_loss_enabled(args.fail_on_loss)
@@ -551,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
     output = open(args.output, "a", encoding="utf-8")
 
     def on_odom(msg: OdomInfo) -> None:
+        """Log one ``/rtabmap/odom_info`` frame."""
         events = tracker.observe_odom(
             stamp_seconds(msg.header.stamp),
             wall_now(),
@@ -563,6 +589,7 @@ def main(argv: list[str] | None = None) -> int:
             write_jsonl(output, event)
 
     def on_info(msg: Info) -> None:
+        """Log ``/rtabmap/info``. Tracking samples stop once odom info is seen."""
         stats = stats_dict(msg.stats_keys, msg.stats_values)
         events = tracker.update(
             stamp_seconds(msg.header.stamp),

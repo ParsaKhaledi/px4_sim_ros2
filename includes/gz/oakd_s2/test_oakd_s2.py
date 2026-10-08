@@ -26,6 +26,7 @@ import rtabmap_params as rtab  # noqa: E402
 
 
 def load_module(path: Path, name: str):
+    """Import a file by path so the health log and eval script can be tested."""
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     # dataclasses resolve the class module through sys.modules during exec.
@@ -41,18 +42,22 @@ PROBE = load_module(REPO / "HealthCheck" / "vision_rate_probe.py", "vision_rate_
 
 
 def pose_values(text: str):
+    """Split an SDF pose string into floats."""
     return [float(item) for item in text.split()]
 
 
 def local(tag: str) -> str:
+    """XML tag name without a namespace."""
     return tag.rsplit("}", 1)[-1]
 
 
 def findall(root, name: str):
+    """Elements whose local tag name is ``name``."""
     return [node for node in root.iter() if local(node.tag) == name]
 
 
 def sensor_pose(root, sensor_name: str):
+    """Pose floats of the sensor named ``sensor_name``."""
     for node in findall(root, "sensor"):
         if node.attrib.get("name") == sensor_name:
             pose = next(child for child in node if local(child.tag) == "pose")
@@ -61,6 +66,7 @@ def sensor_pose(root, sensor_name: str):
 
 
 def child_text(node, name: str) -> str:
+    """Text of the first child named ``name``, or an empty string."""
     for child in node:
         if local(child.tag) == name and child.text:
             return child.text.strip()
@@ -68,7 +74,10 @@ def child_text(node, name: str) -> str:
 
 
 class GeometryTest(unittest.TestCase):
+    """Intrinsics, profiles, and the warnings that do not need a render."""
+
     def test_stereo_tx_uses_the_shared_left_fx(self):
+        """Tx uses the shared left fx and the 7.5 cm baseline."""
         shared = geo.stereo_tx(geo.LEFT_INTRINSICS["fx"])
         self.assertAlmostEqual(shared, -geo.LEFT_INTRINSICS["fx"] * 0.075, places=9)
         self.assertLess(shared, 0.0)
@@ -89,6 +98,7 @@ class GeometryTest(unittest.TestCase):
         self.assertAlmostEqual(right_p[3], shared * 2.0, places=9)
 
     def test_corrected_projection_fills_zero_tx_once(self):
+        """A zero Tx is replaced once and left alone on a second pass."""
         fx = geo.RIGHT_INTRINSICS["fx"]
         k = [fx, 0.0, 10.0, 0.0, fx, 20.0, 0.0, 0.0, 1.0]
         zeros = [0.0] * 12
@@ -99,9 +109,11 @@ class GeometryTest(unittest.TestCase):
         self.assertEqual(again[3], filled[3])
 
     def test_corrected_projection_rejects_missing_fx(self):
+        """A projection with no recoverable fx is rejected."""
         self.assertIsNone(geo.corrected_projection([0.0] * 12, [0.0] * 9))
 
     def test_color_fov_matches_af_datasheet(self):
+        """The color pinhole matches the auto-focus datasheet HFOV."""
         color = geo.color_intrinsics()
         hfov = math.degrees(geo.hfov_from_intrinsics(color))
         vfov = math.degrees(geo.vfov_from_intrinsics(color))
@@ -111,11 +123,13 @@ class GeometryTest(unittest.TestCase):
         self.assertAlmostEqual(geo.diagonal_fov_deg(hfov, vfov), 78.0, delta=0.2)
 
     def test_calibration_hfov_is_not_silently_replaced(self):
+        """The stereo HFOV stays the calibration, not the 80 deg nominal."""
         hfov = math.degrees(geo.hfov_from_intrinsics(geo.LEFT_INTRINSICS))
         self.assertAlmostEqual(hfov, 76.4, delta=0.1)
         self.assertLess(hfov, 80.0)
 
     def test_optical_axes_and_baseline(self):
+        """The optical axes and the right-in-left baseline match the housing."""
         rotation = geo.optical_rotation()
         self.assertAlmostEqual(geo.matvec(rotation, (0.0, 0.0, 1.0))[0], 1.0, places=6)
         baseline = geo.right_in_left_optical()
@@ -124,10 +138,12 @@ class GeometryTest(unittest.TestCase):
         self.assertAlmostEqual(baseline[2], 0.0, places=6)
 
     def test_positive_pitch_points_down(self):
+        """A positive pitch rotates the glass downward."""
         forward = geo.matvec(geo.rot_y(math.radians(17.0)), (1.0, 0.0, 0.0))
         self.assertLess(forward[2], 0.0)
 
     def test_intrinsics_scale_keeps_fov_and_baseline(self):
+        """Scaling the image keeps the field of view and the baseline ratio."""
         full = geo.stereo_intrinsics(geo.FULL_PROFILE)
         cpu = geo.stereo_intrinsics(geo.CPU_PROFILE)
         hw = geo.stereo_intrinsics(geo.HW_PROFILE)
@@ -161,6 +177,7 @@ class GeometryTest(unittest.TestCase):
         self.assertEqual(color_hw["fx"], color_full["fx"])
 
     def test_profile_overrides_win_over_cpu_defaults(self):
+        """CAM_* and IMU_RATE_HZ replace the cpu profile fields."""
         cpu = geo.profile_from_env({"VISION_PROFILE": "cpu"})
         self.assertEqual((cpu.stereo_width, cpu.stereo_height), (320, 200))
         self.assertEqual((cpu.color_width, cpu.color_height), (320, 240))
@@ -202,6 +219,7 @@ class GeometryTest(unittest.TestCase):
             geo.profile_from_env({"VISION_PROFILE": "gpu"})
 
     def test_stereo_override_accepts_only_calibration_scales(self):
+        """Only the 16:10 calibration scales are accepted as stereo sizes."""
         for width, height in geo.ALLOWED_STEREO_RESOLUTIONS:
             chosen = geo.profile_from_env(
                 {"VISION_PROFILE": "hw", "CAM_STEREO_WIDTH": str(width), "CAM_STEREO_HEIGHT": str(height)}
@@ -236,6 +254,7 @@ class GeometryTest(unittest.TestCase):
             geo.profile_from_env({"CAM_RATE_HZ": "0"})
 
     def test_sub_hd_warning_is_only_for_full_and_hw(self):
+        """The below-HD warning is for full and hw, not cpu."""
         self.assertIsNone(geo.sub_hd_warning(geo.FULL_PROFILE))
         self.assertIsNone(geo.sub_hd_warning(geo.HW_PROFILE))
         self.assertIsNone(geo.sub_hd_warning(geo.CPU_PROFILE))
@@ -249,6 +268,7 @@ class GeometryTest(unittest.TestCase):
         self.assertIsNone(geo.sub_hd_warning(cpu_native))
 
     def test_no_gpu_warning_is_only_for_full_and_hw(self):
+        """The missing-GPU warning is for full and hw, and only from the SDF render."""
         self.assertFalse(geo.gpu_visible(dri_nodes=[], nvidia_ok=False))
         self.assertTrue(geo.gpu_visible(dri_nodes=["/dev/dri/renderD128"], nvidia_ok=False))
         self.assertTrue(geo.gpu_visible(dri_nodes=[], nvidia_ok=True))
@@ -275,7 +295,10 @@ class GeometryTest(unittest.TestCase):
 
 
 class RenderTest(unittest.TestCase):
+    """SDF and URDF text for the three profiles and the x500 pose patch."""
+
     def setUp(self):
+        """Mounts the render tests walk: level, default, pitched, and shifted."""
         self.mounts = [
             geo.Mount(pitch_deg=0.0),
             geo.Mount(),
@@ -284,6 +307,7 @@ class RenderTest(unittest.TestCase):
         ]
 
     def test_sensor_poses_match_across_pitches(self):
+        """Sensor poses follow the mount at every pitch."""
         layouts = geo.sensor_layouts()
         for mount in self.mounts:
             stereo = ET.fromstring(render.render_sdf("stereo", mount))
@@ -346,6 +370,7 @@ class RenderTest(unittest.TestCase):
             self.assertIn("model://x500", patched)
 
     def test_frames_intrinsics_and_noise(self):
+        """Frames, intrinsics, clip, and noise in the rendered SDF match the constants."""
         stereo = ET.fromstring(render.render_sdf("stereo", geo.Mount()))
         links = {node.attrib["name"] for node in findall(ET.fromstring(render.render_urdf(geo.Mount())), "link")}
         for sensor_name, frame in (
@@ -387,6 +412,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn(geo.LINK_NAME, {node.attrib.get("name") for node in findall(stereo, "link")})
 
     def test_cpu_profile_sdf_scales_and_keeps_model_names(self):
+        """The cpu SDF is the scaled image and keeps the OakD-Lite name."""
         stereo = ET.fromstring(render.render_sdf("stereo", geo.Mount(), geo.CPU_PROFILE))
         rgbd = ET.fromstring(render.render_sdf("rgbd", geo.Mount(), geo.CPU_PROFILE))
         self.assertIn("OakD-Lite", {node.attrib.get("name") for node in findall(stereo, "model")})
@@ -416,6 +442,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn(geo.LINK_NAME, render.render_urdf(geo.Mount()))
 
     def test_hw_sdf_matches_full_stereo_at_a_lower_rate(self):
+        """hw matches full stereo size at the lower hw rate."""
         full = ET.fromstring(render.render_sdf("stereo", geo.Mount(), geo.FULL_PROFILE))
         hw = ET.fromstring(render.render_sdf("stereo", geo.Mount(), geo.HW_PROFILE))
         hw_rgbd = ET.fromstring(render.render_sdf("rgbd", geo.Mount(), geo.HW_PROFILE))
@@ -435,6 +462,7 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(self._nested(hw_rgbd, "rgb_aligned_depth", "update_rate"), "15")
 
     def test_rendered_urdf_loads_as_a_yaml_string(self):
+        """The URDF is text robot_state_publisher can take as a string parameter."""
         # launch_ros runs yaml.safe_load on robot_description. A colon-space
         # inside an XML comment is a mapping, and StatePublisher rejects it.
         for mount in self.mounts:
@@ -445,12 +473,14 @@ class RenderTest(unittest.TestCase):
             self.assertIsInstance(loaded, str)
 
     def test_checked_in_models_match_default_mount(self):
+        """The checked-in models match a full-profile render at the default mount."""
         mount = geo.Mount()
         self.assertEqual(render.STEREO_SDF.read_text(encoding="utf-8"), render.render_sdf("stereo", mount))
         self.assertEqual(render.RGBD_SDF.read_text(encoding="utf-8"), render.render_sdf("rgbd", mount))
         self.assertEqual(render.URDF_PATH.read_text(encoding="utf-8"), render.render_urdf(mount))
 
     def test_urdf_joints_reference_real_links(self):
+        """Every URDF joint parent and child is a link in the same file."""
         urdf = ET.fromstring(render.render_urdf(geo.Mount(pitch_deg=17)))
         links = {node.attrib["name"] for node in findall(urdf, "link")}
         self.assertIn(geo.RGB_OPTICAL, links)
@@ -461,6 +491,7 @@ class RenderTest(unittest.TestCase):
             self.assertIn(child, links)
 
     def test_x500_patch_file_keeps_other_includes(self):
+        """The x500 patch rewrites the two camera poses and leaves the other include."""
         mount = geo.Mount(x=0.15, y=0.0, z=0.2, pitch_deg=17)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "model.sdf"
@@ -471,6 +502,7 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(text.count(mount.pose_text()), 2)
 
     def x500_sample(self) -> str:
+        """Minimal x500_depth SDF with an OakD include and a camera joint."""
         return """<?xml version="1.0"?>
 <sdf version="1.9">
   <model name="x500_depth">
@@ -491,12 +523,14 @@ class RenderTest(unittest.TestCase):
 """
 
     def _sensor(self, root, name: str):
+        """The sensor element named ``name``."""
         for node in findall(root, "sensor"):
             if node.attrib.get("name") == name:
                 return node
         raise KeyError(name)
 
     def _nested(self, root, sensor_name: str, tag: str) -> str:
+        """Text of the first ``tag`` inside the named sensor."""
         sensor = self._sensor(root, sensor_name)
         matches = [node for node in sensor.iter() if local(node.tag) == tag and node.text]
         if not matches:
@@ -505,7 +539,10 @@ class RenderTest(unittest.TestCase):
 
 
 class HealthAndEvoTest(unittest.TestCase):
+    """Health-log gates, launch-script text, and the evo command shape."""
+
     def test_tracking_loss_duration_and_loop(self):
+        """A loss records a duration, and a loop closure is counted once."""
         log = HEALTH.TrackingLog(min_inliers=20)
         stats_ok = {"Odometry/Inliers/": 40.0}
         stats_lost = {"Odometry/Inliers/": 3.0}
@@ -525,12 +562,14 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertEqual(log.loop_count, 1)
 
     def test_missing_inliers_are_not_a_loss(self):
+        """A stats message with no inlier key is not a tracking loss."""
         log = HEALTH.TrackingLog()
         events = log.update(1.0, "t", 1, 0, 0, {"Loop/Id/": 0.0})
         self.assertEqual(events[0]["tracking"], "ok")
         self.assertEqual(log.loss_count, 0)
 
     def test_evo_commands_do_not_free_scale(self):
+        """The evo commands align in SE3 and do not correct scale."""
         ape = EVAL.ape_command("gt.tum", "est.tum")
         rpe = EVAL.rpe_command("gt.tum", "est.tum")
         self.assertTrue(EVAL.se3_alignment_only(ape))
@@ -543,10 +582,12 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(EVAL.passes(0.1, 0.2, 0.5, 0.1))
 
     def test_parse_evo_rmse_row(self):
+        """The rmse row is the number the gate compares."""
         text = "max 1.0\nrmse 0.25\nstd 0.1\n"
         self.assertAlmostEqual(EVAL.parse_evo_rmse(text), 0.25)
 
     def test_stereo_launch_uses_exact_sync(self):
+        """Both stereo launches use exact sync and do not set an approx interval."""
         root = Path(__file__).resolve().parents[1] / "startFiles"
         stereo = (root / "gz_start_rtabmap_stereo.sh").read_text(encoding="utf-8")
         wrapper = (root / "gz_start_rtabmap.sh").read_text(encoding="utf-8")
@@ -558,6 +599,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertNotIn("approx_sync:=true", text)
 
     def _profile_args(self, profile: str, camera: str, extra_env: str = "") -> dict:
+        """Source ``rtabmap_profile.sh`` and return the three launch variables."""
         script = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profile.sh"
         command = (
             "set -euo pipefail; "
@@ -572,6 +614,7 @@ class HealthAndEvoTest(unittest.TestCase):
         return {"RTAB_CFG": cfg, "RTAB_ARGS": args, "RTAB_ODOM": odom, "stderr": completed.stderr}
 
     def test_unset_vision_profile_shell_is_cpu(self):
+        """An unset VISION_PROFILE resolves to the cpu profile."""
         script = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profile.sh"
         command = (
             "set -euo pipefail; "
@@ -650,6 +693,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("exit 1", text)
 
     def test_launch_scripts_use_real_parameter_names(self):
+        """The launches pass real RTAB-Map keys and the profile ini."""
         root = Path(__file__).resolve().parents[1] / "startFiles"
         names = (
             "gz_start_rtabmap.sh",
@@ -703,6 +747,7 @@ class HealthAndEvoTest(unittest.TestCase):
             log.observe_odom(index * dt, f"t{index}", lost, features, inliers)
 
     def _without_vision_env(self):
+        """Drop the vision gate variables so the profile defaults are visible."""
         keys = (
             "VISION_MAX_LOST_STREAK",
             "VISION_MAX_RECOVERY_FRAMES",
@@ -714,6 +759,7 @@ class HealthAndEvoTest(unittest.TestCase):
         return {key: os.environ.get(key) for key in keys}
 
     def _restore_env(self, saved):
+        """Put back the environment ``_without_vision_env`` removed."""
         for key, value in saved.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -721,6 +767,7 @@ class HealthAndEvoTest(unittest.TestCase):
                 os.environ[key] = value
 
     def test_env_files_define_vision_gates(self):
+        """The env files name the vision gates the health log reads."""
         for name in (".env", ".env.example"):
             text = (REPO / name).read_text(encoding="utf-8")
             self.assertRegex(text, r"(?m)^VISION_PROFILE=cpu$")
@@ -743,6 +790,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertIn('VISION_PROFILE="${VISION_PROFILE:-cpu}"', shell)
 
     def test_thresholds_from_env_and_file(self):
+        """An env file fills a missing gate and the process environment wins."""
         saved = self._without_vision_env()
         try:
             for key in saved:
@@ -772,6 +820,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self._restore_env(saved)
 
     def test_odom_info_sequence_within_gates(self):
+        """A healthy odom_info sequence passes every gate."""
         log = HEALTH.TrackingLog()
         # One lost frame, then tracking returns on the next frame.
         rows = [(False, 800, 50)] * 4 + [(True, 12, 0), (False, 700, 40)]
@@ -798,6 +847,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIsInstance(metric["pass"], bool)
 
     def test_two_recoveries_use_the_worst_episode(self):
+        """Two recoveries are scored by the longer episode."""
         log = HEALTH.TrackingLog()
         rows = [
             (False, 600, 30),
@@ -814,6 +864,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertTrue(recovery["pass"])
 
     def test_three_lost_frames_fail_recovery_and_keep_the_streak(self):
+        """Three lost frames fail recovery and still pass the streak cap."""
         log = HEALTH.TrackingLog()
         rows = [(False, 600, 30), (True, 5, 0), (True, 5, 0), (True, 5, 0), (False, 600, 30)]
         self._feed_odom(log, rows)
@@ -825,6 +876,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(summary["pass"])
 
     def test_four_lost_frames_fail_the_streak(self):
+        """Four lost frames fail the streak gate."""
         log = HEALTH.TrackingLog()
         rows = [(False, 600, 30)] + [(True, 5, 0)] * 4 + [(False, 600, 30)]
         self._feed_odom(log, rows)
@@ -834,6 +886,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(summary["pass"])
 
     def test_open_loss_fails_recovery_after_finish(self):
+        """A loss that is still open when the log ends fails recovery."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 600, 30), (True, 5, 0)])
         end = log.finish("end")
@@ -845,6 +898,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(log.summary("end")["pass"])
 
     def test_low_median_features_fail(self):
+        """A feature median under the floor fails that gate."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 80, 40), (False, 100, 40)])
         features = log.summary("end")["metrics"]["median_features"]
@@ -854,6 +908,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertTrue(log.summary("end")["metrics"]["inliers"]["pass"])
 
     def test_even_feature_count_median_meets_the_floor(self):
+        """An even feature count uses the average of the two middle values."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 100, 40), (False, 140, 40)])
         features = log.summary("end")["metrics"]["median_features"]
@@ -861,6 +916,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertTrue(features["pass"])
 
     def test_tracked_frame_below_inlier_floor_fails(self):
+        """A tracked frame under the inlier floor fails that gate."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 600, 10), (False, 600, 40)])
         inliers = log.summary("end")["metrics"]["inliers"]
@@ -869,6 +925,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(log.summary("end")["pass"])
 
     def test_reset_frame_zero_inliers_do_not_fail_the_inlier_gate(self):
+        """The zero-inlier frame after a reset is left out of the inlier gate."""
         log = HEALTH.TrackingLog()
         # Lost frame, then the reset frame (not lost, 0 inliers), then tracking.
         self._feed_odom(log, [(False, 600, 40), (True, 8, 0), (False, 500, 0), (False, 600, 40)])
@@ -885,6 +942,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(other.summary("end")["metrics"]["inliers"]["pass"])
 
     def test_lost_frame_inliers_do_not_fail_the_inlier_gate(self):
+        """Inliers on a lost frame do not fail the inlier gate."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 600, 40), (True, 1, 0), (False, 600, 40)])
         summary = log.summary("end")
@@ -894,6 +952,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertTrue(summary["pass"])
 
     def test_empty_log_fails_features_and_inliers(self):
+        """An empty log fails the feature and inlier gates."""
         summary = HEALTH.TrackingLog().summary("end")
         self.assertFalse(summary["metrics"]["median_features"]["pass"])
         self.assertIsNone(summary["metrics"]["median_features"]["value"])
@@ -901,6 +960,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(summary["pass"])
 
     def test_odom_info_is_preferred_over_later_info_stats(self):
+        """Later info stats do not add samples once odom info has been seen."""
         log = HEALTH.TrackingLog()
         self._feed_odom(log, [(False, 600, 40)] * 3)
         events = log.update(10.0, "wall", 9, 4, 0, {"Odometry/Inliers/": 1.0})
@@ -914,6 +974,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertEqual(log.loop_count, 1)
 
     def test_cpu_profile_parameters_only_when_selected(self):
+        """The cpu disparity cap is applied only when that profile is selected."""
         # The cpu stereo set is the previous command line, including VisKeyFrameThr 30.
         cpu_stereo = {
             "Optimizer/GravitySigma": "0.1",
@@ -989,6 +1050,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("rtabmap_profile.sh", text)
 
     def test_sim_time_odom_hz_is_gated_and_wall_rate_is_reported(self):
+        """The odom gate uses sim time, and the wall rate is only reported."""
         log = HEALTH.TrackingLog()
         for index in range(9):
             log.observe_odom(index / 8.0, f"t{index}", False, 600, 40, wall_s=index / 2.0)
@@ -1000,6 +1062,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertTrue(metric["pass"])
 
     def test_slow_sim_odom_fails_hz_even_if_wall_is_fast(self):
+        """Slow sim-time odometry fails the rate gate even when the wall rate is fast."""
         log = HEALTH.TrackingLog()
         for index in range(5):
             log.observe_odom(float(index), "t", False, 600, 40, wall_s=index * 0.1)
@@ -1010,6 +1073,7 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(log.summary("end")["pass"])
 
     def test_cpu_profile_lowers_feature_and_inlier_defaults(self):
+        """The cpu profile lowers the feature and inlier floors."""
         saved = self._without_vision_env()
         try:
             for key in saved:
@@ -1038,6 +1102,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self._restore_env(saved)
 
     def test_min_inliers_flag_does_not_reset_other_thresholds(self):
+        """The min-inliers flag changes only that threshold."""
         saved = self._without_vision_env()
         try:
             for key in saved:
@@ -1061,6 +1126,7 @@ class HealthAndEvoTest(unittest.TestCase):
             self._restore_env(saved)
 
     def test_rate_probe_summary(self):
+        """The rate probe summary reports each topic and the real-time factor."""
         result = PROBE.summarize(
             {
                 "/imu": 1000,

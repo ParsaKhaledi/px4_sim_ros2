@@ -30,6 +30,7 @@ FX_TOL_PX = 1.0
 
 
 def record(handle, name: str, ok: bool, **detail) -> dict:
+    """Write one PASS/FAIL JSONL row and return it."""
     event = {"check": name, "pass": bool(ok), **detail}
     handle.write(json.dumps(event, sort_keys=True) + "\n")
     handle.flush()
@@ -37,16 +38,19 @@ def record(handle, name: str, ok: bool, **detail) -> dict:
 
 
 def quat_angle(a, b) -> float:
+    """Smallest angle in radians between two quaternions."""
     dot = abs(sum(x * y for x, y in zip(a, b)))
     dot = min(1.0, max(-1.0, dot))
     return 2.0 * math.acos(dot)
 
 
 def close_vec(got, expected, tol) -> bool:
+    """True when each of the three components is within ``tol``."""
     return all(abs(got[i] - expected[i]) <= tol for i in range(3))
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the selected checks and exit 0 only when every one passes."""
     parser = argparse.ArgumentParser(description="Check stereo, IMU, TF, and RTAB-Map topics.")
     parser.add_argument("--output", default="vision_check.jsonl")
     parser.add_argument("--timeout", type=float, default=20.0)
@@ -78,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     results = []
 
     def wait_for(msg_type, topic):
+        """Return the first message on ``topic``, or ``None`` at the timeout."""
         box = {}
         sub = node.create_subscription(
             msg_type, topic, lambda msg: box.setdefault("msg", msg), qos_profile_sensor_data
@@ -89,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         return box.get("msg")
 
     def check_image(name, topic, frame):
+        """PASS when an image arrives on ``topic`` with ``frame``."""
         msg = wait_for(Image, topic)
         ok = msg is not None and msg.header.frame_id == frame
         results.append(
@@ -103,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     def check_fx(name, topic, frame, expected_fx):
+        """PASS when ``camera_info`` has ``frame`` and fx within one pixel."""
         msg = wait_for(CameraInfo, topic)
         if msg is None:
             results.append(record(output, name, False, topic=topic, error="no message"))
@@ -206,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         tf_pairs.append(("rgb_optical", geo.RGB_OPTICAL, "rgb"))
 
     def lookup(target, source):
+        """Return the ``target`` to ``source`` transform, or ``None`` at the timeout."""
         deadline = time.monotonic() + args.timeout
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)

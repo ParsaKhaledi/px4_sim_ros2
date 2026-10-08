@@ -27,6 +27,7 @@ CAMERAS = ("stereo", "rgbd", "rgbd-wrapper")
 
 
 def ini_path(profile_name: str) -> Path:
+    """Path of ``rtabmap_profiles/<profile>.ini``. Unknown names raise."""
     name = str(profile_name).strip().lower()
     if name not in geo.PROFILES:
         raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {profile_name}")
@@ -60,6 +61,7 @@ def parse_rtabmap_ini(text: str) -> dict[str, str]:
 
 
 def load_profile_ini(profile_name: str) -> tuple[Path, dict[str, str]]:
+    """Ini path and the parsed ``[Core]`` keys."""
     path = ini_path(profile_name)
     return path, parse_rtabmap_ini(path.read_text(encoding="utf-8"))
 
@@ -120,12 +122,14 @@ def launch_strings(profile_name: str, camera: str) -> tuple[Path, str, str]:
 
 
 def _rate_text(value: float) -> str:
+    """Whole-number rates print as ints."""
     if float(value).is_integer():
         return str(int(value))
     return str(value)
 
 
 def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
+    """Stderr lines: the profile summary, ini keys, then camera overrides."""
     path, params = load_profile_ini(profile.name)
     slam, odom = camera_overrides(profile.name, camera)
     lines = [
@@ -151,6 +155,7 @@ def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
 
 
 def shell_assignments(profile: geo.VisionProfile, camera: str) -> str:
+    """Shell text that sets ``RTAB_CFG``, ``RTAB_ARGS``, and ``RTAB_ODOM``."""
     path, args, odom = launch_strings(profile.name, camera)
     return (
         f"RTAB_CFG={shlex.quote(str(path))}\n"
@@ -160,6 +165,7 @@ def shell_assignments(profile: geo.VisionProfile, camera: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Print the startup log, and the shell assignments when ``--shell`` is set."""
     parser = argparse.ArgumentParser(description="Resolve the RTAB-Map profile for this run.")
     parser.add_argument("--camera", required=True, choices=CAMERAS)
     parser.add_argument("--shell", action="store_true", help="Print RTAB_CFG, RTAB_ARGS, and RTAB_ODOM.")

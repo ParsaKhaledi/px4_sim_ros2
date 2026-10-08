@@ -26,6 +26,7 @@ POSE_RE = re.compile(r"(<pose\b[^>]*>)(.*?)(</pose>)", re.DOTALL)
 
 
 def indent(text: str, spaces: int) -> str:
+    """Indent every non-empty line by ``spaces`` spaces."""
     pad = " " * spaces
     return "\n".join(pad + line if line else line for line in text.splitlines())
 
@@ -36,6 +37,7 @@ def fmt(value: float) -> str:
 
 
 def _lens(intrinsics: dict, tx: float) -> str:
+    """SDF lens block: calibration intrinsics and projection ``tx``."""
     # scale_to_hfov stays off so fx/fy/cx/cy are the calibration, not a
     # rescaled copy of horizontal_fov. gnomonical is the rectilinear lens;
     # the default stereographic type would be a fisheye.
@@ -61,6 +63,7 @@ def _lens(intrinsics: dict, tx: float) -> str:
 
 
 def rate_text(value: float) -> str:
+    """Whole-number rates print as ints. Other rates keep full precision."""
     if float(value).is_integer():
         return str(int(value))
     return fmt(value)
@@ -79,6 +82,7 @@ def _camera_sensor(
     tx: float,
     update_rate: float,
 ) -> str:
+    """One Gazebo camera: pose, image size, clip planes, and topics."""
     pose = geo.pose_text(xyz[0], xyz[1], xyz[2], 0.0, 0.0, 0.0)
     hfov = geo.hfov_from_intrinsics(intrinsics)
     return f"""      <sensor name="{name}" type="camera">
@@ -158,6 +162,7 @@ def _depth_sensor(xyz, intrinsics: dict, optical_frame: str, update_rate: float)
 
 
 def _axis_noise(stddev: float, bias: float) -> str:
+    """Gaussian noise for one IMU axis, including the bias stddev."""
     return f"""            <noise type="gaussian">
               <mean>0</mean>
               <stddev>{fmt(stddev)}</stddev>
@@ -167,6 +172,7 @@ def _axis_noise(stddev: float, bias: float) -> str:
 
 
 def _imu_sensor(xyz, imu_hz: float) -> str:
+    """BNO086 IMU. The ENU reference keeps a tilted mount from looking level."""
     pose = geo.pose_text(xyz[0], xyz[1], xyz[2], 0.0, 0.0, 0.0)
     gyro = _axis_noise(geo.gyro_stddev_rad_s(imu_hz), geo.GYRO_BIAS_STDDEV_RAD_S)
     accel = _axis_noise(geo.accel_stddev_m_s2(imu_hz), geo.ACCEL_BIAS_STDDEV_M_S2)
@@ -199,6 +205,7 @@ def _imu_sensor(xyz, imu_hz: float) -> str:
 
 
 def _housing(mount: geo.Mount) -> tuple[str, str, str]:
+    """Inertial XML, visual/collision XML, and the SDF comment header."""
     ixx, iyy, izz = geo.box_inertia(
         geo.MASS_KG, geo.HOUSING_DEPTH_M, geo.HOUSING_WIDTH_M, geo.HOUSING_HEIGHT_M
     )
@@ -247,6 +254,7 @@ def render_sdf(
     mount: geo.Mount | None = None,
     profile: geo.VisionProfile | None = None,
 ) -> str:
+    """Stereo or RGB-D SDF. An omitted profile is ``FULL_PROFILE``."""
     if variant not in ("stereo", "rgbd"):
         raise ValueError(variant)
     mount = mount or geo.Mount()
@@ -332,6 +340,7 @@ def render_sdf(
 
 
 def _optical_joint(parent: str, optical: str) -> str:
+    """Fixed joint from a sensor frame into its optical child."""
     roll, pitch, yaw = geo.OPTICAL_RPY
     rpy_text = f"{roll:.8f} {pitch:.8f} {yaw:.8f}"
     return f"""  <joint name="{optical}_joint" type="fixed">
@@ -351,6 +360,7 @@ def _fixed_joint(
     rpy=(0.0, 0.0, 0.0),
     include_link: bool = True,
 ) -> str:
+    """Fixed joint. The child link is omitted when ``include_link`` is false."""
     xyz_text = " ".join(f"{v:.6f}" for v in xyz)
     rpy_text = " ".join(f"{v:.6f}" for v in rpy)
     joint = f"""  <joint name="{name}" type="fixed">
@@ -416,6 +426,7 @@ def render_urdf(mount: geo.Mount | None = None) -> str:
     # drops the empty link _fixed_joint would have appended.
 
     def sensor_frames(name: str, xyz, optical: str) -> str:
+        """Sensor frame at the housing offset, plus its optical child."""
         frame = name + "_frame"
         block = _fixed_joint(name + "_joint", geo.LINK_NAME, frame, xyz)
         block += _optical_joint(frame, optical)
@@ -430,6 +441,7 @@ def render_urdf(mount: geo.Mount | None = None) -> str:
 
 
 def _replace_first_pose(block: str, pose: str) -> str:
+    """Replace the first pose, or insert one before the closing tag."""
     if POSE_RE.search(block):
         return POSE_RE.sub(lambda match: match.group(1) + pose + match.group(3), block, count=1)
     close = block.rfind("</")
@@ -439,6 +451,7 @@ def _replace_first_pose(block: str, pose: str) -> str:
 
 
 def _block_span(xml: str, start_tag: str, end_tag: str, needle: str) -> tuple[int, int]:
+    """Span of the first start/end block whose text contains ``needle``."""
     cursor = 0
     while True:
         start = xml.find(start_tag, cursor)
@@ -469,6 +482,7 @@ def patch_x500_depth_xml(xml: str, mount: geo.Mount | None = None) -> str:
 
 
 def patch_x500_depth_file(path: Path, mount: geo.Mount | None = None) -> str:
+    """Write the patched x500_depth XML and return the pose text."""
     file_path = Path(path)
     original = file_path.read_text(encoding="utf-8")
     updated = patch_x500_depth_xml(original, mount)
@@ -481,6 +495,7 @@ def write_models(
     urdf_only: bool = False,
     profile: geo.VisionProfile | None = None,
 ) -> None:
+    """Write the URDF, and both SDFs unless ``urdf_only`` is set."""
     mount = mount or geo.mount_from_env()
     profile = geo.profile_from_env() if profile is None else profile
     # The URDF carries the mount and the frame tree. Image size and rate live
@@ -515,6 +530,7 @@ def gazebo_startup_warnings(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Render the models from the environment, or patch one x500_depth file."""
     parser = argparse.ArgumentParser(description="Render the OAK-D S2 SDF and URDF.")
     parser.add_argument("--urdf-only", action="store_true")
     parser.add_argument("--patch-x500", type=Path, default=None)

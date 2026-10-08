@@ -1,4 +1,7 @@
 #!/bin/bash
+# Start stereo RTAB-Map in the rtabmap container.
+# RTABMAPVIZ turns the viewer on. rtabmap_profile.sh reads VISION_PROFILE
+# and the CAM_* / IMU_RATE_HZ overrides (OAKD_S2_DIR when it is set).
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}

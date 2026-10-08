@@ -44,6 +44,7 @@ def summarize(counts: dict, window_s: float, clock_span: float | None) -> dict:
 
 
 def _hz(rates: dict, topic: str) -> str:
+    """One rate as ``12.34 Hz``, or ``n/a`` when it was not measured."""
     value = rates.get(topic)
     if value is None:
         return "n/a"
@@ -51,6 +52,7 @@ def _hz(rates: dict, topic: str) -> str:
 
 
 def format_summary(result: dict) -> str:
+    """One human line: image, IMU, and odom rates, plus the real-time factor."""
     rates = result["rates_hz"]
     rtf = result["rtf"]
     rtf_text = "n/a" if rtf is None else f"{rtf:.3f}"
@@ -66,6 +68,7 @@ def format_summary(result: dict) -> str:
 
 
 def jsonl_events(result: dict) -> list[dict]:
+    """One rate event per topic, then a summary event."""
     events = []
     for topic, rate in result["rates_hz"].items():
         events.append(
@@ -89,11 +92,13 @@ def jsonl_events(result: dict) -> list[dict]:
 
 
 def write_jsonl(handle, event: dict) -> None:
+    """Write one JSON object and flush."""
     handle.write(json.dumps(event, sort_keys=True) + "\n")
     handle.flush()
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Count topics for a wall-clock window, then write JSONL and one summary line."""
     parser = argparse.ArgumentParser(description="Report camera, IMU, odom, and clock rates.")
     parser.add_argument("--seconds", type=float, default=10.0)
     parser.add_argument("--output", default="vision_rate.jsonl")
@@ -116,7 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     clock_span = {"first": None, "last": None}
 
     def count(topic):
+        """Subscription callback that increments ``topic``."""
+
         def _on_msg(_msg) -> None:
+            """Count one message."""
             counts[topic] += 1
 
         return _on_msg
@@ -127,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     node.create_subscription(Odometry, ODOM_TOPIC, count(ODOM_TOPIC), qos_profile_sensor_data)
 
     def on_clock(msg: Clock) -> None:
+        """Remember the first and latest ``/clock`` stamps for the real-time factor."""
         stamp = float(msg.clock.sec) + float(msg.clock.nanosec) * 1e-9
         if clock_span["first"] is None:
             clock_span["first"] = stamp

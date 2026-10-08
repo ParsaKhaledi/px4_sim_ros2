@@ -18,6 +18,7 @@ import geometry as geo  # noqa: E402
 
 
 def main() -> int:
+    """Republish the right ``camera_info`` with the rectified K and P."""
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
@@ -39,6 +40,7 @@ def main() -> int:
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
 
     def on_info(msg: CameraInfo) -> None:
+        """Write the shared K and right-camera P. The stamp is left alone."""
         # Incoming K is ignored. The pair is rectified to the left calibration
         # at the active profile's resolution, so Tx uses the scaled fx.
         msg.k = geo.rectified_k(profile)
