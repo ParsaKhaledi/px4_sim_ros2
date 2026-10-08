@@ -25,6 +25,11 @@ def test_matching_params_pass():
     assert check_px4_params.mismatches(SAMPLE) == []
 
 
+def test_real_param_show_line_uses_the_value_after_the_colon():
+    text = "x   NAV_DLL_ACT [646,1115] : 2"
+    assert check_px4_params.parse_param_value(text, "NAV_DLL_ACT") == 2
+
+
 def test_datalink_failsafe_left_at_return_fails():
     text = SAMPLE.replace("NAV_DLL_ACT [0, 7] : 0", "NAV_DLL_ACT [0, 7] : 2")
     problems = check_px4_params.mismatches(text)
