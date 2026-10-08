@@ -15,6 +15,7 @@ from __future__ import annotations
 # the arming check is still on the airframe default.
 READBACK_PARAMS = (
     'EKF2_EV_CTRL',
+    'EKF2_EV_DELAY',
     'EKF2_GPS_CTRL',
     'EKF2_HGT_REF',
     'EKF2_MAG_TYPE',
@@ -28,7 +29,7 @@ READBACK_PARAMS = (
 def expected_sim_params(
     mode: str,
     ev_ctrl: float = 11.0,
-    ev_delay: float = 50.0,
+    ev_delay: float = 0.0,
 ) -> dict[str, float]:
     """Parameter values the SITL process must show for ``mode``."""
     name = mode.strip().lower()
@@ -64,9 +65,9 @@ def expected_sim_params(
             'EKF2_HGT_REF': 3.0,
             'EKF2_EV_DELAY': float(ev_delay),
             'EKF2_EV_NOISE_MD': 0.0,
-            'EKF2_GPS_CTRL': 5.0,
-            'EKF2_GPS_P_NOISE': 5.0,
-            'EKF2_GPS_V_NOISE': 1.0,
+            # GNSS fusion off. With gnss_pos active, EV horizontal position is
+            # bias-corrected and its variance is floored at GPS_P_NOISE^2.
+            'EKF2_GPS_CTRL': 0.0,
             'COM_ARM_WO_GPS': 1.0,
         })
     return values
@@ -80,6 +81,8 @@ def readback_mismatch(actual: dict[str, float], expected: dict[str, float]) -> s
     """Empty when every read-back parameter matches, otherwise one error line."""
     parts: list[str] = []
     for name in READBACK_PARAMS:
+        if name not in expected:
+            continue
         if name not in actual:
             parts.append(f'{name} was not read back')
             continue

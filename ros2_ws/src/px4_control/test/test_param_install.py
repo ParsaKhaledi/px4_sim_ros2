@@ -23,8 +23,10 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert 'export PX4_PARAM_EKF2_MAG_TYPE=5' in second
     assert 'SYS_HAS_MAG' not in second
     assert 'export PX4_PARAM_EKF2_HGT_REF=3' in second
-    assert 'export PX4_PARAM_EKF2_EV_DELAY=50' in second
-    assert 'export PX4_PARAM_EKF2_GPS_CTRL=5' in second
+    assert 'export PX4_PARAM_EKF2_EV_DELAY=0' in second
+    assert 'export PX4_PARAM_EKF2_GPS_CTRL=0' in second
+    assert 'EKF2_GPS_P_NOISE' not in second
+    assert 'EKF2_GPS_V_NOISE' not in second
     assert 'export PX4_PARAM_UXRCE_DDS_SYNCT=0' in second
     assert 'export PX4_PARAM_NAV_RCL_ACT=1' in second
     assert 'export PX4_PARAM_NAV_DLL_ACT=0' in second
@@ -34,6 +36,8 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert 'export PX4_PARAM_EKF2_EV_CTRL=0' in gps
     assert 'export PX4_PARAM_EKF2_HGT_REF=1' in gps
     assert 'export PX4_PARAM_EKF2_GPS_CTRL=7' in gps
+    assert 'export PX4_PARAM_EKF2_GPS_P_NOISE=0.5' in gps
+    assert 'export PX4_PARAM_EKF2_GPS_V_NOISE=0.3' in gps
     assert 'export PX4_PARAM_NAV_DLL_ACT=0' in gps
     assert 'export PX4_PARAM_EKF2_EV_CTRL=11' not in gps
     assert 'EKF2_MAG_TYPE' not in gps

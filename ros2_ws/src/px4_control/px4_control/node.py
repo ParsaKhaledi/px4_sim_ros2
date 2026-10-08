@@ -152,7 +152,7 @@ class Px4ControlNode(Node):
         self._expected_params = expected_sim_params(
             self._estimation_mode,
             ev_ctrl=float(os.environ.get('EKF2_EV_CTRL', '11')),
-            ev_delay=float(os.environ.get('EKF2_EV_DELAY', '50')),
+            ev_delay=float(os.environ.get('EKF2_EV_DELAY', '0')),
         )
 
         qos = _px4_qos()

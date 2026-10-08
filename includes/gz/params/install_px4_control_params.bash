@@ -13,7 +13,7 @@
 # Usage: install_px4_control_params <env-file> [vision|gps]
 #
 # Vision-mode environment overrides (see docs/px4_control.md):
-#   EKF2_EV_DELAY   milliseconds, 0..300, default 50
+#   EKF2_EV_DELAY   milliseconds, 0..300, default 0
 #   EKF2_EV_CTRL    integer bitmask 0..15, default 11 (no velocity)
 
 _px4_control_number() {
@@ -48,7 +48,7 @@ install_px4_control_params() {
   local ev_delay=""
   local ev_ctrl=""
   if [ "$mode" != "gps" ]; then
-    ev_delay="$(_px4_control_number EKF2_EV_DELAY "${EKF2_EV_DELAY:-50}" 0 300 0)" || return 1
+    ev_delay="$(_px4_control_number EKF2_EV_DELAY "${EKF2_EV_DELAY:-0}" 0 300 0)" || return 1
     ev_ctrl="$(_px4_control_number EKF2_EV_CTRL "${EKF2_EV_CTRL:-11}" 0 15 1)" || return 1
   fi
   local tmp
@@ -75,9 +75,7 @@ install_px4_control_params() {
       echo "export PX4_PARAM_EKF2_HGT_REF=3"
       echo "export PX4_PARAM_EKF2_EV_DELAY=${ev_delay}"
       echo "export PX4_PARAM_EKF2_EV_NOISE_MD=0"
-      echo "export PX4_PARAM_EKF2_GPS_CTRL=5"
-      echo "export PX4_PARAM_EKF2_GPS_P_NOISE=5.0"
-      echo "export PX4_PARAM_EKF2_GPS_V_NOISE=1.0"
+      echo "export PX4_PARAM_EKF2_GPS_CTRL=0"
       echo "export PX4_PARAM_COM_ARM_WO_GPS=1"
     fi
   } > "$tmp"
