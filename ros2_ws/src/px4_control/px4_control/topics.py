@@ -54,7 +54,8 @@ def topics_config_path() -> str:
             return shared
     except Exception:
         pass
-    return os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'config', 'topics.yaml'))
+    here = os.path.dirname(os.path.realpath(__file__))
+    return os.path.normpath(os.path.join(here, '..', 'config', 'topics.yaml'))
 
 
 def _parse_topic_file(text: str) -> dict[str, str]:
