@@ -45,7 +45,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 Component versions (PX4, px4_msgs, XRCE agent, ROS distro) live in [versions.env](versions.env). `.env` only pins the image you pull and the runtime knobs.
 
-Pushes to `main` publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the image and do not push it. Point `PX4_IMAGE` at a published tag when you want to run that build.
+Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build both images and do not push them. The GPU job checks image contents only. Headless smoke and the out-and-back flight stay on a manual or nightly run. Point `PX4_IMAGE` at a published tag when you want to run that build.
 
 ### Compose profiles
 
