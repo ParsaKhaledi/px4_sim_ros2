@@ -29,8 +29,8 @@ x-ros-env: &ros-env
   CAM_X: ${CAM_X:-0.12}
   CAM_Y: ${CAM_Y:-0.03}
   CAM_Z: ${CAM_Z:-0.242}
-  # full is the stock camera profile. cpu is the lighter one.
-  VISION_PROFILE: ${VISION_PROFILE:-full}
+  # cpu is the lighter camera profile. The GPU files default to full.
+  VISION_PROFILE: ${VISION_PROFILE:-cpu}
   # Optional overrides. Empty unless set, so the profile keeps its own values.
   CAM_RATE_HZ: ${CAM_RATE_HZ:-}
   CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
@@ -45,6 +45,7 @@ x-ros-env: &ros-env
   GZ_CAMERA_WIDTH: ${GZ_CAMERA_WIDTH:-}
   GZ_CAMERA_HEIGHT: ${GZ_CAMERA_HEIGHT:-}
   HEALTH_CAMERA_MIN_HZ: ${HEALTH_CAMERA_MIN_HZ:-}
+  PX4_PARAM_FILES: ${PX4_PARAM_FILES:-sim.params}
   World: ${World:-default}
   PX4_GZ_MODEL: ${PX4_GZ_MODEL:-x500_depth}
   PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:--3,-1.6,0,0,0,3.14}
@@ -55,7 +56,9 @@ x-sim-volumes: &sim-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix
   - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
   - /dev:/dev
-  - ./HealthCheck:/home/px4/volume/HealthCheck
+  - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+  - ./config/px4/params:/home/px4/volume/config/px4/params:ro
+  - ./scripts:/home/px4/volume/scripts:ro
   - ./includes/gz:/home/px4/volume/includes/gz
   - ./includes/gz/startFiles:/home/px4/volume/startFiles
   - ./includes/gz/Params:/home/px4/volume/Params
@@ -66,7 +69,6 @@ x-sim-volumes: &sim-volumes
 services:
   PX4:
     image: *px4-image
-    container_name: px4_sim
     hostname: px4_sim
     tty: true
     privileged: true
@@ -82,7 +84,8 @@ services:
         - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4
     networks:
       px4:
-        ipv4_address: 10.20.10.2
+        aliases:
+          - px4_sim
     ports:
       - "5760:5760"
       - "14550:14550/udp"
@@ -105,7 +108,6 @@ services:
 
   StatePublisher:
     image: *px4-image
-    container_name: statePublisher
     hostname: statePublisher
     tty: true
     privileged: true
@@ -123,7 +125,8 @@ services:
         - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service StatePublisher
     networks:
       px4:
-        ipv4_address: 10.20.10.3
+        aliases:
+          - statePublisher
     environment:
       <<: *ros-env
     volumes: *sim-volumes
@@ -135,7 +138,6 @@ services:
   Qground:
     profiles: [gcs]
     image: *px4-image
-    container_name: qground
     hostname: qground
     tty: true
     privileged: true
@@ -155,7 +157,8 @@ services:
         - Qground
     networks:
       px4:
-        ipv4_address: 10.20.10.4
+        aliases:
+          - qground
     environment:
       <<: *ros-env
     volumes:
@@ -175,7 +178,6 @@ services:
   Rtabmap:
     profiles: [slam]
     image: *px4-image
-    container_name: rtabmap
     hostname: rtabmap
     tty: true
     restart: unless-stopped
@@ -195,7 +197,8 @@ services:
         - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service Rtabmap
     networks:
       px4:
-        ipv4_address: 10.20.10.8
+        aliases:
+          - rtabmap
     environment:
       <<: *ros-env
     volumes: *sim-volumes
@@ -207,7 +210,6 @@ services:
   NAV2:
     profiles: [nav]
     image: *px4-image
-    container_name: nav2
     hostname: nav2
     tty: true
     restart: unless-stopped
@@ -227,7 +229,8 @@ services:
         - source /opt/ros/$${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service NAV2
     networks:
       px4:
-        ipv4_address: 10.20.10.9
+        aliases:
+          - nav2
     environment:
       <<: *ros-env
     volumes: *sim-volumes
@@ -245,7 +248,6 @@ services:
   Nav2_Rviz:
     profiles: [nav]
     image: *px4-image
-    container_name: nav2_rviz
     hostname: nav2_rivz
     tty: true
     privileged: true
@@ -264,7 +266,8 @@ services:
         - Nav2_Rviz
     networks:
       px4:
-        ipv4_address: 10.20.10.10
+        aliases:
+          - nav2_rviz
     environment:
       <<: *ros-env
     volumes:
@@ -281,7 +284,4 @@ services:
 
 networks:
   px4:
-    ipam:
-      driver: default
-      config:
-        - subnet: 10.20.10.0/24
+    driver: bridge

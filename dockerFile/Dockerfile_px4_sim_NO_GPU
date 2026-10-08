@@ -112,8 +112,10 @@ RUN mkdir -p ${WORKDIR}/src && \
 	git clone --depth 1 https://github.com/PX4/px4_ros_com.git 1>/dev/null && \
 	source /opt/ros/$ROS_DISTRO/setup.bash && cd ${WORKDIR} && colcon build
 
-### Run PX4 Check and first build
-RUN cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
+### Publish distance_sensor, then build PX4 so the DDS client includes it.
+COPY --chown=${USER_NAME}:${USER_NAME} includes/gz/patch_dds_topics.py /tmp/patch_dds_topics.py
+RUN python3 /tmp/patch_dds_topics.py ${HOME}/PX4-Autopilot/src/modules/uxrce_dds_client/dds_topics.yaml \
+	&& cd ${HOME}/PX4-Autopilot && make check_px4_sitl_default
 
 ### Install m-explore
 # RUN cd /px4_sim_ros2/src && git clone --progress --verbose https://github.com/robo-friends/m-explore-ros2.git

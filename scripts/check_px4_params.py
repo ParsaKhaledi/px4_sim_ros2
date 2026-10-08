@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""Fail if `param show` does not match the headless failsafe overrides."""
+"""Fail if `param show` does not match the merged parameter files and env."""
 
 from __future__ import annotations
 
+import argparse
 import math
 import re
 import sys
+from pathlib import Path
 
-# NAV_DLL_ACT 0 disables the GCS datalink preflight. NAV_RCL_ACT 1 is Hold.
-# COM_RC_IN_MODE 1 is the SITL joystick default. COM_RC_LOSS_T matches the
-# value the start script used to request.
-EXPECTED = {
-    "NAV_DLL_ACT": 0.0,
-    "NAV_RCL_ACT": 1.0,
-    "COM_RC_IN_MODE": 1.0,
-    "COM_RC_LOSS_T": 35.0,
-}
+from px4_params import merge_expected
 
 
 def parse_param_value(text: str, name: str) -> float | None:
@@ -31,7 +25,7 @@ def parse_param_value(text: str, name: str) -> float | None:
 
 
 def mismatches(text: str, expected: dict[str, float] | None = None) -> list[str]:
-    wanted = EXPECTED if expected is None else expected
+    wanted = merge_expected() if expected is None else expected
     problems = []
     for name, target in wanted.items():
         actual = parse_param_value(text, name)
@@ -42,15 +36,32 @@ def mismatches(text: str, expected: dict[str, float] | None = None) -> list[str]
     return problems
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--params-dir", type=Path, default=None)
+    parser.add_argument(
+        "--override",
+        action="append",
+        default=[],
+        help="NAME=VALUE that replaces the merged expectation. Used to prove the gate can fail.",
+    )
+    args = parser.parse_args(argv)
+    overrides = []
+    for item in args.override:
+        name, separator, value = item.partition("=")
+        if not separator or not name:
+            print(f"Bad override {item!r}. Use NAME=VALUE.", file=sys.stderr)
+            return 2
+        overrides.append((name, value))
     text = sys.stdin.read()
-    problems = mismatches(text)
+    expected = merge_expected(directory=args.params_dir, overrides=overrides)
+    problems = mismatches(text, expected)
     if problems:
         print("PX4 parameter overrides did not apply:", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
-    for name, target in EXPECTED.items():
+    for name, target in expected.items():
         print(f"{name}={target:g}")
     return 0
 

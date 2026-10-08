@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "${ROOT}/scripts/load_env.sh"
 load_repo_env "${ROOT}"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/compose_cli.sh"
 
 ACTION="${1:-up}"
 
@@ -16,32 +18,42 @@ export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 export DISPLAY="${DISPLAY:-}"
 
-COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
-IFS=':' read -r -a FILE_ARR <<< "${COMPOSE_FILES}"
-COMPOSE=(docker compose)
-for file in "${FILE_ARR[@]}"; do
-  COMPOSE+=(-f "${ROOT}/${file}")
-done
-
-PROFILE_ARGS=()
-if [ -n "${COMPOSE_PROFILES:-}" ]; then
-  IFS=',' read -ra PROFILES <<< "${COMPOSE_PROFILES}"
-  for profile in "${PROFILES[@]}"; do
-    profile="${profile// /}"
-    if [ -n "${profile}" ]; then
-      PROFILE_ARGS+=(--profile "${profile}")
-    fi
-  done
-fi
+compose_setup
 
 mkdir -p "${ROOT}/logs/health" "${ROOT}/logs/flights"
 chmod 777 "${ROOT}/logs" "${ROOT}/logs/health" "${ROOT}/logs/flights" || true
 
-# Optional space-separated service list. Empty means the whole project.
-SERVICES=()
-if [ -n "${COMPOSE_SERVICES:-}" ]; then
-  read -r -a SERVICES <<< "${COMPOSE_SERVICES}"
-fi
+note_unhealthy() {
+  local timeout="${SMOKE_TEST_TIMEOUT:-900}"
+  local waited_for="${SERVICES[*]:-every service in this project}"
+  echo "Timed out after ${timeout}s waiting for ${waited_for} to become healthy (healthcheck.py topic rates)." >&2
+  local status
+  status="$(compose_ps_status)"
+  if [ -n "${status}" ]; then
+    echo "${status}" >&2
+  else
+    echo "docker compose ps returned no services." >&2
+  fi
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### Stack did not become healthy"
+      echo
+      echo "Timed out after ${timeout}s waiting for ${waited_for} to become healthy."
+      echo
+      echo '```'
+      echo "${status:-no services reported}"
+      echo '```'
+    } >> "${GITHUB_STEP_SUMMARY}"
+  fi
+}
+
+wait_up() {
+  local timeout="${SMOKE_TEST_TIMEOUT:-900}"
+  if ! "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${timeout}" "${SERVICES[@]}"; then
+    note_unhealthy
+    return 1
+  fi
+}
 
 cd "${ROOT}"
 case "${ACTION}" in
@@ -49,7 +61,7 @@ case "${ACTION}" in
     if ! docker image inspect "${PX4_IMAGE}" >/dev/null 2>&1; then
       docker pull "${PX4_IMAGE}"
     fi
-    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${SMOKE_TEST_TIMEOUT:-900}" "${SERVICES[@]}"
+    wait_up
     ;;
   down)
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" down --remove-orphans
@@ -59,7 +71,7 @@ case "${ACTION}" in
     # PX4's estimator in the crashed state, so the container has to go.
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" stop "${SERVICES[@]}" || true
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" rm -f "${SERVICES[@]}" || true
-    "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" up -d --wait --wait-timeout "${SMOKE_TEST_TIMEOUT:-900}" "${SERVICES[@]}"
+    wait_up
     ;;
   logs)
     "${COMPOSE[@]}" "${PROFILE_ARGS[@]}" logs --no-color > "${ROOT}/logs/smoke-containers.log" || true

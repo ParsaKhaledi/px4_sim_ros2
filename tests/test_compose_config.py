@@ -23,6 +23,15 @@ def _command_text(service):
     return " ".join(str(part) for part in command)
 
 
+def test_no_compose_file_sets_a_container_name():
+    files = list(ROOT.glob("compose*.yml")) + list(ROOT.glob("docker-compose*.yml"))
+    assert files
+    for path in files:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.split("#", 1)[0]
+            assert "container_name:" not in stripped, path
+
+
 def test_every_compose_file_parses():
     variants = [
         ("compose.yml",),
@@ -37,6 +46,8 @@ def test_every_compose_file_parses():
     for files in variants:
         rendered = _config(*files)
         assert "PX4" in rendered["services"]
+        for service in rendered["services"].values():
+            assert "container_name" not in service
 
 
 def test_gpu_and_cpu_stacks_match_apart_from_gpu():
@@ -77,6 +88,20 @@ def test_ci_override_is_headless():
     assert str(px4_env["PX4_PARAM_NAV_RCL_ACT"]) == "1"
     assert str(px4_env["PX4_PARAM_COM_RC_IN_MODE"]) == "1"
     assert str(px4_env["PX4_PARAM_COM_RC_LOSS_T"]) == "35"
+    assert str(px4_env["PX4_PARAM_FILES"]) == "sim.params"
+    px4_volumes = " ".join(
+        volume if isinstance(volume, str) else volume.get("target", "")
+        for volume in rendered["services"]["PX4"]["volumes"]
+    )
+    assert "/home/px4/volume/config/px4/params" in px4_volumes
+    rtab = rendered["services"]["Rtabmap"]
+    rtab_cmd = " ".join(rtab["healthcheck"]["test"])
+    assert "/home/px4/volume/HealthCheck/healthcheck.py" in rtab_cmd
+    rtab_volumes = " ".join(
+        volume if isinstance(volume, str) else f"{volume.get('source', '')}:{volume.get('target', '')}"
+        for volume in rtab["volumes"]
+    )
+    assert "/home/px4/volume/HealthCheck" in rtab_volumes
 
 
 CAMERA_ENV = {
@@ -86,7 +111,6 @@ CAMERA_ENV = {
     "CAM_X": "0.12",
     "CAM_Y": "0.03",
     "CAM_Z": "0.242",
-    "VISION_PROFILE": "full",
 }
 
 OPTIONAL_VISION_ENV = (
@@ -119,12 +143,9 @@ def _config_env(*files, profiles=(), env=None):
 
 
 def test_cpu_and_gpu_pass_the_same_camera_env():
-    stacks = (
-        ("docker-compose-px4.yml",),
-        ("docker-compose-px4-GPU.yml",),
-        ("compose.yml", "compose.gpu.yml"),
-    )
-    for files in stacks:
+    cpu_stacks = (("docker-compose-px4.yml",), ("compose.yml",))
+    gpu_stacks = (("docker-compose-px4-GPU.yml",), ("compose.yml", "compose.gpu.yml"))
+    for files in cpu_stacks + gpu_stacks:
         rendered = _config(*files, profiles=("slam",))
         for name in ("PX4", "StatePublisher", "Rtabmap"):
             env = rendered["services"][name]["environment"]
@@ -132,6 +153,10 @@ def test_cpu_and_gpu_pass_the_same_camera_env():
                 assert str(env[key]) == value, (files, name, key, env.get(key))
             for key in OPTIONAL_VISION_ENV:
                 assert env.get(key) in (None, ""), (files, name, key, env.get(key))
+    for files in cpu_stacks:
+        assert _config(*files)["services"]["PX4"]["environment"]["VISION_PROFILE"] == "cpu"
+    for files in gpu_stacks:
+        assert _config(*files)["services"]["PX4"]["environment"]["VISION_PROFILE"] == "full"
 
 
 def test_camera_env_follows_the_shell():

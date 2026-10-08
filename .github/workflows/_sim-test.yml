@@ -43,6 +43,7 @@ jobs:
           PX4_GZ_MODEL: x500_depth
           E2E_LEG_LENGTH_M: ${{ inputs.leg_length }}
           SMOKE_TEST_TIMEOUT: "900"
+          COMPOSE_PROJECT_NAME: px4-nightly-${{ github.run_id }}
         run: |
           set -euo pipefail
           if [ -n "${{ inputs.image }}" ]; then

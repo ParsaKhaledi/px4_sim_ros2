@@ -9,15 +9,17 @@ services:
       LIBGL_ALWAYS_SOFTWARE: "1"
       GALLIUM_DRIVER: llvmpipe
       RTABMAPVIZ: "false"
-      # param set after the saved bson import, before airframe set-default.
-      # 0 disables the GCS datalink preflight. 1 is RC-loss Hold.
+      # One-off overrides of sim.params. The start script applies them
+      # after the airframe and logs each one as an override.
       PX4_PARAM_NAV_DLL_ACT: "0"
       PX4_PARAM_NAV_RCL_ACT: "1"
       PX4_PARAM_COM_RC_IN_MODE: "1"
       PX4_PARAM_COM_RC_LOSS_T: "35"
     ports: !override []
     volumes: !override
-      - ./HealthCheck:/home/px4/volume/HealthCheck
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./config/px4/params:/home/px4/volume/config/px4/params:ro
+      - ./scripts:/home/px4/volume/scripts:ro
       - ./includes/gz:/home/px4/volume/includes/gz
       - ./includes/gz/startFiles:/home/px4/volume/startFiles
       - ./includes/gz/Params:/home/px4/volume/Params
@@ -30,7 +32,7 @@ services:
       DISPLAY: ""
       RTABMAPVIZ: "false"
     volumes: !override
-      - ./HealthCheck:/home/px4/volume/HealthCheck
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
       - ./includes/gz:/home/px4/volume/includes/gz
       - ./includes/gz/startFiles:/home/px4/volume/startFiles
       - ./includes/gz/Params:/home/px4/volume/Params
@@ -42,7 +44,7 @@ services:
       RTABMAPVIZ: "false"
       QT_QPA_PLATFORM: offscreen
     volumes: !override
-      - ./HealthCheck:/home/px4/volume/HealthCheck
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
       - ./includes/gz:/home/px4/volume/includes/gz
       - ./includes/gz/startFiles:/home/px4/volume/startFiles
       - ./includes/gz/Params:/home/px4/volume/Params
@@ -53,7 +55,7 @@ services:
       DISPLAY: ""
       RTABMAPVIZ: "false"
     volumes: !override
-      - ./HealthCheck:/home/px4/volume/HealthCheck
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
       - ./includes/gz:/home/px4/volume/includes/gz
       - ./includes/gz/startFiles:/home/px4/volume/startFiles
       - ./includes/gz/Params:/home/px4/volume/Params

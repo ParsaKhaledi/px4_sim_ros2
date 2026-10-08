@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "${ROOT}/scripts/load_env.sh"
 load_repo_env "${ROOT}"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/compose_cli.sh"
 
 if [ -n "${1:-}" ]; then
   export PX4_IMAGE="$1"
@@ -31,13 +33,16 @@ trap cleanup EXIT
 "${ROOT}/scripts/compose_stack.sh" down || true
 "${ROOT}/scripts/compose_stack.sh" up
 "${ROOT}/scripts/assert_px4_params.sh"
+compose_setup
 
 echo "Checking camera rates first."
-docker exec px4_sim bash -lc \
+# shellcheck disable=SC2016
+compose_exec PX4 bash -lc \
   'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4 --group camera'
 
 echo "Checking the rest of the PX4 graph."
-docker exec px4_sim bash -lc \
+# shellcheck disable=SC2016
+compose_exec PX4 bash -lc \
   'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4'
 
 echo "Smoke test passed."

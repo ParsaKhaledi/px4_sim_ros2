@@ -40,7 +40,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
 | `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
-| `VISION_PROFILE` | Camera profile, `full` or `cpu` | `full` |
+| `VISION_PROFILE` | Camera profile. `cpu` on the base stack, `full` on the GPU files | `cpu` |
 | `World` | Gazebo world filename stem | `default` |
 | `HEADLESS` | `1` skips the Gazebo GUI | `0` |
 | `RTABMAPVIZ` | RTAB-Map visualization. Unset stays closed. | `false` |
@@ -48,7 +48,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 Component versions (PX4, px4_msgs, XRCE agent, ROS distro) live in [versions.env](versions.env). `.env` only pins the image you pull and the runtime knobs.
 
-Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only and do not push it. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. `.env` points `PX4_IMAGE` at the published CPU tag `1.17.0_121`. A pull-request flight does not pull that tag: it loads `px4_sim:ci-<sha>` from the build job. No `1.17` GPU tag is published. `px4GPUTAG` is the name a local GPU build uses.
+Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only when a Dockerfile, `versions.env`, `includes/gz/patch_dds_topics.py`, or a `ros2_ws` package manifest changed. Otherwise CI pulls `PX4_IMAGE` (`1.17.0_121`). The flight job loads that same image and does not build it again. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. No `1.17` GPU tag is published. `px4GPUTAG` is the name a local GPU build uses. `COMPOSE_PROJECT_NAME` selects the Compose project so two stacks can run on one host and `down` removes only that project.
 
 ### Compose profiles
 
@@ -95,7 +95,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 # or: CameraType=stereo World=apt_world docker compose -f docker-compose-px4.yml up -d --force-recreate PX4
 ```
 
-**Verify:** `docker logs px4_sim 2>&1 | grep "Selected Camera Type"`
+**Verify:** `docker compose -f docker-compose-px4.yml logs PX4 2>&1 | grep "Selected Camera Type"`
 
 **Profile dependencies:** `nav` depends on `slam` (Nav2 waits for Rtabmap). Use `COMPOSE_PROFILES=slam,nav` or include both. Services without a profile (`PX4`, `StatePublisher`) always start.
 
@@ -105,15 +105,15 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 
 **Display / X11:** QGC and RViz need `DISPLAY` and `xhost +local:`. Set `XAUTH` if your setup uses `/tmp/.docker.xauth` (Compose may warn if unset).
 
-| Service | Container | Role |
-|---------|-----------|------|
+| Service | Alias | Role |
+|---------|-------|------|
 | PX4 | `px4_sim` | SITL, Gazebo, XRCE agent, ros_gz bridge |
 | StatePublisher | `statePublisher` | x500 TF / URDF |
 | Qground | `qground` | QGroundControl (`gcs`) |
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
-Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation. Folder READMEs follow [docs/templates/FOLDER_README.md](docs/templates/FOLDER_README.md).
 
 Operational scripts: [scripts/README.md](scripts/README.md).
 
@@ -121,7 +121,7 @@ Operational scripts: [scripts/README.md](scripts/README.md).
 
 ### Docker
 
-[Docker Compose](docker-compose-px4.yml) runs multiple containers on a custom bridge network (`10.20.10.0/24`). The PX4 container bundles SITL, Gazebo, Micro-XRCE-DDS agent, and the `ros_gz` bridge because ROS 2 discovery across containers requires extra DDS configuration.
+[Docker Compose](docker-compose-px4.yml) runs one project per `COMPOSE_PROJECT_NAME`. Docker assigns the bridge subnet, so a second project can start beside the first. The old container names stay as network aliases (`px4_sim`, `statePublisher`, `qground`, `rtabmap`, `nav2`, `nav2_rviz`). The PX4 service bundles SITL, Gazebo, Micro-XRCE-DDS agent, and the `ros_gz` bridge because ROS 2 discovery across containers requires extra DDS configuration.
 
 Build locally:
 
@@ -144,10 +144,10 @@ xhost +local:
 
 ### QGroundControl
 
-Add a UDP comm link in QGC pointing at the PX4 container hostname `px4_sim` on ports `14550`, `14540`, `14580`, `18570`. MAVLink ports are visible in:
+Add a UDP comm link in QGC pointing at the PX4 hostname `px4_sim` on ports `14550`, `14540`, `14580`, `18570`. MAVLink ports are visible in:
 
 ```bash
-docker logs px4_sim 2>&1 | grep mavlink
+docker compose -f docker-compose-px4.yml logs PX4 2>&1 | grep mavlink
 ```
 
 ### ROS 2 and ros_gz bridge
@@ -170,7 +170,7 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 Pull requests run lint, colcon, the CPU image build, and two headless flights on that image. Nothing is pushed from a pull request. The GPU image is not built on a pull request. There is no GPU flight.
 
-The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). That flight is the required gate. The second flight uses `x500_depth` with `CameraType=rgbd` and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). It is non-blocking: the model link is still `OakD-Lite/base_link`, so the spawn waits on PR #20's `camera_link` models, and the step logs that before it runs. Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). That step also asks the copied model for 10 Hz at 320x240 (`GZ_CAMERA_UPDATE_RATE`, `GZ_CAMERA_WIDTH`, `GZ_CAMERA_HEIGHT`) and lowers the camera health floor to 1 Hz (`HEALTH_CAMERA_MIN_HZ`). The Oak-D files in the repo are not edited. If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. Both flights share one image load inside the `flight_test` job, because a second job would build the image again.
+The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). That flight is the required gate. The second flight uses `x500_depth` with `CameraType=rgbd`, `VISION_PROFILE=cpu`, and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). It is non-blocking: the model link is still `OakD-Lite/base_link`, so the spawn waits on PR #20's `camera_link` models, and the step logs that before it runs. Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). That step asks the copied model for 10 Hz (`GZ_CAMERA_UPDATE_RATE`) and leaves the image size alone. The camera health floor is 1 Hz (`HEALTH_CAMERA_MIN_HZ`). The Oak-D files in the repo are not edited. If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. `flight_test` loads the image from the build job. An attempt that runs longer than `E2E_ATTEMPT_TIMEOUT` (8 minutes) fails with that reason in the step summary.
 
 Each flight takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. The hover clock starts only after height has held ±5 cm for 2 s. Each leg and the yaw wait until they settle: position inside ±2 cm for 1 s, and that hold finishing within 4 s of the step. Yaw settles inside ±3°. Grading uses the Gazebo track, so a step that overshoots (3 cm, or 5° in yaw) or never settles fails even if the driver moves on. Legs must finish at 30 cm ± 3 cm, and the landing must be within 5 cm of the start. The log includes the PX4 `vehicle_local_position` error against the Gazebo pose. `logs/flights/*/trajectory.json` also stores the Gazebo real-time factor and, for the camera flight, each camera topic's rate, mean, and variance. If `px4_control.Drone` imports, that API flies the same mission. The grade is the same either way.
 

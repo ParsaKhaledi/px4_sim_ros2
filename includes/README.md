@@ -28,7 +28,7 @@ CI is defined in [.github/workflows/ci.yml](../.github/workflows/ci.yml). Compon
 
 ### What triggers CI
 
-Pull requests and pushes to `main` or `dev/px4-upgrade` that touch Dockerfiles, Compose, `scripts/`, `HealthCheck/`, `ros2_ws/`, `tests/`, or the workflow files. `includes/gz/**` is bind-mounted at runtime, so editing a world does not rebuild the image. The spawn-pose and RTAB-Map viz hooks under `includes/gz/startFiles/` are on the path filter.
+Pull requests and pushes to `main` or `dev/px4-upgrade` that touch Dockerfiles, Compose, `scripts/`, `HealthCheck/`, `ros2_ws/`, `config/`, `tests/`, or the workflow files. `includes/gz/**` is bind-mounted at runtime, so editing a world does not rebuild the image. The image is rebuilt only when `scripts/image_rebuild_paths.py` matches a changed path: `dockerFile/**`, `DockerBuild.sh`, `versions.env`, `includes/gz/patch_dds_topics.py`, or a `ros2_ws` manifest (`package.xml`, `CMakeLists.txt`, `setup.py`, `setup.cfg`, `pyproject.toml`). Anything else pulls `PX4_IMAGE`. The flight job loads that image and does not run `docker build`. The spawn-pose and RTAB-Map viz hooks under `includes/gz/startFiles/` are on the path filter.
 
 Pull requests do not push images. A push to `main` (or a `v*` tag) publishes `px4-<PX4_VERSION>` and `sha-<short>`.
 
@@ -36,7 +36,7 @@ Pull requests do not push images. A push to `main` (or a `v*` tag) publishes `px
 
 1. **Lint** — hadolint, shellcheck, yamllint, actionlint, `docker compose config`, version pins, and a warn-only Fuel URI check.
 2. **colcon** — builds `ros2_ws`. An empty `src/` is a successful no-op until the control packages arrive.
-3. **Image** — builds the no-GPU Dockerfile once, records the digest, and runs `scripts/image_assert.sh` on that image. The GPU Dockerfile builds on `main` and on manual dispatch. Gazebo smoke stays on the nightly/manual workflow because hosted runners have no GPU.
+3. **Image** — builds the no-GPU Dockerfile once when an image input changed, otherwise pulls the published tag. The flight job loads that image. The GPU Dockerfile builds on `main` and on manual dispatch. Gazebo smoke stays on the nightly/manual workflow because hosted runners have no GPU.
 
 ### Secrets required
 

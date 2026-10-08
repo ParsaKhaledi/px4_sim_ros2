@@ -77,7 +77,4 @@ services:
 
 networks:
   px4:
-    ipam:
-      driver: default
-      config:
-        - subnet: 10.20.10.0/24
+    driver: bridge

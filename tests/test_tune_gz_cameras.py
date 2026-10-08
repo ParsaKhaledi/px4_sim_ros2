@@ -22,11 +22,10 @@ SAMPLE = """
 """
 
 
-def test_tune_changes_cameras_and_leaves_the_imu():
-    updated = tune_gz_cameras.tune_cameras(SAMPLE, "10", "320", "240")
+def test_tune_changes_rate_and_leaves_size_and_imu():
+    updated = tune_gz_cameras.tune_cameras(SAMPLE, "10")
     assert "<update_rate>50</update_rate>" in updated
     assert updated.count("<update_rate>10</update_rate>") == 2
-    assert "<width>320</width>" in updated
-    assert "<height>240</height>" in updated
-    assert "<width>640</width>" not in updated
+    assert updated.count("<width>640</width>") == 2
+    assert updated.count("<height>480</height>") == 2
     assert "<update_rate>30</update_rate>" not in updated
