@@ -11,8 +11,11 @@ docker run --rm --entrypoint bash "${IMAGE}" -lc '
   test -d /opt/ros/jazzy
   test -d /home/px4/PX4-Autopilot
   test "$(id -u px4)" = "1000"
+  # setup.bash reads unset AMENT_* variables. nounset must stay off.
+  set +u
   # shellcheck disable=SC1091
   source /opt/ros/jazzy/setup.bash
+  set -u
   command -v ros2
   test "${ROS_DISTRO}" = "jazzy"
 '
