@@ -13,6 +13,7 @@ from sim_origin import (
     ecef_to_geodetic,
     enu_to_geodetic,
     geodetic_to_ecef,
+    main,
     origin_from_env,
     parse_spawn_xyz,
     rewrite_spherical_coordinates,
@@ -86,6 +87,7 @@ def test_rewrite_updates_every_block_and_inserts_when_missing(tmp_path):
     assert count == 2
     assert updated.count(f"{DEFAULT_LAT:.10f}") == 2
     assert updated.count("ENU") == 2
+    assert "\n      <latitude_deg>" in updated
     assert "<heading_deg>0.0000</heading_deg>" in updated
     assert "50.0" not in updated
 
@@ -101,3 +103,28 @@ def test_rewrite_updates_every_block_and_inserts_when_missing(tmp_path):
     written = apply_origin_to_worlds(tmp_path, DEFAULT_LAT, DEFAULT_LON, DEFAULT_ALT, {"husarion_office.sdf"})
     assert written == ["default.sdf:2"]
     assert "50.0" in other.read_text(encoding="utf-8")
+
+
+def test_dry_run_prints_exports_without_writing(tmp_path, monkeypatch, capsys):
+    world = tmp_path / "default.sdf"
+    original = (
+        "<sdf><world name='w'>\n"
+        "    <spherical_coordinates><latitude_deg>1</latitude_deg></spherical_coordinates>\n"
+        "</world></sdf>\n"
+    )
+    world.write_text(original, encoding="utf-8")
+    monkeypatch.setenv("PX4_GZ_WORLDS", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "empty-home"))
+    monkeypatch.setenv("SIM_ORIGIN_LAT", str(DEFAULT_LAT))
+    monkeypatch.setenv("SIM_ORIGIN_LON", str(DEFAULT_LON))
+    monkeypatch.setenv("SIM_ORIGIN_ALT", str(DEFAULT_ALT))
+    monkeypatch.setenv("PX4_GZ_MODEL_POSE", "-3,-1.6,0,0,0,3.14")
+    assert main(["--dry-run"]) == 0
+    assert world.read_text(encoding="utf-8") == original
+    dry = capsys.readouterr().out
+    assert "export PX4_HOME_LAT=35.7048522177" in dry
+    assert "world origin: 35.7048522177 51.4095380435 1205.0000" in dry
+    assert main([]) == 0
+    assert "35.7048522177" in world.read_text(encoding="utf-8")
+    live = capsys.readouterr().out
+    assert live.splitlines()[0].startswith("export PX4_HOME_LAT=")

@@ -17,9 +17,11 @@ The vehicle home is the first GPS fix, which is the spawn.
 
 from __future__ import annotations
 
+import argparse
 import math
 import os
 import re
+import sys
 from pathlib import Path
 
 WGS84_A = 6378137.0
@@ -109,16 +111,16 @@ def world_origin_from_spawn(lat_deg: float, lon_deg: float, alt_m: float,
 
 
 def spherical_block(lat_deg: float, lon_deg: float, alt_m: float, heading_deg: float = 0.0) -> str:
-    """One world spherical-coordinates element."""
+    """One world spherical-coordinates element, indented for an SDF world."""
     return (
-        "<spherical_coordinates>"
-        "<surface_model>EARTH_WGS84</surface_model>"
-        "<world_frame_orientation>ENU</world_frame_orientation>"
-        f"<latitude_deg>{lat_deg:.10f}</latitude_deg>"
-        f"<longitude_deg>{lon_deg:.10f}</longitude_deg>"
-        f"<elevation>{alt_m:.4f}</elevation>"
-        f"<heading_deg>{heading_deg:.4f}</heading_deg>"
-        "</spherical_coordinates>"
+        "    <spherical_coordinates>\n"
+        "      <surface_model>EARTH_WGS84</surface_model>\n"
+        "      <world_frame_orientation>ENU</world_frame_orientation>\n"
+        f"      <latitude_deg>{lat_deg:.10f}</latitude_deg>\n"
+        f"      <longitude_deg>{lon_deg:.10f}</longitude_deg>\n"
+        f"      <elevation>{alt_m:.4f}</elevation>\n"
+        f"      <heading_deg>{heading_deg:.4f}</heading_deg>\n"
+        "    </spherical_coordinates>"
     )
 
 
@@ -132,7 +134,7 @@ def rewrite_spherical_coordinates(text: str, lat_deg: float, lon_deg: float,
 
     updated, count = _BLOCK.subn(replace, text)
     if count == 0:
-        updated, inserted = _WORLD.subn(rf"\1\n    {block}\n", text, count=1)
+        updated, inserted = _WORLD.subn(rf"\1\n{block}\n", text, count=1)
         count = inserted
     return updated, count
 
@@ -220,35 +222,50 @@ def shell_exports(origin: dict[str, float]) -> str:
     ])
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Set the Gazebo world origin so the spawn pose is SIM_ORIGIN_*.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the world origin and PX4_HOME_* exports without writing worlds",
+    )
+    args = parser.parse_args(argv)
     origin = origin_from_env()
     names = repo_world_names()
     written: list[str] = []
     dirs = px4_world_dirs()
-    for directory in dirs:
-        written.extend(apply_origin_to_worlds(
-            directory, origin["origin_lat"], origin["origin_lon"], origin["origin_alt"], names,
-        ))
+    if not args.dry_run:
+        for directory in dirs:
+            written.extend(apply_origin_to_worlds(
+                directory, origin["origin_lat"], origin["origin_lon"], origin["origin_alt"], names,
+            ))
     print(shell_exports(origin))
+    if args.dry_run:
+        print(
+            "world origin: "
+            f"{origin['origin_lat']:.10f} {origin['origin_lon']:.10f} {origin['origin_alt']:.4f}"
+        )
     print(
         "sim origin: spawn "
         f"{origin['spawn_lat']:.8f}, {origin['spawn_lon']:.8f}, {origin['spawn_alt']:.3f} m "
         f"at xyz {origin['spawn_x']},{origin['spawn_y']},{origin['spawn_z']}",
-        file=__import__("sys").stderr,
+        file=sys.stderr,
     )
     print(
         "sim origin: world "
         f"{origin['origin_lat']:.8f}, {origin['origin_lon']:.8f}, {origin['origin_alt']:.3f} m "
         "(ENU, heading 0). PX4_HOME_* is this world origin.",
-        file=__import__("sys").stderr,
+        file=sys.stderr,
     )
     if written:
-        print("sim origin: updated " + ", ".join(written), file=__import__("sys").stderr)
+        print("sim origin: updated " + ", ".join(written), file=sys.stderr)
     elif not dirs:
         print(
             "sim origin: PX4 worlds directory not found; "
             "px4-rc.gzsim still applies PX4_HOME_* after the world starts",
-            file=__import__("sys").stderr,
+            file=sys.stderr,
         )
     return 0
 

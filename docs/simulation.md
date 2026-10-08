@@ -130,7 +130,7 @@ Each stream is written as a TUM file (`timestamp tx ty tz qx qy qz qw`) for evo.
 Unit tests cover the frame conversions, the geodetic conversion, alignment, and the metrics:
 
 ```bash
-python3 -m pytest includes/gz/sim_ws/src/trajectory_eval/test includes/gz/sim_ws/src/sim_monitor/test includes/gz/scripts/test_wall_geometry.py includes/gz/scripts/test_offline_worlds.py
+python3 -m pytest
 ```
 
 ## Preflight

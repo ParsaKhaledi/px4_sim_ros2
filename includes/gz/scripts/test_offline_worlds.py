@@ -17,6 +17,12 @@ def test_fuel_file_url_pattern():
     assert match.group(4) == "meshes/TrashBin.obj"
 
 
+def test_missing_worlds_directory_fails():
+    from check_offline_worlds import main
+
+    assert main(["/tmp/px4-worlds-missing-for-test"]) == 1
+
+
 def test_find_fuel_references(tmp_path):
     world = tmp_path / "demo.sdf"
     world.write_text("<uri>https://fuel.gazebosim.org/1.0/openrobotics/models/table/3/files/Table_Diffuse.jpg</uri>\n")
