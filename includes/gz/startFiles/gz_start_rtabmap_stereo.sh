@@ -23,14 +23,15 @@ python3 "${HOME}/volume/includes/gz/oakd_s2/stereo_info_relay.py" &
 RELAY_PID=$!
 trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 
+# rtabmap.launch.py (ROS 2) names the viewer rtabmap_viz. rtabmapviz is not
+# a declared argument. Odom/ResetCountdown 0 never restarts a lost odometry.
 ros2 launch rtabmap_launch rtabmap.launch.py \
-     args:="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10  --Kp/DetectorStrategy 10  \
-     --Grid/MapFrameProjection true  --NormalsSegmentation false --Grid/MaxGroundHeight 1.0 \
-     --Grid/MaxObstacleHeight 2.0 --RGBD/StartAtOrigin true" \
+     args:="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Vis/MaxFeatures 1000 --Vis/MinInliers 20 --Grid/MapFrameProjection true --Grid/NormalsSegmentation false --Grid/MaxGroundHeight 1.0 --Grid/MaxObstacleHeight 2.0 --RGBD/StartAtOrigin true" \
+     odom_args:="--Odom/Strategy 0 --Odom/ResetCountdown 1 --OdomF2M/MaxSize 2000 --Vis/CorGuessWinSize 40 --Vis/EstimationType 1" \
      stereo:=true  \
      left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
      right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
      imu_topic:=/imu  frame_id:=base_link  \
      approx_sync:=false  wait_imu_to_init:=true  \
      use_sim_time:=true \
-     qos:=2  rtabmapviz:=${RTABMAPVIZ}  rviz:=false
+     qos:=2  rtabmap_viz:=${RTABMAPVIZ}  rviz:=false

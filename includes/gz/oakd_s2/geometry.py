@@ -45,8 +45,9 @@ DEFAULT_PITCH_DEG = 17.0
 # Real S2 calibration at 640x400, from
 # includes/gazebo_classic/Params/OAK-D Calibration Files/oak-s2/.
 # The nominal datasheet HFOV is 80 deg. These intrinsics are narrower
-# (about 76.4 deg). The sim follows the calibration and sets horizontal_fov
-# from fx so the rendered image and camera_info describe the same pinhole.
+# (about 76.4 deg). The sim follows the left calibration and sets
+# horizontal_fov from fx so the rendered image and camera_info describe
+# the same pinhole.
 LEFT_INTRINSICS = {
     "width": 640,
     "height": 400,
@@ -55,6 +56,9 @@ LEFT_INTRINSICS = {
     "cx": 305.77686139278046,
     "cy": 204.52975717455422,
 }
+# The real right camera is a few pixels different. Both renders use the left
+# K instead. RTAB-Map treats the pair as already rectified, and two Ks bias
+# the depth. Kept here so the difference stays visible.
 RIGHT_INTRINSICS = {
     "width": 640,
     "height": 400,
@@ -114,6 +118,23 @@ def gyro_stddev_rad_s() -> float:
 def accel_stddev_m_s2() -> float:
     bandwidth_hz = IMU_HZ / 2.0
     return ACCEL_DENSITY_G_SQRT_HZ * GRAVITY_M_S2 * math.sqrt(bandwidth_hz)
+
+
+def rectified_k() -> list[float]:
+    """3x3 K shared by both stereo cameras. Row-major, from the left calibration."""
+    src = LEFT_INTRINSICS
+    return [src["fx"], 0.0, src["cx"], 0.0, src["fy"], src["cy"], 0.0, 0.0, 1.0]
+
+
+def rectified_p(right: bool, baseline_m: float = BASELINE_M) -> list[float]:
+    """3x4 projection. Same K on both cameras. Only the right camera has Tx."""
+    src = LEFT_INTRINSICS
+    tx = stereo_tx(src["fx"], baseline_m) if right else 0.0
+    return [
+        src["fx"], 0.0, src["cx"], tx,
+        0.0, src["fy"], src["cy"], 0.0,
+        0.0, 0.0, 1.0, 0.0,
+    ]
 
 
 def stereo_tx(fx: float, baseline_m: float = BASELINE_M) -> float:

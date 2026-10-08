@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             "stereo_right_info_raw",
             geo.RIGHT_INFO_IN,
             geo.STEREO_RIGHT_OPTICAL,
-            geo.RIGHT_INTRINSICS["fx"],
+            geo.LEFT_INTRINSICS["fx"],
         )
         corrected = wait_for(CameraInfo, geo.RIGHT_INFO_OUT)
         if corrected is None or raw is None:

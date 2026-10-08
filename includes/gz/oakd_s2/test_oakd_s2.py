@@ -58,12 +58,21 @@ def child_text(node, name: str) -> str:
 
 
 class GeometryTest(unittest.TestCase):
-    def test_stereo_tx_uses_each_camera_fx(self):
-        left = geo.stereo_tx(geo.LEFT_INTRINSICS["fx"])
-        right = geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"])
-        self.assertAlmostEqual(left, -geo.LEFT_INTRINSICS["fx"] * 0.075, places=9)
-        self.assertAlmostEqual(right, -30.545785371947205, places=9)
-        self.assertLess(right, 0.0)
+    def test_stereo_tx_uses_the_shared_left_fx(self):
+        shared = geo.stereo_tx(geo.LEFT_INTRINSICS["fx"])
+        self.assertAlmostEqual(shared, -geo.LEFT_INTRINSICS["fx"] * 0.075, places=9)
+        self.assertLess(shared, 0.0)
+        # The unused right calibration would have produced a different Tx.
+        self.assertNotAlmostEqual(shared, geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"]), places=3)
+        left_p = geo.rectified_p(right=False)
+        right_p = geo.rectified_p(right=True)
+        self.assertEqual(geo.rectified_k()[0], left_p[0])
+        self.assertEqual(left_p[0], right_p[0])
+        self.assertEqual(left_p[2], right_p[2])
+        self.assertEqual(left_p[5], right_p[5])
+        self.assertEqual(left_p[6], right_p[6])
+        self.assertEqual(left_p[3], 0.0)
+        self.assertAlmostEqual(right_p[3], shared, places=9)
 
     def test_corrected_projection_fills_zero_tx_once(self):
         fx = geo.RIGHT_INTRINSICS["fx"]
@@ -187,10 +196,30 @@ class RenderTest(unittest.TestCase):
             sensor = self._sensor(stereo, sensor_name)
             self.assertIn(child_text(sensor, "gz_frame_id"), links)
         right_tx = float(self._nested(stereo, "OV9282_right", "tx"))
-        self.assertAlmostEqual(right_tx, geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"]), places=4)
+        self.assertAlmostEqual(right_tx, geo.stereo_tx(geo.LEFT_INTRINSICS["fx"]), places=4)
         self.assertAlmostEqual(float(self._nested(stereo, "OV9282_left", "tx")), 0.0, places=6)
+        for field in ("fx", "fy", "cx", "cy"):
+            self.assertAlmostEqual(
+                float(self._nested(stereo, "OV9282_left", field)),
+                float(self._nested(stereo, "OV9282_right", field)),
+                places=6,
+            )
+            self.assertAlmostEqual(
+                float(self._nested(stereo, "OV9282_left", field)),
+                geo.LEFT_INTRINSICS[field],
+                places=4,
+            )
         self.assertGreater(float(self._nested(stereo, "OV9282_left", "stddev")), 0.0)
         self.assertEqual(child_text(self._sensor(stereo, "BNO086"), "update_rate"), str(geo.IMU_HZ))
+        for variant in ("stereo", "rgbd"):
+            model = ET.fromstring(render.render_sdf(variant, geo.Mount()))
+            imu = self._sensor(model, "BNO086")
+            localization = [
+                node.text.strip()
+                for node in imu.iter()
+                if local(node.tag) == "localization" and node.text
+            ]
+            self.assertEqual(localization, ["ENU"])
         self.assertIn(geo.LINK_NAME, {node.attrib.get("name") for node in findall(stereo, "link")})
 
     def test_checked_in_models_match_default_mount(self):
@@ -305,6 +334,37 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("wait_imu_to_init:=true", text)
             self.assertNotIn("approx_sync_max_interval", text)
             self.assertNotIn("approx_sync:=true", text)
+
+    def test_launch_scripts_use_real_parameter_names(self):
+        root = Path(__file__).resolve().parents[1] / "startFiles"
+        names = (
+            "gz_start_rtabmap.sh",
+            "gz_start_rtabmap_stereo.sh",
+            "gz_start_rtabmap_rgbd.sh",
+        )
+        texts = {name: (root / name).read_text(encoding="utf-8") for name in names}
+        for text in texts.values():
+            self.assertNotIn("--MaxFeatures", text)
+            self.assertNotIn("--NormalsSegmentation", text)
+            self.assertNotIn("rtabmapviz:=", text)
+            self.assertNotIn("MaxFeatures:=", text)
+            self.assertIn("Odom/ResetCountdown 1", text)
+            self.assertIn("rtabmap_viz:=", text)
+            self.assertIn("--Grid/NormalsSegmentation false", text)
+            self.assertIn("--Vis/MaxFeatures 1000", text)
+        wrapper = texts["gz_start_rtabmap.sh"]
+        stereo_branch, rgbd_branch = wrapper.split("elif", 1)
+        self.assertIn("approx_sync:=false", stereo_branch)
+        self.assertIn("--Grid/3D true", rgbd_branch)
+        self.assertIn("--Grid/RayTracing true", rgbd_branch)
+        self.assertIn("--Vis/DepthAsMask true", rgbd_branch)
+        self.assertIn("approx_sync:=true", rgbd_branch)
+        self.assertIn("wait_imu_to_init:=true", rgbd_branch)
+        rgbd = texts["gz_start_rtabmap_rgbd.sh"]
+        self.assertIn("approx_sync:=true", rgbd)
+        self.assertIn("--Vis/DepthAsMask true", rgbd)
+        self.assertIn("wait_imu_to_init:=true", rgbd)
+        self.assertNotIn("--Grid/3D", rgbd)
 
 
 if __name__ == "__main__":

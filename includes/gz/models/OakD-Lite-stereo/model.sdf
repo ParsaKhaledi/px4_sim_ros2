@@ -99,7 +99,7 @@
         <update_rate>30</update_rate>
         <visualize>true</visualize>
         <camera name="OV9282_right">
-          <horizontal_fov>1.331927951693669</horizontal_fov>
+          <horizontal_fov>1.333487845201744</horizontal_fov>
           <image>
             <width>640</width>
             <height>400</height>
@@ -125,18 +125,18 @@
             <type>gnomonical</type>
             <scale_to_hfov>false</scale_to_hfov>
             <intrinsics>
-              <fx>407.2771382926294</fx>
-              <fy>407.1335123740604</fy>
-              <cx>304.9249183482313</cx>
-              <cy>203.9058445315902</cy>
+              <fx>406.6239117362143</fx>
+              <fy>406.080036476775</fy>
+              <cx>305.7768613927805</cx>
+              <cy>204.5297571745542</cy>
               <s>0</s>
             </intrinsics>
             <projection>
-              <p_fx>407.2771382926294</p_fx>
-              <p_fy>407.1335123740604</p_fy>
-              <p_cx>304.9249183482313</p_cx>
-              <p_cy>203.9058445315902</p_cy>
-              <tx>-30.5457853719472</tx>
+              <p_fx>406.6239117362143</p_fx>
+              <p_fy>406.080036476775</p_fy>
+              <p_cx>305.7768613927805</p_cx>
+              <p_cy>204.5297571745542</p_cy>
+              <tx>-30.49679338021607</tx>
               <ty>0</ty>
             </projection>
           </lens>
@@ -151,6 +151,9 @@
         <always_on>true</always_on>
         <update_rate>200</update_rate>
         <imu>
+          <orientation_reference_frame>
+            <localization>ENU</localization>
+          </orientation_reference_frame>
           <angular_velocity>
           <x>
             <noise type="gaussian">

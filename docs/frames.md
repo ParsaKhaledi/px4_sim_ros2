@@ -58,11 +58,11 @@ Depth is aligned to color the way a real OAK-D publishes it: the depth sensor us
 |---|---|---|---|
 | 1 | Stereo `frame_id` | no `gz_frame_id` | `stereo_*_camera_optical_frame`, and those links are in the URDF |
 | 2 | Baseline | SDF y = ±0.037, URDF y = ±0.05 | both y = ±0.0375 (7.5 cm) |
-| 3 | Right `camera_info` Tx | two independent cameras, Tx usually 0 | SDF `<projection><tx>` = `-fx * 0.075`, and a relay republishes the same value |
+| 3 | Right `camera_info` Tx | two independent cameras, Tx usually 0, and the two Ks differed | both cameras render the left K. Tx = `-fx * 0.075` with that fx. The relay writes the same K and P |
 | 4 | Pitch | 0.3 rad on the sensors only; URDF sensors had no pitch | pitch is the mount (`CAM_PITCH_DEG`, default 17). Sensors stay fixed in the housing |
 | 5 | Mount on the drone | URDF `camera_joint` rpy `-1.85 0 0` | translation `0.12 0.03 0.242` and pitch only, matching PX4's include. The roll was not in the SDF |
 | 6 | Stereo base frame | `oak-d-base-frame` | `base_link` |
-| 7 | IMU | topic `imu/data`, not bridged, URDF rpy `1.57 3.14 1.57` | absolute topic `/imu`, bridged, frame `imu_link` with the housing axes |
+| 7 | IMU | topic `imu/data`, not bridged, URDF rpy `1.57 3.14 1.57`, orientation relative to the spawn pose | absolute topic `/imu`, frame `imu_link`, orientation reference ENU so a pitched mount is not reported as level |
 | 8 | Sim time | RGB-D launch set `use_sim_time:=false` | both RTAB-Map launches set `use_sim_time:=true` |
 
 Items 2, 4 and 5 do not crash anything. They bend the map, and that bent pose is what EKF2 was integrating.
@@ -74,7 +74,7 @@ The mount is not stored inside the camera SDF. PX4 includes the camera at a pose
 ```bash
 ros2 topic echo --once /camera/stereo/left/image_raw --field header
 ros2 topic echo --once /camera/stereo/right/camera_info_baseline --field p
-# p[3] is about -30.55 (right fx 407.277 * 0.075)
+# p[3] is about -30.497 (left fx 406.624 * 0.075). Right K matches left K.
 
 ros2 run tf2_ros tf2_echo base_link stereo_left_camera_optical_frame
 ros2 run tf2_ros tf2_echo stereo_left_camera_optical_frame stereo_right_camera_optical_frame
@@ -94,12 +94,12 @@ A tilted or curved wall in the RTAB-Map cloud is a rotation error. A wall at the
 | Housing | 97 × 29.5 × 22.9 mm, 91 g | Luxonis datasheet and shop page |
 | Stereo | 2× OV9282, 1280×800 native, run at 640×400, global shutter | Luxonis OAK-D S2 docs |
 | Baseline | 7.5 cm, not configurable | Shop page, older manual, `depthai-ros` xacro (`baseline = 0.075`). The current docs page says 75 cm; that is a typo |
-| Stereo intrinsics | left fx 406.6239, fy 406.0800, cx 305.7769, cy 204.5298 | `includes/gazebo_classic/.../oak-s2/left.yaml` (right.yaml for the other camera) |
+| Stereo intrinsics | left fx 406.6239, fy 406.0800, cx 305.7769, cy 204.5298, used for both cameras | `oak-s2/left.yaml`. The right yaml differs by about a pixel and is not rendered |
 | Stereo HFOV | about 76.4 deg, from that fx | Datasheet nominal HFOV is 80 deg. The sim follows the calibration, with `scale_to_hfov` off |
 | Color | IMX378 auto-focus, HFOV 66 deg, 640×480, square pixels | Datasheet "center color camera" table. Fixed-focus would be 69 deg and was not used |
 | Color VFOV / DFOV | about 52 deg / 78 deg implied | Datasheet lists 54 / 78. 66 and 54 deg are not one pinhole on 4:3; HFOV is what the model is pinned to |
 | Depth | near 0.2 m, far 12 m, aligned to color | Ideal range about 0.8–12 m, MinZ about 0.2 m at 400p with extended disparity |
-| IMU | BNO086, 200 Hz | Luxonis docs. Noise is a BMI270-class stand-in (see `geometry.py`); the BNO086 datasheet does not give a raw Gaussian |
+| IMU | BNO086, 200 Hz, orientation reference ENU | Luxonis docs. gz-sim8 otherwise uses the spawn pose as the reference. Noise is a BMI270-class stand-in (see `geometry.py`) |
 | Rates | cameras 30 Hz, IMU 200 Hz | Previous sim rate for images; 200 Hz is a normal visual-inertial IMU rate |
 | Image noise | Gaussian stddev 0.007 | Normalized intensity, about two counts on an 8-bit image |
 
@@ -114,7 +114,9 @@ Sensor origins in `camera_link` (x forward, y left, z up, origin at the housing 
 
 `0.01145` is half the 22.9 mm depth, so the lenses sit on the front glass. `depthai_descriptions` puts all three cameras on the base origin and splits them only in y; the extra x is the glass. The public URDF does not enable an IMU for the S2, so there is no PCB offset to copy. The IMU frame is the housing center.
 
-Right-camera Tx at the calibrated fx is `-407.2771382926294 * 0.075 ≈ -30.546`.
+Right-camera Tx uses the shared left fx: `-406.6239117362143 * 0.075 ≈ -30.497`.
+
+Why the launches pass the parameters they pass is in [rtabmap_tuning.md](rtabmap_tuning.md).
 
 ## 6. Changing the mount
 

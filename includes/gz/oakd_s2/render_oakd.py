@@ -165,6 +165,12 @@ def _imu_sensor(xyz) -> str:
     accel = _axis_noise(geo.accel_stddev_m_s2(), 1.0e-3)
     axes = "\n".join(f"          <{axis}>\n{gyro}\n          </{axis}>" for axis in "xyz")
     linear = "\n".join(f"          <{axis}>\n{accel}\n          </{axis}>" for axis in "xyz")
+    # Without this element, gz-sim8 stores the spawn rotation as the IMU
+    # reference (Imu.cc SetOrientationReference). A 17 deg mount then looks
+    # level, and GravitySigma pulls the map the wrong way. ENU matches the
+    # Gazebo world and REP-103. The localization child is what gz-sensors8
+    # actually reads; the parent element is what makes Imu.cc replace the
+    # spawn reference.
     return f"""      <sensor name="BNO086" type="imu">
         <pose>{pose}</pose>
         <gz_frame_id>{geo.IMU_FRAME}</gz_frame_id>
@@ -172,6 +178,9 @@ def _imu_sensor(xyz) -> str:
         <always_on>true</always_on>
         <update_rate>{geo.IMU_HZ}</update_rate>
         <imu>
+          <orientation_reference_frame>
+            <localization>ENU</localization>
+          </orientation_reference_frame>
           <angular_velocity>
 {axes}
           </angular_velocity>
@@ -234,13 +243,15 @@ def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
     inertial, visual, header = _housing(mount)
     imu = _imu_sensor(layouts["imu"])
     if variant == "stereo":
-        right_tx = geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"])
+        # One K for the pair. The right camera's own calibration is not used.
+        shared = geo.LEFT_INTRINSICS
+        right_tx = geo.stereo_tx(shared["fx"])
         sensors = "\n".join(
             [
                 _camera_sensor(
                     "OV9282_left",
                     layouts["stereo_left"],
-                    geo.LEFT_INTRINSICS,
+                    shared,
                     "L8",
                     "/camera/stereo/left/image_raw",
                     "/camera/stereo/left/camera_info",
@@ -252,7 +263,7 @@ def render_sdf(variant: str, mount: geo.Mount | None = None) -> str:
                 _camera_sensor(
                     "OV9282_right",
                     layouts["stereo_right"],
-                    geo.RIGHT_INTRINSICS,
+                    shared,
                     "L8",
                     "/camera/stereo/right/image_raw",
                     geo.RIGHT_INFO_IN,

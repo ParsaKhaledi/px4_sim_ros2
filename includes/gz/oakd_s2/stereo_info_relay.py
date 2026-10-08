@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Republish the right stereo camera_info with the OAK-D S2 baseline.
+"""Republish the right stereo camera_info as a rectified partner of the left.
 
-Gazebo Harmonic writes ``<projection><tx>`` into CameraInfo P[3], and the SDF
-sets that to -fx * 0.075. This node publishes the same correction on a second
-topic so RTAB-Map still sees the baseline if a Gazebo build leaves Tx at 0.
-If P[3] is already right, the value is written again and does not change.
+Both renders use the left calibration. This node writes that same K and P
+onto the right message, with P[3] = -fx * 0.075, and leaves header.stamp
+alone so exact sync still matches the image. The left camera_info stays the
+Gazebo topic; it is already that K with Tx = 0.
 """
 
 from __future__ import annotations
@@ -30,16 +30,13 @@ def main() -> int:
         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
     )
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
-    warned = {"empty": False}
 
     def on_info(msg: CameraInfo) -> None:
-        corrected = geo.corrected_projection(msg.p, msg.k)
-        if corrected is None:
-            if not warned["empty"]:
-                node.get_logger().warning("right camera_info has no fx yet; waiting")
-                warned["empty"] = True
-            return
-        msg.p = corrected
+        # Incoming K is ignored. The pair is rectified to the left calibration.
+        msg.k = geo.rectified_k()
+        msg.p = geo.rectified_p(right=True)
+        msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
         publisher.publish(msg)
 
     node.create_subscription(CameraInfo, geo.RIGHT_INFO_IN, on_info, qos_profile_sensor_data)

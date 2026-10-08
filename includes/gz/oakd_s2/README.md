@@ -17,4 +17,4 @@ python3 includes/gz/oakd_s2/test_oakd_s2.py
 
 At container start, `gz_modifications.bash` renders both models, copies the one selected by `CameraType`, renames that folder to `OakD-Lite`, and patches `x500_depth`. The state publisher container renders the URDF again. Both need `CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, and `CAM_Z`.
 
-`stereo_info_relay.py` republishes `/camera/stereo/right/camera_info` as `/camera/stereo/right/camera_info_baseline` with `P[3] = -fx * 0.075`. The stereo RTAB-Map scripts start it. Why the frames look like this is written up in [docs/frames.md](../../../docs/frames.md).
+`stereo_info_relay.py` republishes `/camera/stereo/right/camera_info` as `/camera/stereo/right/camera_info_baseline`. Both cameras use the left K. The relay writes that K and `P[3] = -fx * 0.075`, and it does not change the stamp. The IMU element sets `<localization>ENU</localization>` so orientation is not relative to the spawn pose. Frames: [docs/frames.md](../../../docs/frames.md). Launch parameters: [docs/rtabmap_tuning.md](../../../docs/rtabmap_tuning.md).
