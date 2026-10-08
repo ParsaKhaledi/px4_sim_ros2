@@ -143,6 +143,15 @@ def test_prearm_names_a_missing_or_failed_magnetometer():
     assert quiet is not None
     assert 'Magnetometer' not in quiet
 
+    gps_missing = prearm_block_reason(Status(), Flags(), Estimator(), 'gps')
+    assert gps_missing is not None
+    assert 'Magnetometer missing' in gps_missing
+    assert 'SYS_HAS_MAG' in gps_missing
+    vision_missing = prearm_block_reason(Status(), Flags(), Estimator(), 'vision')
+    assert vision_missing is not None
+    assert 'Magnetometer missing' in vision_missing
+    assert 'SYS_HAS_MAG' not in vision_missing
+
     aligned = Estimator()
     aligned.cs_yaw_align = True
     assert 'Magnetometer' not in prearm_block_reason(Status(), Flags(), aligned)

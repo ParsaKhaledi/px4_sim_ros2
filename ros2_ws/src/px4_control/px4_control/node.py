@@ -303,7 +303,9 @@ class Px4ControlNode(Node):
             self._estimator = msg
 
     def _block_reason(self) -> str | None:
-        return prearm_block_reason(self._status, self._flags, self._estimator)
+        return prearm_block_reason(
+            self._status, self._flags, self._estimator, self._estimation_mode,
+        )
 
     def _on_land(self, msg: VehicleLandDetected) -> None:
         with self._lock:
@@ -711,7 +713,7 @@ class Px4ControlNode(Node):
         from px4_control.arming import ArmDecision
 
         if not self._wait_until(lambda: self._param_report is not None, min(float(timeout), 20.0)):
-            return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF, EKF2_MAG_TYPE)')
+            return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF, EKF2_MAG_TYPE, SYS_HAS_MAG)')
         if self._param_report:
             return ArmDecision(False, self._param_report)
         armed = self._do_arm(True, timeout)

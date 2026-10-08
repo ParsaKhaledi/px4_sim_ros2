@@ -84,7 +84,10 @@ def failsafe_reasons(flags: object | None) -> list[str]:
     return reasons
 
 
-def _magnetometer_arming_text(estimator: object | None) -> str | None:
+def _magnetometer_arming_text(
+    estimator: object | None,
+    estimation_mode: str | None = None,
+) -> str | None:
     """Spell out a missing or failed compass. ``None`` when the estimator is quiet."""
     if estimator is None:
         return None
@@ -111,18 +114,25 @@ def _magnetometer_arming_text(estimator: object | None) -> str | None:
     yaw_aligned = bool(getattr(estimator, 'cs_yaw_align', False))
     if fused or yaw_from_vision or yaw_aligned:
         return None
-    return (
+    text = (
         'Magnetometer missing. No compass fusion is active and yaw is not '
         'aligned. PX4 denies arming when the world has no magnetometer plugin '
         '(Preflight Fail: Compass Sensor missing, No valid data from Compass, '
         'or Found 0 compass).'
     )
+    if str(estimation_mode or '').strip().lower() == 'gps':
+        text += (
+            ' SYS_HAS_MAG stays at its firmware default of 1 in gps mode, so '
+            'the commander still requires a compass.'
+        )
+    return text
 
 
 def prearm_block_reason(
     status: object | None,
     flags: object | None,
     estimator: object | None = None,
+    estimation_mode: str | None = None,
 ) -> str | None:
     """Why PX4 should not be armed, or ``None`` when the commander looks ready.
 
@@ -147,7 +157,7 @@ def prearm_block_reason(
             'blocks arming without a QGroundControl heartbeat. The sim '
             'profile sets NAV_DLL_ACT 0'
         )
-    mag = _magnetometer_arming_text(estimator)
+    mag = _magnetometer_arming_text(estimator, estimation_mode)
     if mag:
         reasons.append(mag)
     if not checks_pass:
