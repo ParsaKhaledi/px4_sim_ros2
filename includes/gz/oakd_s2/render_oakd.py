@@ -412,8 +412,8 @@ def render_urdf(mount: geo.Mount | None = None) -> str:
             include_link=False,
         ),
     ]
-    # camera_joint's child link is declared above, so drop the empty link
-    # that _fixed_joint would have appended. Done via replace on that one call.
+    # camera_joint's child link is declared above, so include_link=False
+    # drops the empty link _fixed_joint would have appended.
 
     def sensor_frames(name: str, xyz, optical: str) -> str:
         frame = name + "_frame"

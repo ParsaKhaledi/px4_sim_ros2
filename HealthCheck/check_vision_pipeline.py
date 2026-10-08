@@ -219,8 +219,6 @@ def main(argv: list[str] | None = None) -> int:
         # IMU origin uses the same helper; its frame is not optical, but the
         # joint translation is the sensor origin. Orientation is checked only
         # for optical frames.
-        if sensor == "imu":
-            expected = geo.optical_origin_in_base("imu", mount)
         if transform is None:
             results.append(record(output, f"tf_{name}", False, frame=frame, error="no transform"))
             continue

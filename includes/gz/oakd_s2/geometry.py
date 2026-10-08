@@ -227,6 +227,13 @@ def _env_int(env: dict, name: str, default: int) -> int:
     return value
 
 
+def _env_float(env: dict, name: str, default: float) -> float:
+    raw = env.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return float(raw)
+
+
 def _parse_stereo_res(text: str) -> tuple[int, int]:
     cleaned = str(text).strip().lower().replace(" ", "")
     if "x" not in cleaned:
@@ -529,13 +536,6 @@ class Mount:
 
     def pose_text(self) -> str:
         return pose_text(self.x, self.y, self.z, 0.0, self.pitch_rad, 0.0)
-
-
-def _env_float(env: dict, name: str, default: float) -> float:
-    raw = env.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    return float(raw)
 
 
 def mount_from_env(env: dict | None = None) -> Mount:

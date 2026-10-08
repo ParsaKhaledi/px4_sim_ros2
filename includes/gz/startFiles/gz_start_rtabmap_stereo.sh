@@ -24,7 +24,7 @@ RELAY_PID=$!
 trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 
 # rtabmap.launch.py (ROS 2) names the viewer rtabmap_viz. rtabmapviz is not
-# a declared argument. Odom/ResetCountdown 0 never restarts a lost odometry.
+# a declared argument. ResetCountdown is 1 in the ini; 0 would never restart.
 # VISION_PROFILE selects rtabmap_profiles/<profile>.ini via cfg:=.
 # shellcheck disable=SC1091
 source "${HOME}/volume/startFiles/rtabmap_profile.sh"
