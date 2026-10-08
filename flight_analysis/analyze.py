@@ -26,6 +26,7 @@ from flight_analysis.metrics import measure_flight
 from flight_analysis.plots import write_plots
 from flight_analysis.segment import segment_command
 from flight_analysis.spawn import ResolvedSpawn
+from flight_analysis.spawn import clock_quality_warnings
 from flight_analysis.spawn import resolve_spawn
 from flight_analysis.tum import TimeAlignment
 from flight_analysis.tum import align_tum_to_ulog
@@ -146,15 +147,22 @@ def _resolve_truth(
         if spawn is None:
             raise RuntimeError("TUM ground truth requires a resolved spawn pose")
         tum = load_tum(tum_path, spawn.xyz_m, spawn.yaw_rad)
+        for message in clock_quality_warnings(spawn.px4_offset_spread_s, spawn.px4_offset_samples):
+            warn(message)
         if spawn.px4_offset_s is None:
             alignment = align_tum_to_ulog(estimate, tum)
             clock_source = "climb_edge_estimate"
-            warn(
-                "no px4_offset_s in spawn.json and no --clock-offset; "
-                "using the climb-edge estimate "
+            estimated = (
+                f"using the climb-edge estimate "
                 f"(px4_offset_s={-alignment.offset_s:.3f} s, "
                 "ROS sim time minus PX4 boot time)"
             )
+            if spawn.px4_offset_reason:
+                warn(f"px4_offset_s is null in spawn.json ({spawn.px4_offset_reason}); {estimated}")
+            elif spawn.offset_is_null:
+                warn(f"px4_offset_s is null in spawn.json; {estimated}")
+            else:
+                warn(f"no px4_offset_s in spawn.json and no --clock-offset; {estimated}")
         else:
             alignment = alignment_from_px4_offset(estimate, tum, spawn.px4_offset_s)
             clock_source = spawn.clock_source or "cli"
@@ -171,11 +179,7 @@ def _resolve_truth(
             "xyz_source": spawn.xyz_source,
             "yaw_source": spawn.yaw_source,
         }
-        meta["clock"] = {
-            "source": clock_source,
-            "px4_offset_s": -alignment.offset_s,
-            "applied_offset_s": alignment.offset_s,
-        }
+        meta["clock"] = _clock_meta(clock_source, alignment.offset_s, spawn)
         return shift_track(tum, alignment.offset_s), meta
     if logged is not None:
         return logged, _truth_meta(
@@ -188,6 +192,28 @@ def _resolve_truth(
         "no TUM file and vehicle_local_position_groundtruth was not logged",
         None,
     )
+
+
+def _clock_meta(source: str, applied_offset_s: float, spawn: ResolvedSpawn) -> dict[str, Any]:
+    """JSON block for the clock, including the recorder's spread and samples.
+
+    ``px4_offset_s`` here is the value that was applied, in the same
+    convention as the file: ROS sim time minus PX4 boot time. Spread and
+    sample count are copied only when ``spawn.json`` contained them.
+    """
+
+    clock: dict[str, Any] = {
+        "source": source,
+        "px4_offset_s": -applied_offset_s,
+        "applied_offset_s": applied_offset_s,
+    }
+    if spawn.px4_offset_spread_s is not None:
+        clock["px4_offset_spread_s"] = spawn.px4_offset_spread_s
+    if spawn.px4_offset_samples is not None:
+        clock["px4_offset_samples"] = spawn.px4_offset_samples
+    if spawn.px4_offset_reason:
+        clock["px4_offset_reason"] = spawn.px4_offset_reason
+    return clock
 
 
 def _truth_meta(source: str, detail: str, alignment: TimeAlignment | None) -> dict[str, Any]:

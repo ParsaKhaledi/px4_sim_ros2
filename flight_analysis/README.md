@@ -49,7 +49,9 @@ The TUM poses are Gazebo world ENU. Before they are compared with the PX4 log th
 {
   "spawn_xyz": [1.0, 2.0, 0.1],
   "spawn_yaw": 0.3,
-  "px4_offset_s": 12.5
+  "px4_offset_s": 12.5,
+  "px4_offset_spread_s": 0.004,
+  "px4_offset_samples": 120
 }
 ```
 
@@ -57,7 +59,11 @@ The TUM poses are Gazebo world ENU. Before they are compared with the PX4 log th
 
 `--spawn-xyz X Y Z` and `--spawn-yaw RAD` override the matching file fields. If a ground-truth file is given and neither the file nor those options supply a complete pose, the command stops. It does not assume the vehicle spawned at the origin, because that would shift every error.
 
-`px4_offset_s` is ROS sim time minus PX4 boot time, in seconds: `t_px4 = t_ros - px4_offset_s`. The seconds added to each TUM timestamp are therefore `-px4_offset_s`. `--clock-offset` is the same quantity and wins over the file. If neither is present, the tool estimates the offset from the climb (up-velocity) and prints a warning. `metrics.json` records `spawn.xyz_source`, `spawn.yaw_source`, and `clock.source` as `spawn_json`, `cli`, or, for the clock only, `climb_edge_estimate`, plus the values that were used. The overlap after the shift must cover at least a few seconds. An estimated clock also has to correlate with the climb; an explicit clock does not, but a short overlap is still an error.
+`px4_offset_s` is ROS sim time minus PX4 boot time, in seconds: `t_px4 = t_ros - px4_offset_s`. The seconds added to each TUM timestamp are therefore `-px4_offset_s`. `--clock-offset` is the same quantity and wins over the file. If the key is missing, or it is JSON `null`, the tool estimates the offset from the climb (up-velocity) and prints a warning. A null offset is what `trajectory_eval record` writes when PX4 was not publishing. The warning includes `px4_offset_reason` when that string is in the file. The run does not stop for a null offset.
+
+`px4_offset_spread_s` is the median gap minus the minimum gap, in seconds. `px4_offset_samples` is the number of samples in that estimate. When either key is present it is copied into `metrics.json` next to the offset. A spread over 0.02 s, or fewer than 50 samples, prints a warning; the offset is still used. Any other key in the file is ignored.
+
+`metrics.json` records `spawn.xyz_source`, `spawn.yaw_source`, and `clock.source` as `spawn_json`, `cli`, or, for the clock only, `climb_edge_estimate`, plus the values that were used. The overlap after the shift must cover at least a few seconds. An estimated clock also has to correlate with the climb; an explicit clock does not, but a short overlap is still an error.
 
 ## Outputs
 

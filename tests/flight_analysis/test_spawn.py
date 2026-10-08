@@ -192,6 +192,158 @@ class SpawnFileTests(unittest.TestCase):
         self.assertEqual(report["ground_truth"]["clock"]["source"], "spawn_json")
         self.assertAlmostEqual(report["ground_truth"]["clock"]["px4_offset_s"], 0.0)
 
+    def test_null_offset_uses_the_climb_and_keeps_the_reason(self) -> None:
+        """JSON null is not a clock. The warning quotes px4_offset_reason."""
+
+        limits = load_fixture_limits()
+        log, time_s, north, down = _mission(limits)
+        reason = "PX4 was not publishing vehicle_odometry"
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ulg = root / "flight.ulg"
+            ulg.write_bytes(b"")
+            tum = root / "gt.tum"
+            _write_tum(tum, time_s, north, down, time_shift_s=1.5)
+            (root / "spawn.json").write_text(
+                json.dumps(
+                    {
+                        "spawn_xyz": [0.0, 0.0, 0.0],
+                        "spawn_yaw": 0.0,
+                        "px4_offset_s": None,
+                        "px4_offset_reason": reason,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            warnings: list[str] = []
+            report = analyze_flight(
+                log,
+                limits,
+                tum_path=tum,
+                log_path=ulg,
+                warn=warnings.append,
+            )
+        clock = report["ground_truth"]["clock"]
+        self.assertEqual(clock["source"], "climb_edge_estimate")
+        self.assertAlmostEqual(clock["px4_offset_s"], 1.5, delta=0.05)
+        self.assertEqual(clock["px4_offset_reason"], reason)
+        self.assertTrue(any(reason in item and "climb-edge" in item for item in warnings))
+
+    def test_wide_spread_and_few_samples_warn(self) -> None:
+        """A spread over 0.02 s or fewer than 50 samples is a warning, not a failure."""
+
+        limits = load_fixture_limits()
+        log, time_s, north, down = _mission(limits)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ulg = root / "flight.ulg"
+            ulg.write_bytes(b"")
+            tum = root / "gt.tum"
+            _write_tum(tum, time_s, north, down)
+            (root / "spawn.json").write_text(
+                json.dumps(
+                    {
+                        "spawn_xyz": [0.0, 0.0, 0.0],
+                        "spawn_yaw": 0.0,
+                        "px4_offset_s": 0.0,
+                        "px4_offset_spread_s": 0.05,
+                        "px4_offset_samples": 12,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            warnings: list[str] = []
+            report = analyze_flight(
+                log,
+                limits,
+                tum_path=tum,
+                log_path=ulg,
+                warn=warnings.append,
+            )
+        clock = report["ground_truth"]["clock"]
+        self.assertEqual(clock["source"], "spawn_json")
+        self.assertAlmostEqual(clock["px4_offset_s"], 0.0)
+        self.assertAlmostEqual(clock["px4_offset_spread_s"], 0.05)
+        self.assertEqual(clock["px4_offset_samples"], 12)
+        self.assertTrue(any("px4_offset_spread_s" in item and "0.02" in item for item in warnings))
+        self.assertTrue(any("px4_offset_samples" in item and "50" in item for item in warnings))
+        self.assertFalse(any("climb-edge" in item for item in warnings))
+
+    def test_spread_at_the_threshold_does_not_warn(self) -> None:
+        """0.02 s and 50 samples are inside the recorder's accepted band."""
+
+        limits = load_fixture_limits()
+        log, time_s, north, down = _mission(limits)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ulg = root / "flight.ulg"
+            ulg.write_bytes(b"")
+            tum = root / "gt.tum"
+            _write_tum(tum, time_s, north, down)
+            (root / "spawn.json").write_text(
+                json.dumps(
+                    {
+                        "spawn_xyz": [0.0, 0.0, 0.0],
+                        "spawn_yaw": 0.0,
+                        "px4_offset_s": 0.0,
+                        "px4_offset_spread_s": 0.02,
+                        "px4_offset_samples": 50,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            warnings: list[str] = []
+            report = analyze_flight(
+                log,
+                limits,
+                tum_path=tum,
+                log_path=ulg,
+                warn=warnings.append,
+            )
+        self.assertEqual(warnings, [])
+        self.assertEqual(report["ground_truth"]["clock"]["px4_offset_samples"], 50)
+
+    def test_unknown_spawn_keys_are_ignored(self) -> None:
+        """Extra recorder fields, and near-miss clock names, do not change the pose."""
+
+        limits = load_fixture_limits()
+        log, time_s, north, down = _mission(limits)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            ulg = root / "flight.ulg"
+            ulg.write_bytes(b"")
+            tum = root / "gt.tum"
+            _write_tum(tum, time_s, north, down)
+            (root / "spawn.json").write_text(
+                json.dumps(
+                    {
+                        "spawn_xyz": [0.0, 0.0, 0.0],
+                        "spawn_yaw": 0.0,
+                        "px4_offset_s": 0.0,
+                        "px4_offset_spread": 0.9,
+                        "px4_offset_sample_count": 3,
+                        "recorder": "trajectory_eval",
+                        "note": "ignored",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            warnings: list[str] = []
+            report = analyze_flight(
+                log,
+                limits,
+                tum_path=tum,
+                log_path=ulg,
+                warn=warnings.append,
+            )
+        clock = report["ground_truth"]["clock"]
+        self.assertEqual(clock["source"], "spawn_json")
+        self.assertAlmostEqual(clock["px4_offset_s"], 0.0)
+        self.assertNotIn("px4_offset_spread_s", clock)
+        self.assertNotIn("px4_offset_samples", clock)
+        self.assertEqual(warnings, [])
+        self.assertAlmostEqual(report["flight"]["estimation_error"]["horizontal_peak_m"], 0.0, delta=0.02)
+
 
 if __name__ == "__main__":
     unittest.main()

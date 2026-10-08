@@ -9,6 +9,11 @@ each when they are present.
 
     t_px4 = t_ros - px4_offset_s
 
+``trajectory_eval record`` may also write ``px4_offset_spread_s`` (median
+gap minus minimum gap, seconds), ``px4_offset_samples``, and, when the
+offset is JSON null, ``px4_offset_reason``. A null offset is not a clock.
+Unknown keys are ignored.
+
 A missing pose is an error. A missing clock falls back to the climb-edge
 estimate in ``tum.py``. The identity transform is never assumed.
 """
@@ -16,8 +21,15 @@ estimate in ``tum.py``. The identity transform is never assumed.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
+
+
+# The recorder's offset is a spread of gaps. Wider than this, or fewer
+# samples than this, and the value is still used but the run warns.
+OFFSET_SPREAD_WARN_S = 0.02
+OFFSET_SAMPLES_WARN = 50
 
 
 class SpawnError(RuntimeError):
@@ -31,6 +43,8 @@ class ResolvedSpawn:
     ``xyz_source`` and ``yaw_source`` are ``spawn_json`` or ``cli``.
     ``clock_source`` is ``spawn_json`` or ``cli`` when ``px4_offset_s`` is
     set, and ``None`` when the caller should estimate the climb edge.
+    ``offset_is_null`` means the file contained ``px4_offset_s: null``.
+    Spread and sample count are copied from the file when those keys exist.
     """
 
     xyz_m: tuple[float, float, float]
@@ -39,6 +53,10 @@ class ResolvedSpawn:
     yaw_source: str
     px4_offset_s: float | None
     clock_source: str | None
+    px4_offset_reason: str | None = None
+    px4_offset_spread_s: float | None = None
+    px4_offset_samples: int | None = None
+    offset_is_null: bool = False
 
 
 def resolve_spawn(
@@ -80,14 +98,18 @@ def resolve_spawn(
             "Refusing to assume the identity transform."
         )
 
-    clock, clock_source = _prefer(clock_offset_s, "cli", file_clock, "spawn_json")
+    clock, clock_source = _prefer(clock_offset_s, "cli", file_clock.px4_offset_s, "spawn_json")
     return ResolvedSpawn(
-        xyz_m=xyz,
+        xyz_m=(float(xyz[0]), float(xyz[1]), float(xyz[2])),
         yaw_rad=float(yaw),
-        xyz_source=xyz_source,
-        yaw_source=yaw_source,
+        xyz_source=str(xyz_source),
+        yaw_source=str(yaw_source),
         px4_offset_s=None if clock is None else float(clock),
         clock_source=clock_source,
+        px4_offset_reason=file_clock.reason,
+        px4_offset_spread_s=file_clock.spread_s,
+        px4_offset_samples=file_clock.samples,
+        offset_is_null=file_clock.explicit_null,
     )
 
 
@@ -154,18 +176,121 @@ def _yaw_from_file(path: Path | None, data: dict[str, object]) -> float | None:
     return _optional_number(path, data, "spawn_yaw", "a yaw in radians")
 
 
-def _clock_from_file(path: Path | None, data: dict[str, object]) -> float | None:
-    """Return ``px4_offset_s`` when the file has it.
+@dataclass(frozen=True)
+class FileClock:
+    """Clock fields copied from ``spawn.json``. Missing keys stay ``None``.
 
-    The value is ROS sim time minus PX4 boot time, in seconds.
+    ``explicit_null`` is true when ``px4_offset_s`` is present and JSON null.
+    That is not a clock: the climb-edge estimate is used, and ``reason`` is
+    the recorder's explanation.
     """
 
-    return _optional_number(
-        path,
-        data,
-        "px4_offset_s",
-        "seconds of ROS sim time minus PX4 boot time",
+    px4_offset_s: float | None
+    explicit_null: bool
+    reason: str | None
+    spread_s: float | None
+    samples: int | None
+
+
+def _clock_from_file(path: Path | None, data: dict[str, object]) -> FileClock:
+    """Read the recorder's clock fields. Other keys in the file are ignored.
+
+    ``px4_offset_s`` is ROS sim time minus PX4 boot time. JSON null means
+    PX4 was not publishing. ``px4_offset_spread_s`` is the median gap minus
+    the minimum gap, in seconds. ``px4_offset_samples`` is the sample count.
+    ``px4_offset_reason`` is the string that explains a null offset.
+    """
+
+    offset, explicit_null = _offset_value(path, data)
+    return FileClock(
+        px4_offset_s=offset,
+        explicit_null=explicit_null,
+        reason=_reason(path, data),
+        spread_s=_spread(path, data),
+        samples=_samples(path, data),
     )
+
+
+def _offset_value(path: Path | None, data: dict[str, object]) -> tuple[float | None, bool]:
+    """Return ``(seconds, was_null)`` for ``px4_offset_s``."""
+
+    if "px4_offset_s" not in data:
+        return None, False
+    raw = data["px4_offset_s"]
+    if raw is None:
+        return None, True
+    return (
+        _finite_number(path, "px4_offset_s", raw, "seconds of ROS sim time minus PX4 boot time"),
+        False,
+    )
+
+
+def _reason(path: Path | None, data: dict[str, object]) -> str | None:
+    """Return ``px4_offset_reason`` when it is a non-empty string."""
+
+    if "px4_offset_reason" not in data or data["px4_offset_reason"] is None:
+        return None
+    raw = data["px4_offset_reason"]
+    if not isinstance(raw, str):
+        raise SpawnError(f"{path} px4_offset_reason must be a string")
+    text = raw.strip()
+    return text or None
+
+
+def _spread(path: Path | None, data: dict[str, object]) -> float | None:
+    """Return ``px4_offset_spread_s`` in seconds, or ``None`` when absent."""
+
+    if "px4_offset_spread_s" not in data or data["px4_offset_spread_s"] is None:
+        return None
+    return _finite_number(
+        path,
+        "px4_offset_spread_s",
+        data["px4_offset_spread_s"],
+        "seconds, the median gap minus the minimum gap",
+    )
+
+
+def _samples(path: Path | None, data: dict[str, object]) -> int | None:
+    """Return ``px4_offset_samples`` as an integer, or ``None`` when absent."""
+
+    if "px4_offset_samples" not in data or data["px4_offset_samples"] is None:
+        return None
+    raw = data["px4_offset_samples"]
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise SpawnError(f"{path} px4_offset_samples must be an integer")
+    number = float(raw)
+    if not math.isfinite(number) or not number.is_integer():
+        raise SpawnError(f"{path} px4_offset_samples must be an integer")
+    return int(number)
+
+
+def _finite_number(path: Path | None, key: str, raw: object, detail: str) -> float:
+    """Parse one finite JSON number."""
+
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise SpawnError(f"{path} {key} must be {detail}")
+    number = float(raw)
+    if not math.isfinite(number):
+        raise SpawnError(f"{path} {key} must be finite")
+    return number
+
+
+def clock_quality_warnings(spread_s: float | None, samples: int | None) -> list[str]:
+    """Warn when the recorder's offset estimate is wide or thinly sampled.
+
+    The spread is the median gap minus the minimum gap. A spread over
+    0.02 s, or fewer than 50 samples, is reported. The offset is still used.
+    """
+
+    messages: list[str] = []
+    if spread_s is not None and spread_s > OFFSET_SPREAD_WARN_S:
+        messages.append(
+            f"px4_offset_spread_s is {spread_s:.4f} s, over {OFFSET_SPREAD_WARN_S:.2f} s "
+            "(median gap minus the minimum gap)"
+        )
+    if samples is not None and samples < OFFSET_SAMPLES_WARN:
+        messages.append(f"px4_offset_samples is {samples}, fewer than {OFFSET_SAMPLES_WARN}")
+    return messages
 
 
 def _optional_number(

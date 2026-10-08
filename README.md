@@ -160,7 +160,7 @@ python3 -m pip install -r flight_analysis/requirements.txt
 python3 -m flight_analysis logs/<run_id>/flight.ulg --ground-truth logs/<run_id>/ground_truth.tum
 ```
 
-`metrics.json` and the plots are written to `logs/<run_id>/control/`. A TUM file also needs `spawn.json` beside the `.ulg` (Gazebo spawn pose and `px4_offset_s`). Pass/fail limits are the shared `E2E_*` settings (`e2e_limits.py`): the process environment, then `.env`. See [flight_analysis/README.md](flight_analysis/README.md) for the checks, the spawn frame, and the tests.
+`metrics.json` and the plots are written to `logs/<run_id>/control/`. A TUM file also needs `spawn.json` beside the `.ulg` (Gazebo spawn pose and `px4_offset_s`). A null offset falls back to the climb-edge estimate. Pass/fail limits are the shared `E2E_*` settings (`e2e_limits.py`): the process environment, then `.env`. See [flight_analysis/README.md](flight_analysis/README.md) for the checks, the spawn frame, and the tests.
 
 ## CI
 
