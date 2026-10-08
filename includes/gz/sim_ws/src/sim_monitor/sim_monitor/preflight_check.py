@@ -23,6 +23,7 @@ from sim_monitor.checks import (
     minimum_rate_hz,
     relative_position_error,
     summarize,
+    with_rtf_hint,
 )
 
 
@@ -173,7 +174,8 @@ def main() -> None:
             if self.rtf is None:
                 results.append((False, line(False, "real_time_factor: no messages on /sim/real_time_factor")))
             else:
-                results.append(check_min("real_time_factor", self.rtf, self.min_rtf, ""))
+                ok, text = check_min("real_time_factor", self.rtf, self.min_rtf, "")
+                results.append((ok, with_rtf_hint(ok, text)))
             if self.clock_wall is None:
                 results.append((False, line(False, "clock: /clock is not publishing")))
             else:

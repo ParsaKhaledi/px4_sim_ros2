@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sim_monitor.checks import (
     RateTracker,
+    check_min,
     check_rate,
     default_min_rtf,
     expected_sensor_hz,
@@ -17,6 +18,7 @@ from sim_monitor.checks import (
     quat_from_rpy,
     relative_position_error,
     summarize,
+    with_rtf_hint,
 )
 from sim_monitor.real_time_factor import iter_real_time_factors, parse_stats_message, windowed_rtf
 
@@ -89,6 +91,23 @@ def test_sim_rate_and_wall_fallback():
     ok, text = check_rate("/ground_truth/odom", 50.0, 10.4, 20.0)
     assert ok is True
     assert "/ground_truth/odom: 50.0 Hz sim (10.4 Hz wall)" in text
+
+
+def test_rtf_failure_hints_unless_vision_profile_is_cpu():
+    ok, text = check_min("real_time_factor", 0.125, 0.15, "")
+    assert ok is False
+    hinted = with_rtf_hint(ok, text, {})
+    assert hinted == (
+        "FAIL real_time_factor: 0.125  >= 0.150; "
+        "on CPU-only machines set VISION_PROFILE=cpu "
+        "(measured ~0.45 vs 0.125 for full on apt_world)"
+    )
+    assert "\n" not in hinted
+    assert with_rtf_hint(ok, text, {"VISION_PROFILE": "full"}) == hinted
+    assert with_rtf_hint(ok, text, {"VISION_PROFILE": "cpu"}) == text
+    passed, pass_text = check_min("real_time_factor", 0.50, 0.15, "")
+    assert passed is True
+    assert with_rtf_hint(passed, pass_text, {}) == pass_text
 
 
 def test_preflight_thresholds_follow_profile_and_overrides():

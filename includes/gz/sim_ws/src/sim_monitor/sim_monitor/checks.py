@@ -151,6 +151,24 @@ def check_min(name: str, value: float, minimum: float, unit: str) -> tuple[bool,
     return ok, line(ok, f"{name}: {value:.3f} {unit} >= {minimum:.3f} {unit}")
 
 
+RTF_CPU_HINT = (
+    "on CPU-only machines set VISION_PROFILE=cpu "
+    "(measured ~0.45 vs 0.125 for full on apt_world)"
+)
+
+
+def with_rtf_hint(ok: bool, text: str, environ: dict[str, str] | None = None) -> str:
+    """Append the CPU-profile hint to a failed real-time-factor line.
+
+    The hint is omitted when the check passes, and when ``VISION_PROFILE``
+    is already ``cpu``. Unset and ``full`` both get it. The result stays one line.
+    """
+    env = os.environ if environ is None else environ
+    if ok or env.get("VISION_PROFILE", "").strip().lower() == "cpu":
+        return text
+    return f"{text.rstrip()}; {RTF_CPU_HINT}"
+
+
 def check_rate(topic: str, sim_hz: float, wall_hz: float, minimum: float) -> tuple[bool, str]:
     """Gate on the sim-time rate and report the wall rate beside it."""
     ok = sim_hz >= minimum
