@@ -28,7 +28,10 @@ trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 # VISION_PROFILE selects rtabmap_profiles/<profile>.ini via cfg:=.
 # shellcheck disable=SC1091
 source "${HOME}/volume/startFiles/rtabmap_profile.sh"
-rtabmap_profile_args stereo
+rtabmap_profile_args stereo || {
+     echo "refusing to launch RTAB-Map without a profile" >&2
+     exit 1
+}
 ros2 launch rtabmap_launch rtabmap.launch.py \
      cfg:="${RTAB_CFG}" \
      args:="${RTAB_ARGS}" \

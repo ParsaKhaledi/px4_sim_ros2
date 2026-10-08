@@ -7,6 +7,7 @@ import importlib.util
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -577,6 +578,67 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertIn("stereo=320x200", completed.stderr)
         self.assertIn("camera_hz=10", completed.stderr)
         self.assertNotIn("no GPU", completed.stderr)
+
+    def test_container_mount_layout_loads_profile_and_failure_stops(self):
+        """Rtabmap bind-mounts startFiles apart from includes/gz.
+
+        ../oakd_s2 from that mount does not exist. The module is the
+        includes/gz copy. A missing module must not look like a launch.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gz = root / "volume" / "includes" / "gz"
+            shutil.copytree(REPO / "includes" / "gz" / "oakd_s2", gz / "oakd_s2")
+            shutil.copytree(REPO / "includes" / "gz" / "startFiles", gz / "startFiles")
+            start = root / "volume" / "startFiles"
+            shutil.copytree(REPO / "includes" / "gz" / "startFiles", start)
+            self.assertFalse((root / "volume" / "oakd_s2").exists())
+            script = start / "rtabmap_profile.sh"
+            command = (
+                "set -euo pipefail; "
+                f'export HOME="{root}"; '
+                "unset OAKD_S2_DIR VISION_PROFILE CAM_STEREO_RES CAM_STEREO_WIDTH "
+                "CAM_STEREO_HEIGHT CAM_RATE_HZ CAM_COLOR_WIDTH CAM_COLOR_HEIGHT IMU_RATE_HZ; "
+                f'source "{script}"; '
+                "rtabmap_profile_args stereo; "
+                'printf "%s\\n%s\\n" "$RTAB_CFG" "$RTAB_ARGS"'
+            )
+            completed = subprocess.run(
+                ["bash", "-c", command], check=True, text=True, capture_output=True
+            )
+            cfg, args = completed.stdout.splitlines()
+            self.assertTrue(str(cfg).endswith("startFiles/rtabmap_profiles/cpu.ini"))
+            self.assertTrue(Path(cfg).is_file())
+            self.assertIn("/volume/includes/gz/startFiles/rtabmap_profiles/cpu.ini", cfg)
+            self.assertTrue(args.startswith("-d"))
+            self.assertIn("vision profile=cpu", completed.stderr)
+            self.assertIn("stereo=320x200", completed.stderr)
+            self.assertIn("camera_hz=10", completed.stderr)
+
+            broken = root / "empty"
+            broken.mkdir()
+            failed = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    "set -u; "
+                    f'export HOME="{broken}"; '
+                    "unset OAKD_S2_DIR VISION_PROFILE; "
+                    f'source "{script}"; '
+                    "rtabmap_profile_args stereo || exit 1; "
+                    "echo launched",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertNotIn("launched", failed.stdout)
+            self.assertIn("missing rtabmap_params.py", failed.stderr)
+        start_dir = Path(__file__).resolve().parents[1] / "startFiles"
+        for name in ("gz_start_rtabmap.sh", "gz_start_rtabmap_stereo.sh", "gz_start_rtabmap_rgbd.sh"):
+            text = (start_dir / name).read_text(encoding="utf-8")
+            self.assertIn("refusing to launch RTAB-Map without a profile", text)
+            self.assertIn("exit 1", text)
 
     def test_launch_scripts_use_real_parameter_names(self):
         root = Path(__file__).resolve().parents[1] / "startFiles"

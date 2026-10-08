@@ -22,7 +22,10 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      # VISION_PROFILE selects the ini. Stereo and RGB-D both use it.
      # shellcheck disable=SC1091
      source "${HOME}/volume/startFiles/rtabmap_profile.sh"
-     rtabmap_profile_args stereo
+     rtabmap_profile_args stereo || {
+          echo "refusing to launch RTAB-Map without a profile" >&2
+          exit 1
+     }
      ros2 launch rtabmap_launch rtabmap.launch.py \
           cfg:="${RTAB_CFG}" \
           args:="${RTAB_ARGS}" \
@@ -40,7 +43,10 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      # The 3D grid flags stay: this branch already asked for an OctoMap-style grid.
      # shellcheck disable=SC1091
      source "${HOME}/volume/startFiles/rtabmap_profile.sh"
-     rtabmap_profile_args rgbd-wrapper
+     rtabmap_profile_args rgbd-wrapper || {
+          echo "refusing to launch RTAB-Map without a profile" >&2
+          exit 1
+     }
      ros2 launch rtabmap_launch rtabmap.launch.py   \
           cfg:="${RTAB_CFG}" \
           args:="${RTAB_ARGS}" \
