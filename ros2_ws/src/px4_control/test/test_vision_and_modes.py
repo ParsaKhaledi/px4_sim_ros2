@@ -122,6 +122,10 @@ def test_vision_covariance_is_positive_and_reset_bumps_on_a_jump():
     assert jumped.reset_counter == 1
     assert bridge.push(_sample(1.2, (8.0, 2.0, 3.0), lost=True)) is None
     assert bridge.current(1.25) is None
+    recovered = bridge.push(_sample(1.5, (8.0, 2.0, 3.0)))
+    assert recovered is not None
+    assert recovered.reset_counter == 2
+    assert recovered.stamp_sec == pytest.approx(1.5)
 
 
 def test_vision_does_not_restamp_a_stale_pose():

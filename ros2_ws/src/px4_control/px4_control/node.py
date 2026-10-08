@@ -345,11 +345,10 @@ class Px4ControlNode(Node):
 
     def _publish_visual(self, visual) -> None:
         msg = VehicleOdometry()
-        # Keep the odometry header stamp. Do not replace it with "now".
-        stamp_us = int(visual.stamp_sec * 1e6)
-        if self._px4_us is not None and self._px4_ros_s is not None:
-            stamp_us = int(self._px4_us + (visual.stamp_sec - self._px4_ros_s) * 1e6)
-        msg.timestamp = max(0, stamp_us)
+        # RTAB-Map's header is sim time. UXRCE_DDS_SYNCT 0 keeps PX4 on that
+        # same clock, so the header is the timestamp. Do not overwrite it
+        # with the node clock or the wall clock.
+        msg.timestamp = max(0, int(round(float(visual.stamp_sec) * 1e6)))
         msg.timestamp_sample = msg.timestamp
         msg.pose_frame = VehicleOdometry.POSE_FRAME_NED
         msg.velocity_frame = VehicleOdometry.VELOCITY_FRAME_BODY_FRD
@@ -408,6 +407,11 @@ class Px4ControlNode(Node):
                         float(self.get_parameter('a_brake').value),
                     )
                     self._motion.note_cmd_vel(now, v_n, v_e, yaw_rate)
+            if self._estimation_mode == 'vision':
+                if self._vision.current(now) is None:
+                    self._motion.note_vision_lost(now)
+                else:
+                    self._motion.note_vision_regained()
             setpoint = self._motion.update(now, snap)
             self._gate.tick(now)
             phase = self._motion.phase

@@ -4,6 +4,25 @@
 # so parameters do not stack the way `>>` did in gz_modifications.bash.
 #
 # Usage: install_px4_control_params <px4-rc.params> [vision|gps]
+#
+# Vision-mode environment overrides (see docs/px4_control.md):
+#   EKF2_EV_DELAY   milliseconds, 0..300, default 50
+#   EKF2_EV_CTRL    integer bitmask 0..15, default 11 (no velocity)
+
+_px4_control_number() {
+  local name="$1"
+  local raw="$2"
+  local min="$3"
+  local max="$4"
+  local integer="${5:-0}"
+  awk -v name="$name" -v raw="$raw" -v min="$min" -v max="$max" -v integer="$integer" 'BEGIN {
+    if (raw + 0 != raw) { printf "%s is not a number: %s\n", name, raw > "/dev/stderr"; exit 1 }
+    value = raw + 0
+    if (integer && value != int(value)) { printf "%s must be an integer, got %s\n", name, raw > "/dev/stderr"; exit 1 }
+    if (value < min + 0 || value > max + 0) { printf "%s must be in [%s, %s], got %s\n", name, min, max, raw > "/dev/stderr"; exit 1 }
+    print value
+  }'
+}
 
 install_px4_control_params() {
   local rc_file="$1"
@@ -20,6 +39,12 @@ install_px4_control_params() {
   if [ ! -d "$dir" ]; then
     echo "install_px4_control_params: $dir not found, skipping" >&2
     return 0
+  fi
+  local ev_delay=""
+  local ev_ctrl=""
+  if [ "$mode" != "gps" ]; then
+    ev_delay="$(_px4_control_number EKF2_EV_DELAY "${EKF2_EV_DELAY:-50}" 0 300 0)" || return 1
+    ev_ctrl="$(_px4_control_number EKF2_EV_CTRL "${EKF2_EV_CTRL:-11}" 0 15 1)" || return 1
   fi
   # PX4 v1.17 does not source px4-rc.params. The old gz_modifications.bash
   # append created a file the startup script never read. Create the file
@@ -46,6 +71,9 @@ install_px4_control_params() {
     echo "param set COM_OBL_RC_ACT 4"
     echo "param set COM_RC_LOSS_T 35.0"
     echo "param set NAV_RCL_ACT 1"
+    # SITL and the ROS graph share /clock. Syncing PX4 to the agent OS
+    # clock would stamp messages with wall time. Default in v1.17 is 1.
+    echo "param set UXRCE_DDS_SYNCT 0"
     if [ "$mode" = "gps" ]; then
       echo "param set EKF2_EV_CTRL 0"
       echo "param set EKF2_HGT_REF 1"
@@ -56,9 +84,12 @@ install_px4_control_params() {
       # Vision is the primary aid. GPS stays enabled at a lower weight:
       # lon/lat + velocity (bits 0 and 2 => 5), not altitude, so height
       # follows vision. The simulated GPS sensor is not removed.
-      echo "param set EKF2_EV_CTRL 15"
+      # Position and yaw only (bits 0, 1, 3 => 11). Bit 2 is 3D velocity.
+      # RTAB-Map twist covariance is a poor EKF measurement, so velocity
+      # fusion stays off unless EKF2_EV_CTRL is set (15 adds bit 2).
+      echo "param set EKF2_EV_CTRL ${ev_ctrl}"
       echo "param set EKF2_HGT_REF 3"
-      echo "param set EKF2_EV_DELAY 50.0"
+      echo "param set EKF2_EV_DELAY ${ev_delay}"
       echo "param set EKF2_EV_NOISE_MD 0"
       echo "param set EKF2_GPS_CTRL 5"
       echo "param set EKF2_GPS_P_NOISE 5.0"

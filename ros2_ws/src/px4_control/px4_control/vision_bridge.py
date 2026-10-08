@@ -89,6 +89,7 @@ class VisionOdometryBridge:
         self._last: VisualOdom | None = None
         self._last_rx: float | None = None
         self._lost = False
+        self._tracked_once = False
         self._prev_position: np.ndarray | None = None
         self._prev_velocity_ned: np.ndarray | None = None
         self._prev_stamp: float | None = None
@@ -105,6 +106,7 @@ class VisionOdometryBridge:
     def push(self, sample: OdomSample) -> VisualOdom | None:
         """Ingest one odometry message. Returns a sample only while tracking."""
         self._last_rx = sample.stamp_sec
+        recovering = self._lost and self._tracked_once
         if sample.tracking_lost or sample.stamp_sec <= 0.0:
             self.mark_lost()
             return None
@@ -132,7 +134,12 @@ class VisionOdometryBridge:
         velocity_frd = flu_to_frd(sample.linear_flu)
         angular_frd = flu_to_frd(sample.angular_flu)
         velocity_ned = attitude.rotation @ velocity_frd
-        self._bump_reset_if_jumped(position_ned, velocity_ned, sample.stamp_sec)
+        # One bump re-anchors EKF2. A gap and a pose jump on the same sample
+        # are the same event, so they do not increment twice.
+        if recovering:
+            self.reset_counter = (self.reset_counter + 1) % 256
+        else:
+            self._bump_reset_if_jumped(position_ned, velocity_ned, sample.stamp_sec)
 
         position_cov_ned = rotate_covariance(position_cov_enu, R_NED_FROM_ENU)
         # Pose orientation covariance is in the parent ENU frame. PX4 wants the
@@ -158,6 +165,7 @@ class VisionOdometryBridge:
         self._prev_velocity_ned = velocity_ned
         self._prev_stamp = float(sample.stamp_sec)
         self._lost = False
+        self._tracked_once = True
         self._last = visual
         return visual
 
@@ -170,6 +178,7 @@ class VisionOdometryBridge:
         if self._lost or self._last is None or self._last_rx is None:
             return None
         if now_sec - self._last_rx > self.timeout_s:
+            self.mark_lost()
             return None
         return self._last
 

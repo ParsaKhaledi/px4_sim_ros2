@@ -157,3 +157,24 @@ def test_takeoff_climbs_smoothly_and_hold_waits():
             break
     assert executive.poll(hold_id).success
     assert (index - start) * 0.05 >= 0.5
+
+
+def test_vision_loss_holds_and_does_not_keep_yawing():
+    executive = MotionExecutive(_limits())
+    snap = _snap(np.array([0.0, 0.0, -2.0]), yaw=0.0)
+    executive.update(0.0, snap)
+    executive.note_cmd_vel(0.0, 0.0, 0.0, 0.2)
+    spinning = executive.update(0.05, snap)
+    assert abs(spinning.yaw_rate) > 0.0
+    executive.note_vision_lost(0.05)
+    state = snap
+    last = spinning
+    for index in range(1, 80):
+        last = executive.update(0.05 + index * 0.05, state)
+        state = Snapshot(last.position.copy(), last.velocity.copy(), last.yaw, last.yaw_rate, False)
+    assert last.use_position is True
+    assert last.yaw_rate == pytest.approx(0.0, abs=1e-3)
+    assert abs(last.yaw) < math.radians(15.0)
+    executive.note_cmd_vel(6.0, 0.0, 0.0, 0.2)
+    held = executive.update(6.05, state)
+    assert held.yaw_rate == pytest.approx(0.0, abs=1e-3)

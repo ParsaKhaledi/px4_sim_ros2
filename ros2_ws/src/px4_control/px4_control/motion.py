@@ -133,13 +133,41 @@ class MotionExecutive:
         self._cmd_time: float | None = None
         self._hold_z: float | None = None
         self._locked_xy: np.ndarray | None = None
+        self._vision_lost = False
         self.needs_disarm = False
 
     def poll(self, goal_id: int) -> GoalStatus:
         return self._status[goal_id]
 
     def accepts_cmd_vel(self) -> bool:
-        return self.phase not in (Phase.TAKEOFF, Phase.LAND)
+        return not self._vision_lost and self.phase not in (Phase.TAKEOFF, Phase.LAND)
+
+    def note_vision_lost(self, time_s: float) -> None:
+        """Brake to a position hold and take yaw rate to zero.
+
+        The previous offboard script yawed at 0.2 rad/s while vision was
+        gone. This does not. Takeoff and land keep their vertical path and
+        only freeze the yaw command.
+        """
+        if self._vision_lost or self._p is None:
+            return
+        self._vision_lost = True
+        if self.phase in (Phase.TAKEOFF, Phase.LAND):
+            self._yaw_goal = self._yaw
+            return
+        if self._active is not None and not self._status[self._active].done:
+            status = self._status[self._active]
+            status.done = True
+            status.success = False
+            status.message = 'vision tracking lost'
+            self._active = None
+        self._holding = False
+        self._hold_since = None
+        self._begin_brake(time_s, Phase.HOLD)
+
+    def note_vision_regained(self) -> None:
+        """Allow new commands again. The vehicle stays on the hold it latched."""
+        self._vision_lost = False
 
     def note_landed(self, landed: bool, down: float) -> None:
         if landed:
@@ -254,7 +282,7 @@ class MotionExecutive:
         return goal
 
     def note_cmd_vel(self, time_s: float, v_north: float, v_east: float, yaw_rate: float) -> None:
-        if not self.accepts_cmd_vel() or self._p is None:
+        if self._vision_lost or not self.accepts_cmd_vel() or self._p is None:
             return
         if self.phase != Phase.CMD_VEL:
             self._preempt_active()

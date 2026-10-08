@@ -19,9 +19,6 @@ Runtime simulation assets mounted into Docker containers from the host repo. Cha
 | `config_gz_bridge.yaml` | ros_gz bridge topic mapping |
 | `Params/nav2/` | Nav2 and RViz configuration |
 | `startFiles/` | Per-service launch scripts referenced from Compose |
-| `params/install_px4_control_params.bash` | Idempotent EKF2 / offboard block in `px4-rc.params` (`ESTIMATION_MODE`) |
-| `startFiles/gz_start_px4_control.sh` | Starts the `px4_control` node after the ROS overlay is sourced |
-| `worlds/walls/<World>.txt` | Optional wall segments (`x1 y1 x2 y2` ENU metres); not in the repo until Simulation adds them |
 
 Mount points in Compose (example): `./includes/gz/` → `/home/px4/volume/includes/gz/`, `./includes/gz/startFiles/` → `/home/px4/volume/startFiles/`.
 

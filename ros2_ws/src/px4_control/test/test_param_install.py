@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 INSTALLER = Path(__file__).resolve().parents[4] / 'includes' / 'gz' / 'params' / 'install_px4_control_params.bash'
 
@@ -25,10 +27,13 @@ def test_param_block_is_idempotent_and_selects_mode(tmp_path):
     assert second.count('# BEGIN px4_control') == 1
     assert second.count('# END px4_control') == 1
     assert second.count('param set COM_OF_LOSS_T 1.0') == 1
-    assert 'EKF2_EV_CTRL 15' in second
+    assert 'EKF2_EV_CTRL 11' in second
     assert 'EKF2_HGT_REF 3' in second
+    assert 'EKF2_EV_DELAY 50' in second
+    assert 'UXRCE_DDS_SYNCT 0' in second
     assert 'EKF2_GPS_CTRL 5' in second
     assert 'EKF2_GPS_CTRL 0' not in second
+    assert 'EKF2_EV_CTRL 15' not in second
     assert 'SYS_AUTOSTART' in second
     assert first.count('param set-default COM_RC_LOSS_T') == 0
     gps = _install(rc, 'gps')
@@ -36,7 +41,9 @@ def test_param_block_is_idempotent_and_selects_mode(tmp_path):
     assert 'EKF2_EV_CTRL 0' in gps
     assert 'EKF2_HGT_REF 1' in gps
     assert 'EKF2_GPS_CTRL 7' in gps
-    assert 'EKF2_EV_CTRL 15' not in gps
+    assert 'UXRCE_DDS_SYNCT 0' in gps
+    assert 'EKF2_EV_CTRL 11' not in gps
+    assert 'EKF2_EV_DELAY' not in gps
 
 
 def test_missing_params_file_is_created_and_rcs_is_hooked_once(tmp_path):
@@ -80,3 +87,16 @@ def test_romfs_cmake_lists_the_params_file_once(tmp_path):
     text = cmake.read_text(encoding='utf-8')
     assert text.count('px4-rc.params') == 1
     assert text.index('px4-rc.params') < text.index('rcS')
+
+
+def test_vision_delay_and_ctrl_come_from_the_environment(tmp_path, monkeypatch):
+    rc = tmp_path / 'px4-rc.params'
+    rc.write_text('keep\n', encoding='utf-8')
+    monkeypatch.setenv('EKF2_EV_DELAY', '80')
+    monkeypatch.setenv('EKF2_EV_CTRL', '15')
+    text = _install(rc, 'vision')
+    assert 'param set EKF2_EV_DELAY 80' in text
+    assert 'param set EKF2_EV_CTRL 15' in text
+    monkeypatch.setenv('EKF2_EV_CTRL', '16')
+    with pytest.raises(subprocess.CalledProcessError):
+        _install(rc, 'vision')

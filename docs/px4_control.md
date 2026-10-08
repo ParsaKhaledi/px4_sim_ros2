@@ -99,7 +99,9 @@ Publishing stops on any of:
 - optional `rtabmap_msgs/OdomInfo.lost` when that package is installed
 - no sample for `vision_timeout_s` (default 0.3 s)
 
-The bridge keeps the odometry header stamp. It does not re-stamp the last pose. `reset_counter` increments when the pose jumps farther than the motion predicted since the previous sample (`vision_reset_jump_m`, default 0.75 m).
+The bridge keeps the odometry header stamp and copies it, in microseconds, onto `VehicleOdometry.timestamp` and `timestamp_sample`. It does not re-stamp the last pose and it does not read the wall clock. `reset_counter` increments once when tracking returns after a loss or a timeout, and once when a pose jumps farther than the motion predicted since the previous sample (`vision_reset_jump_m`, default 0.75 m). A jump on the recovering sample counts as one re-anchor, not two.
+
+While vision is lost the setpoint brakes to a stop, latches position, and takes yaw rate to zero. It does not yaw in place. `/cmd_vel` is ignored until the next valid sample. Takeoff and land keep climbing or descending and only freeze the yaw command. A `GoTo` or `Hold` that was running is aborted with `vision tracking lost`. After recovery the vehicle stays on that hold until a new command; the EKF re-anchors from the bumped `reset_counter`.
 
 `rtabmap_msgs` is optional. Without it, loss is detected from the odometry stream itself.
 
@@ -109,7 +111,9 @@ ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. D
 
 `includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites one marked block in `ROMFS/px4fmu_common/init.d-posix/px4-rc.params`. PX4 v1.17 does not source that file on its own (the previous `>>` append never ran). The installer also inserts one source of it into `rcS`, after the airframe and immediately before `ekf2 start`, and adds `px4-rc.params` to the posix ROMFS file list so the SITL rootfs actually contains it. Re-running it does not stack lines. Values are `param set`, so a later start overrides a value stored from a previous run. The mode is expanded when the container starts, so the PX4 shell does not need the variable itself.
 
-Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, and `NAV_RCL_ACT 1`.
+Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, and `UXRCE_DDS_SYNCT 0`.
+
+`UXRCE_DDS_SYNCT` defaults to 1 in v1.17: the client measures the offset between the agent OS clock and PX4 time and rewrites message stamps. In this stack every clock is `/clock`. Syncing to the agent would turn those stamps into wall time, so the installer forces 0. The client starts after the params block, which is what the reboot-required flag needs.
 
 ### vision (indoor default)
 
@@ -117,18 +121,47 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 
 | Parameter | Value | Meaning |
 |-----------|-------|---------|
-| `EKF2_EV_CTRL` | 15 | horizontal position, vertical position, velocity, yaw |
+| `EKF2_EV_CTRL` | 11 | horizontal position, vertical position, yaw. Not velocity |
 | `EKF2_HGT_REF` | 3 | height from vision |
-| `EKF2_EV_DELAY` | 50 | ms, read at EKF start |
+| `EKF2_EV_DELAY` | 50 | ms, from `EKF2_EV_DELAY` if set. Read at EKF start |
 | `EKF2_EV_NOISE_MD` | 0 | use the variances on the message |
 | `EKF2_GPS_CTRL` | 5 | lon/lat and 3D velocity, not altitude |
 | `EKF2_GPS_P_NOISE` | 5.0 | lower GPS position weight (max 10) |
 | `EKF2_GPS_V_NOISE` | 1.0 | lower GPS velocity weight (max 5) |
 | `COM_ARM_WO_GPS` | 1 | arming is allowed if the GPS check fails |
+| `UXRCE_DDS_SYNCT` | 0 | do not sync PX4 time to the agent OS clock |
+
+`EKF2_EV_CTRL` in v1.17 is a bitmask: bit 0 horizontal position, bit 1 vertical position, bit 2 3D velocity, bit 3 yaw. 11 is `0b1011`. 15 is `0b1111` and adds velocity.
+
+The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe uses 11. RTAB-Map's twist is body velocity with a covariance that is often too small or not a real velocity uncertainty, so fusing it pulls the EKF off the pose. Velocity fusion stays off unless `EKF2_EV_CTRL=15` is set in the environment before the params installer runs. The bridge still fills the velocity fields; EKF2 ignores them while bit 2 is clear.
+
+### Tuning `EKF2_EV_DELAY`
+
+The parameter is milliseconds of vision lag relative to the IMU, range 0 to 300, reboot-required, so it has to be in the params block before `ekf2 start`. Default 50. Override with the environment variable of the same name.
+
+It is not on the uXRCE topic list. In the PX4 shell, or in the log, read uORB `estimator_aid_src_ev_pos` (`EstimatorAidSource2d`, horizontal position). `innovation[0]` and `innovation[1]` are the residuals. During a real acceleration:
+
+- innovation the same sign as the acceleration means vision is late: raise the delay
+- the opposite sign means vision is early: lower the delay
+
+Use the value that leaves the innovation near zero and uncorrelated with acceleration. One 30 Hz camera frame is about 33 ms. RTAB-Map's processing is often 50 to 100 ms. Height uses `estimator_aid_src_ev_hgt` the same way. `estimator_aid_src_ev_vel` stays empty while bit 2 is off.
 
 ### gps
 
-Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`.
+Classic SITL. External vision is off. `EKF2_EV_CTRL 0`, `EKF2_HGT_REF 1`, `EKF2_GPS_CTRL 7`, `EKF2_GPS_P_NOISE 0.5`, `EKF2_GPS_V_NOISE 0.3`. `UXRCE_DDS_SYNCT 0` still applies.
+
+## Environment
+
+These are read by the params installer and `gz_start_px4_control.sh`. They are not in `.env.example`; DevOps can pass them on the PX4 service without sharing that file with other PRs.
+
+| Variable | Default | Used for |
+|----------|---------|----------|
+| `ESTIMATION_MODE` | `vision` | `vision` or `gps` |
+| `EKF2_EV_DELAY` | `50` | vision delay in milliseconds, 0..300 |
+| `EKF2_EV_CTRL` | `11` | vision bitmask, 0..15. `15` also fuses velocity |
+| `PX4_MAX_YAW_RATE_DEG_S` | `30` | ROS `max_yaw_rate_deg_s` |
+| `PX4_WALL_SEGMENTS_FILE` | empty | wall segments, if the file exists |
+| `USE_SIM_TIME` | `true` | launch `use_sim_time` |
 
 ## Arming
 
@@ -165,7 +198,7 @@ Start it on the same DDS domain as the Micro-XRCE-DDS agent, after the clock bri
 This change does not edit Compose files, Dockerfiles, or CI.
 
 1. Colcon-build `ros2_ws/src/px4_control` and `px4_control_interfaces` in the image after `px4_msgs` v1.17.0. Image workspace `/home/px4/ws_px4`; optional overlay `/home/px4/ws_control`.
-2. Pass `ESTIMATION_MODE` into the PX4 service environment so `gz_modifications.bash` bakes it. Also optional `PX4_MAX_YAW_RATE_DEG_S`, `PX4_WALL_SEGMENTS_FILE`, and `USE_SIM_TIME`.
+2. Pass `ESTIMATION_MODE` into the PX4 service environment so `gz_modifications.bash` bakes it. Optional, listed in the Environment section above: `EKF2_EV_DELAY`, `EKF2_EV_CTRL`, `PX4_MAX_YAW_RATE_DEG_S`, `PX4_WALL_SEGMENTS_FILE`, and `USE_SIM_TIME`.
 3. Start `includes/gz/startFiles/gz_start_px4_control.sh` on the same DDS domain as the XRCE agent, after the bridge so `/clock` exists. `use_sim_time` defaults to true.
 4. Simulation: `/sim/preflight_check` as `std_srvs/Trigger`, wall files at `includes/gz/worlds/walls/<World>.txt`, and `/ground_truth/odom` in ENU at about 50 Hz.
 5. Leave the GPS sensor and `/fmu/out/vehicle_gps_position` in place.
