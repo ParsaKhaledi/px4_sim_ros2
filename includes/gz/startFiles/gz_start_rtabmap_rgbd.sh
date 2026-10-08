@@ -14,11 +14,12 @@ esac
 
 # Color (IMX378) and depth (rgb_aligned_depth) are separate sensors, so exact
 # sync is not used here. rtabmap_viz is the ROS 2 launch argument.
-# VISION_PROFILE=cpu selects the lighter set in rtabmap_profile.sh.
+# VISION_PROFILE selects rtabmap_profiles/<profile>.ini via cfg:=.
 # shellcheck disable=SC1091
 source "${HOME}/volume/startFiles/rtabmap_profile.sh"
 rtabmap_profile_args rgbd
 ros2 launch rtabmap_launch rtabmap.launch.py   \
+     cfg:="${RTAB_CFG}" \
      args:="${RTAB_ARGS}" \
      odom_args:="${RTAB_ODOM}" \
      rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info \

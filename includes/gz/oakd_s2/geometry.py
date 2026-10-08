@@ -80,15 +80,40 @@ COLOR_VFOV_DEG = 54.0
 CAMERA_HZ = 30
 IMU_HZ = 200
 
-# VISION_PROFILE=cpu. Half the stereo pixels on each axis (640x400 -> 320x200),
-# half the color frame (640x480 -> 320x240), and slower sensors. Field of view
-# stays put because fx, fy, cx, and cy scale with the resolution.
+# Native OV9282 size. The calibration above is the 2x2 bin of this frame.
+# VISION_PROFILE=full and hw render this size. cpu does not.
+NATIVE_STEREO_WIDTH = 1280
+NATIVE_STEREO_HEIGHT = 800
+
+# VISION_PROFILE=cpu. Half the calibration pixels on each axis (640x400 ->
+# 320x200), half the color frame (640x480 -> 320x240), and slower sensors.
+# This is the low-resource set for CPU-only simulation and CI, not a mode for
+# the real camera. Field of view stays put because fx, fy, cx, and cy scale
+# with the resolution.
 CPU_STEREO_WIDTH = 320
 CPU_STEREO_HEIGHT = 200
 CPU_COLOR_WIDTH = 320
 CPU_COLOR_HEIGHT = 240
 CPU_CAMERA_HZ = 10
 CPU_IMU_HZ = 100
+
+# VISION_PROFILE=hw. Same native stereo size as full, at a rate a modest
+# onboard computer can track. Color stays at the 640x480 datasheet frame.
+HW_CAMERA_HZ = 15
+HW_IMU_HZ = 200
+
+# Uniform scales of the 640x400 calibration (16:10). sx and sy match, so the
+# principal point stays the scaled calibration point. 1280x720 is not here:
+# it would crop 1280x800 and move cx/cy.
+ALLOWED_STEREO_RESOLUTIONS = (
+    (NATIVE_STEREO_WIDTH, NATIVE_STEREO_HEIGHT),
+    (LEFT_INTRINSICS["width"], LEFT_INTRINSICS["height"]),
+    (CPU_STEREO_WIDTH, CPU_STEREO_HEIGHT),
+)
+
+# Real-use stereo is at least HD. full and hw below this log a warning.
+HD_MIN_WIDTH = 1280
+HD_MIN_HEIGHT = 720
 
 # Ogre's image noise pass is in normalized intensity. 0.007 is about two
 # counts on an 8-bit image, enough to not be a perfect render.
@@ -132,11 +157,18 @@ def accel_stddev_m_s2(imu_hz: float | None = None) -> float:
 
 @dataclass(frozen=True)
 class VisionProfile:
-    """Image size and sensor rate. ``full`` is the OAK-D S2 spec.
+    """Image size and sensor rate for one ``VISION_PROFILE``.
 
-    Optional ``CAM_*`` and ``IMU_RATE_HZ`` overrides replace individual fields
-    after the profile is chosen. Intrinsics are scaled from the full-resolution
-    calibration so the field of view does not change.
+    ``full`` is the default: native 1280x800 stereo for a GPU simulation.
+    ``cpu`` is 320x200 for CPU-only simulation and CI. ``hw`` is 1280x800 at
+    a lower rate for a real OAK-D S2 on a small onboard computer.
+
+    Optional ``CAM_STEREO_RES`` (or ``CAM_STEREO_WIDTH`` and
+    ``CAM_STEREO_HEIGHT``), ``CAM_RATE_HZ``, and the other ``CAM_*`` /
+    ``IMU_RATE_HZ`` overrides replace individual fields after the profile is
+    chosen. Stereo intrinsics are scaled from the 640x400 calibration so the
+    field of view does not change. Only the 16:10 sizes in
+    ``ALLOWED_STEREO_RESOLUTIONS`` are accepted.
     """
 
     name: str
@@ -150,8 +182,8 @@ class VisionProfile:
 
 FULL_PROFILE = VisionProfile(
     "full",
-    LEFT_INTRINSICS["width"],
-    LEFT_INTRINSICS["height"],
+    NATIVE_STEREO_WIDTH,
+    NATIVE_STEREO_HEIGHT,
     COLOR_WIDTH,
     COLOR_HEIGHT,
     CAMERA_HZ,
@@ -166,6 +198,20 @@ CPU_PROFILE = VisionProfile(
     CPU_CAMERA_HZ,
     CPU_IMU_HZ,
 )
+HW_PROFILE = VisionProfile(
+    "hw",
+    NATIVE_STEREO_WIDTH,
+    NATIVE_STEREO_HEIGHT,
+    COLOR_WIDTH,
+    COLOR_HEIGHT,
+    HW_CAMERA_HZ,
+    HW_IMU_HZ,
+)
+PROFILES = {
+    FULL_PROFILE.name: FULL_PROFILE,
+    CPU_PROFILE.name: CPU_PROFILE,
+    HW_PROFILE.name: HW_PROFILE,
+}
 
 
 def _env_int(env: dict, name: str, default: int) -> int:
@@ -178,29 +224,107 @@ def _env_int(env: dict, name: str, default: int) -> int:
     return value
 
 
+def _parse_stereo_res(text: str) -> tuple[int, int]:
+    cleaned = str(text).strip().lower().replace(" ", "")
+    if "x" not in cleaned:
+        raise ValueError(
+            f"CAM_STEREO_RES must look like 1280x800, got {text}. "
+            f"{_allowed_stereo_text()}"
+        )
+    width_text, height_text = cleaned.split("x", 1)
+    try:
+        width = int(float(width_text))
+        height = int(float(height_text))
+    except ValueError as exc:
+        raise ValueError(
+            f"CAM_STEREO_RES must look like 1280x800, got {text}. {_allowed_stereo_text()}"
+        ) from exc
+    return width, height
+
+
+def _allowed_stereo_text() -> str:
+    sizes = ", ".join(f"{width}x{height}" for width, height in ALLOWED_STEREO_RESOLUTIONS)
+    return (
+        f"Allowed stereo sizes are {sizes}, the uniform 16:10 scales of the "
+        f"640x400 calibration. 1280x720 is rejected because it would crop "
+        f"1280x800 and move the principal point."
+    )
+
+
+def _require_allowed_stereo(width: int, height: int) -> None:
+    if (int(width), int(height)) in ALLOWED_STEREO_RESOLUTIONS:
+        return
+    raise ValueError(f"stereo resolution {width}x{height} is not valid. {_allowed_stereo_text()}")
+
+
+def _stereo_size(source: dict, base: VisionProfile) -> tuple[int, int]:
+    """``CAM_STEREO_RES`` or the width/height pair. They must name one allowed size."""
+    res = source.get("CAM_STEREO_RES")
+    res_set = res is not None and str(res).strip() != ""
+    width_raw = source.get("CAM_STEREO_WIDTH")
+    height_raw = source.get("CAM_STEREO_HEIGHT")
+    width_set = width_raw is not None and str(width_raw).strip() != ""
+    height_set = height_raw is not None and str(height_raw).strip() != ""
+    if res_set:
+        width, height = _parse_stereo_res(str(res))
+        if width_set or height_set:
+            other_width = _env_int(source, "CAM_STEREO_WIDTH", width) if width_set else width
+            other_height = _env_int(source, "CAM_STEREO_HEIGHT", height) if height_set else height
+            if (other_width, other_height) != (width, height):
+                raise ValueError(
+                    f"CAM_STEREO_RES={str(res).strip()} disagrees with "
+                    f"CAM_STEREO_WIDTH/CAM_STEREO_HEIGHT {other_width}x{other_height}"
+                )
+        _require_allowed_stereo(width, height)
+        return width, height
+    width = _env_int(source, "CAM_STEREO_WIDTH", base.stereo_width)
+    height = _env_int(source, "CAM_STEREO_HEIGHT", base.stereo_height)
+    _require_allowed_stereo(width, height)
+    return width, height
+
+
 def profile_from_env(env: dict | None = None) -> VisionProfile:
-    """``VISION_PROFILE`` selects ``full`` or ``cpu``. Per-field overrides win."""
+    """``VISION_PROFILE`` selects ``cpu``, ``full``, or ``hw``. Overrides win.
+
+    The default profile is ``full``. An empty ``VISION_PROFILE`` is ``full``.
+    """
     source = os.environ if env is None else env
     raw = source.get("VISION_PROFILE", "full")
     name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
-    if name == "full":
-        base = FULL_PROFILE
-    elif name == "cpu":
-        base = CPU_PROFILE
-    else:
-        raise ValueError(f"VISION_PROFILE must be full or cpu, got {raw}")
+    if name not in PROFILES:
+        raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {raw}")
+    base = PROFILES[name]
     camera_hz = _env_float(source, "CAM_RATE_HZ", base.camera_hz)
     imu_hz = _env_float(source, "IMU_RATE_HZ", base.imu_hz)
     if camera_hz <= 0.0 or imu_hz <= 0.0:
         raise ValueError(f"sensor rates must be positive, got camera {camera_hz} imu {imu_hz}")
+    stereo_width, stereo_height = _stereo_size(source, base)
     return VisionProfile(
         name=name,
-        stereo_width=_env_int(source, "CAM_STEREO_WIDTH", base.stereo_width),
-        stereo_height=_env_int(source, "CAM_STEREO_HEIGHT", base.stereo_height),
+        stereo_width=stereo_width,
+        stereo_height=stereo_height,
         color_width=_env_int(source, "CAM_COLOR_WIDTH", base.color_width),
         color_height=_env_int(source, "CAM_COLOR_HEIGHT", base.color_height),
         camera_hz=camera_hz,
         imu_hz=imu_hz,
+    )
+
+
+def sub_hd_warning(profile: VisionProfile) -> str | None:
+    """Warning when ``full`` or ``hw`` is running below HD stereo.
+
+    ``cpu`` is the low-resolution profile and does not warn. 1280x800 is the
+    only allowed size that is not below 1280x720.
+    """
+    if profile.name not in ("full", "hw"):
+        return None
+    if profile.stereo_width >= HD_MIN_WIDTH and profile.stereo_height >= HD_MIN_HEIGHT:
+        return None
+    return (
+        f"warning: VISION_PROFILE={profile.name} stereo "
+        f"{profile.stereo_width}x{profile.stereo_height} is below 1280x720. "
+        f"1280x800 is the stereo size for real use. The cpu profile is the "
+        f"low-resolution option for CPU-only simulation and CI."
     )
 
 

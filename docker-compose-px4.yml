@@ -40,6 +40,7 @@ services:
         VISION_PROFILE: ${VISION_PROFILE:-full}
         # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
+        CAM_STEREO_RES: ${CAM_STEREO_RES:-}
         CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
         CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
         CAM_COLOR_WIDTH: ${CAM_COLOR_WIDTH:-}
@@ -97,6 +98,7 @@ services:
         VISION_PROFILE: ${VISION_PROFILE:-full}
         # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
+        CAM_STEREO_RES: ${CAM_STEREO_RES:-}
         CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
         CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
         CAM_COLOR_WIDTH: ${CAM_COLOR_WIDTH:-}
@@ -253,8 +255,9 @@ services:
         - CameraType=${CameraType}
         - RTABMAPVIZ=${RTABMAPVIZ:-false}
         - VISION_PROFILE=${VISION_PROFILE:-full}
-        # Unset feature floor follows the profile: full 120, cpu 40.
+        # Unset feature floor follows the profile: full 120 (not yet measured at 1280x800), cpu 40, hw 80 (not yet measured).
         - CAM_RATE_HZ=${CAM_RATE_HZ:-}
+        - CAM_STEREO_RES=${CAM_STEREO_RES:-}
         - CAM_STEREO_WIDTH=${CAM_STEREO_WIDTH:-}
         - CAM_STEREO_HEIGHT=${CAM_STEREO_HEIGHT:-}
         - CAM_COLOR_WIDTH=${CAM_COLOR_WIDTH:-}

@@ -48,7 +48,7 @@ The Gazebo link is named `camera_link` because that is the child of `CameraJoint
 
 RTAB-Map's `frame_id` is `base_link`. The old stereo launch used `oak-d-base-frame`, which was never in the URDF.
 
-Stereo uses exact sync (`approx_sync:=false`). Gazebo gives both OV9282 sensors, and the `camera_info` published with each image, the simulation time of the step that rendered them. The baseline relay copies that stamp onto `/camera/stereo/right/camera_info_baseline`. The four stereo topics therefore match. The IMU is not in that set. `rtabmap_launch` remaps `imu` on its own and `wait_imu_to_init:=true` waits for the first sample before odometry starts. At 200 Hz the IMU does not land on the 30 Hz image stamps, so it is not put through `approx_sync`. `VISION_PROFILE=cpu` lowers those to 100 Hz and 10 Hz; the stamps still do not match, and the IMU stays out of the synchronizer.
+Stereo uses exact sync (`approx_sync:=false`). Gazebo gives both OV9282 sensors, and the `camera_info` published with each image, the simulation time of the step that rendered them. The baseline relay copies that stamp onto `/camera/stereo/right/camera_info_baseline`. The four stereo topics therefore match. The IMU is not in that set. `rtabmap_launch` remaps `imu` on its own and `wait_imu_to_init:=true` waits for the first sample before odometry starts. At 200 Hz (`full` and `hw`) the IMU does not land on the image stamps, so it is not put through `approx_sync`. `VISION_PROFILE=cpu` lowers those to 100 Hz and 10 Hz; the stamps still do not match, and the IMU stays out of the synchronizer. `hw` images are 15 Hz.
 
 Depth is aligned to color the way a real OAK-D publishes it: the depth sensor uses the color camera's pose, intrinsics, and `camera_rgb_optical_frame`. There is no separate depth frame.
 
@@ -74,7 +74,9 @@ The mount is not stored inside the camera SDF. PX4 includes the camera at a pose
 ```bash
 ros2 topic echo --once /camera/stereo/left/image_raw --field header
 ros2 topic echo --once /camera/stereo/right/camera_info_baseline --field p
-# p[3] is about -30.497 (left fx 406.624 * 0.075). Right K matches left K.
+# p[3] / p[0] is -0.075. At the 640x400 calibration, p[3] is about -30.497
+# (fx 406.624 * 0.075). full and hw at 1280x800 double fx, so p[3] is about
+# -60.994. Right K matches left K.
 
 ros2 run tf2_ros tf2_echo base_link stereo_left_camera_optical_frame
 ros2 run tf2_ros tf2_echo stereo_left_camera_optical_frame stereo_right_camera_optical_frame
@@ -92,7 +94,7 @@ A tilted or curved wall in the RTAB-Map cloud is a rotation error. A wall at the
 | Item | Value | Source |
 |---|---|---|
 | Housing | 97 × 29.5 × 22.9 mm, 91 g | Luxonis datasheet and shop page |
-| Stereo | 2× OV9282, 1280×800 native, run at 640×400, global shutter | Luxonis OAK-D S2 docs |
+| Stereo | 2× OV9282, 1280×800 native, global shutter. `full` and `hw` run at 1280×800. `cpu` runs at 320×200. The calibration file is 640×400 | Luxonis OAK-D S2 docs |
 | Baseline | 7.5 cm, not configurable | Shop page, older manual, `depthai-ros` xacro (`baseline = 0.075`). The current docs page says 75 cm; that is a typo |
 | Stereo intrinsics | left fx 406.6239, fy 406.0800, cx 305.7769, cy 204.5298, used for both cameras | `oak-s2/left.yaml`. The right yaml differs by about a pixel and is not rendered |
 | Stereo HFOV | about 76.4 deg, from that fx | Datasheet nominal HFOV is 80 deg. The sim follows the calibration, with `scale_to_hfov` off |
@@ -100,7 +102,7 @@ A tilted or curved wall in the RTAB-Map cloud is a rotation error. A wall at the
 | Color VFOV / DFOV | about 52 deg / 78 deg implied | Datasheet lists 54 / 78. 66 and 54 deg are not one pinhole on 4:3; HFOV is what the model is pinned to |
 | Depth | near 0.2 m, far 12 m, aligned to color | Ideal range about 0.8–12 m, MinZ about 0.2 m at 400p with extended disparity |
 | IMU | BNO086, 200 Hz, orientation reference ENU | Luxonis docs. gz-sim8 otherwise uses the spawn pose as the reference. Noise is a BMI270-class stand-in (see `geometry.py`) |
-| Rates | cameras 30 Hz, IMU 200 Hz | Previous sim rate for images; 200 Hz is a normal visual-inertial IMU rate |
+| Rates | `full` cameras 30 Hz and IMU 200 Hz. `hw` cameras 15 Hz and IMU 200 Hz. `cpu` cameras 10 Hz and IMU 100 Hz | `full` keeps the previous image rate at the native stereo size. `hw` is the onboard rate. `cpu` is the CPU-only sim rate |
 | Image noise | Gaussian stddev 0.007 | Normalized intensity, about two counts on an 8-bit image |
 
 Real distortion coefficients are in the calibration yaml and are **not** applied. The render is a pinhole and `camera_info` D is zero, so the image and the calibration agree. Putting the real k1/k2 on a pinhole render would make RTAB-Map undistort a picture that was never distorted.

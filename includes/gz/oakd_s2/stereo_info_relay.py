@@ -30,6 +30,9 @@ def main() -> int:
         parameter_overrides=[Parameter("use_sim_time", Parameter.Type.BOOL, True)],
     )
     profile = geo.profile_from_env()
+    warning = geo.sub_hd_warning(profile)
+    if warning:
+        node.get_logger().warning(warning)
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
 
     def on_info(msg: CameraInfo) -> None:
@@ -44,7 +47,8 @@ def main() -> int:
     node.create_subscription(CameraInfo, geo.RIGHT_INFO_IN, on_info, qos_profile_sensor_data)
     fx = geo.stereo_intrinsics(profile)["fx"]
     node.get_logger().info(
-        f"profile {profile.name} baseline {geo.BASELINE_M:.3f} m fx {fx:.4f}: "
+        f"profile {profile.name} stereo {profile.stereo_width}x{profile.stereo_height} "
+        f"at {profile.camera_hz:g} Hz baseline {geo.BASELINE_M:.3f} m fx {fx:.4f}: "
         f"{geo.RIGHT_INFO_IN} -> {geo.RIGHT_INFO_OUT}"
     )
     try:

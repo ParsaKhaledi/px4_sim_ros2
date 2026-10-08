@@ -15,10 +15,13 @@ The summary line scores five gates. Thresholds come from the environment
   frames elapse from that loss until the first frame that is not lost. The
   metric is the worst run. A run that never reaches a non-lost frame fails
   even when it is shorter than the cap.
-- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 120.
-  ``VISION_PROFILE=cpu`` uses 40 unless the variable is set.
-- ``VISION_MIN_INLIERS``: floor on frames that are not lost. Default 20.
-  ``VISION_PROFILE=cpu`` uses 15 unless the variable is set. Lost frames stay
+- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 120
+  (``full``). ``cpu`` uses 40 unless the variable is set. ``hw`` uses 80.
+  40 was measured at 320x200. 120 was measured when full was 640x400 and
+  has not been remeasured at 1280x800. 80 has not been measured.
+- ``VISION_MIN_INLIERS``: floor on frames that are not lost. Default 20
+  (``full`` and ``hw``). ``cpu`` uses 15 unless the variable is set. The
+  ``hw`` and 1280x800 ``full`` inlier floors are not yet measured. Lost frames stay
   in the distribution, and the streak and recovery gates already cover them.
   The first frame after an automatic odometry reset is not lost. It starts a
   new local map and reports 0 inliers, so it stays in the distribution and is
@@ -55,10 +58,17 @@ INLIER_KEYS = (
 
 DEFAULT_MAX_LOST_STREAK = 3
 DEFAULT_MAX_RECOVERY_FRAMES = 2
+# 120 and 20 were measured when full was 640x400. full is now 1280x800.
+# These two stay the full floor until a 1280x800 run is scored.
 DEFAULT_MIN_MEDIAN_FEATURES = 120
 DEFAULT_MIN_INLIERS = 20
+# Measured at 320x200.
 CPU_MIN_MEDIAN_FEATURES = 40
 CPU_MIN_INLIERS = 15
+# Not yet measured. 80 is about the same share of Vis/MaxFeatures 600 as
+# 120 is of 1000 and 40 is of 400. Inliers follow Vis/MinInliers 20.
+HW_MIN_MEDIAN_FEATURES = 80
+HW_MIN_INLIERS = 20
 DEFAULT_MIN_ODOM_HZ = 7
 
 METRIC_NAMES = ("lost_streak", "recovery_frames", "median_features", "inliers", "odom_hz")
@@ -126,19 +136,25 @@ def _env_float(name: str, default: float) -> float:
 def profile_name_from_env() -> str:
     raw = os.environ.get("VISION_PROFILE", "full")
     name = "full" if raw is None or str(raw).strip() == "" else str(raw).strip().lower()
-    if name in ("full", "cpu"):
+    if name in ("full", "cpu", "hw"):
         return name
-    raise ValueError(f"VISION_PROFILE must be full or cpu, got {raw}")
+    raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {raw}")
+
+
+def profile_feature_defaults(name: str) -> tuple[float, float]:
+    """Feature and inlier floors for one profile, before ``VISION_MIN_*`` overrides."""
+    if name == "cpu":
+        return CPU_MIN_MEDIAN_FEATURES, CPU_MIN_INLIERS
+    if name == "hw":
+        return HW_MIN_MEDIAN_FEATURES, HW_MIN_INLIERS
+    if name == "full":
+        return DEFAULT_MIN_MEDIAN_FEATURES, DEFAULT_MIN_INLIERS
+    raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {name}")
 
 
 def thresholds_from_env() -> VisionThresholds:
     """Explicit ``VISION_MIN_*`` values win over the profile defaults."""
-    if profile_name_from_env() == "cpu":
-        feature_default = CPU_MIN_MEDIAN_FEATURES
-        inlier_default = CPU_MIN_INLIERS
-    else:
-        feature_default = DEFAULT_MIN_MEDIAN_FEATURES
-        inlier_default = DEFAULT_MIN_INLIERS
+    feature_default, inlier_default = profile_feature_defaults(profile_name_from_env())
     return VisionThresholds(
         max_lost_streak=int(_env_float("VISION_MAX_LOST_STREAK", DEFAULT_MAX_LOST_STREAK)),
         max_recovery_frames=int(_env_float("VISION_MAX_RECOVERY_FRAMES", DEFAULT_MAX_RECOVERY_FRAMES)),

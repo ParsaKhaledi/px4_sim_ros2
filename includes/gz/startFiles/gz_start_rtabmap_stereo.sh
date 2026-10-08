@@ -25,11 +25,12 @@ trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 
 # rtabmap.launch.py (ROS 2) names the viewer rtabmap_viz. rtabmapviz is not
 # a declared argument. Odom/ResetCountdown 0 never restarts a lost odometry.
-# VISION_PROFILE=cpu selects the lighter set in rtabmap_profile.sh.
+# VISION_PROFILE selects rtabmap_profiles/<profile>.ini via cfg:=.
 # shellcheck disable=SC1091
 source "${HOME}/volume/startFiles/rtabmap_profile.sh"
 rtabmap_profile_args stereo
 ros2 launch rtabmap_launch rtabmap.launch.py \
+     cfg:="${RTAB_CFG}" \
      args:="${RTAB_ARGS}" \
      odom_args:="${RTAB_ODOM}" \
      stereo:=true  \

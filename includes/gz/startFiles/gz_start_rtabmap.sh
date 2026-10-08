@@ -19,10 +19,12 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
      # Exact sync: both cameras and the relayed camera_info share one Gazebo stamp.
      # IMU is a separate subscription (wait_imu_to_init), not part of that set.
+     # VISION_PROFILE selects the ini. Stereo and RGB-D both use it.
      # shellcheck disable=SC1091
      source "${HOME}/volume/startFiles/rtabmap_profile.sh"
      rtabmap_profile_args stereo
      ros2 launch rtabmap_launch rtabmap.launch.py \
+          cfg:="${RTAB_CFG}" \
           args:="${RTAB_ARGS}" \
           odom_args:="${RTAB_ODOM}" \
           stereo:=true  \
@@ -40,6 +42,7 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      source "${HOME}/volume/startFiles/rtabmap_profile.sh"
      rtabmap_profile_args rgbd-wrapper
      ros2 launch rtabmap_launch rtabmap.launch.py   \
+          cfg:="${RTAB_CFG}" \
           args:="${RTAB_ARGS}" \
           odom_args:="${RTAB_ODOM}" \
           rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \

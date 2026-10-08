@@ -21,6 +21,7 @@ sys.path.insert(0, str(HERE))
 
 import geometry as geo  # noqa: E402
 import render_oakd as render  # noqa: E402
+import rtabmap_params as rtab  # noqa: E402
 
 
 def load_module(path: Path, name: str):
@@ -72,15 +73,19 @@ class GeometryTest(unittest.TestCase):
         self.assertLess(shared, 0.0)
         # The unused right calibration would have produced a different Tx.
         self.assertNotAlmostEqual(shared, geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"]), places=3)
+        full = geo.stereo_intrinsics(geo.FULL_PROFILE)
         left_p = geo.rectified_p(right=False)
         right_p = geo.rectified_p(right=True)
         self.assertEqual(geo.rectified_k()[0], left_p[0])
         self.assertEqual(left_p[0], right_p[0])
+        self.assertEqual(left_p[0], full["fx"])
         self.assertEqual(left_p[2], right_p[2])
         self.assertEqual(left_p[5], right_p[5])
         self.assertEqual(left_p[6], right_p[6])
         self.assertEqual(left_p[3], 0.0)
-        self.assertAlmostEqual(right_p[3], shared, places=9)
+        self.assertAlmostEqual(right_p[3], geo.stereo_tx(full["fx"]), places=9)
+        self.assertAlmostEqual(right_p[3] / right_p[0], -0.075, places=12)
+        self.assertAlmostEqual(right_p[3], shared * 2.0, places=9)
 
     def test_corrected_projection_fills_zero_tx_once(self):
         fx = geo.RIGHT_INTRINSICS["fx"]
@@ -124,12 +129,15 @@ class GeometryTest(unittest.TestCase):
     def test_intrinsics_scale_keeps_fov_and_baseline(self):
         full = geo.stereo_intrinsics(geo.FULL_PROFILE)
         cpu = geo.stereo_intrinsics(geo.CPU_PROFILE)
+        hw = geo.stereo_intrinsics(geo.HW_PROFILE)
+        self.assertEqual((full["width"], full["height"]), (1280, 800))
+        self.assertEqual((hw["width"], hw["height"]), (1280, 800))
         self.assertEqual((cpu["width"], cpu["height"]), (320, 200))
-        self.assertAlmostEqual(geo.hfov_from_intrinsics(full), geo.hfov_from_intrinsics(cpu), places=9)
-        self.assertAlmostEqual(geo.vfov_from_intrinsics(full), geo.vfov_from_intrinsics(cpu), places=9)
-        self.assertAlmostEqual(cpu["fx"], full["fx"] * 0.5, places=9)
-        self.assertAlmostEqual(cpu["cx"], full["cx"] * 0.5, places=9)
-        for profile in (geo.FULL_PROFILE, geo.CPU_PROFILE):
+        self.assertAlmostEqual(full["fx"], geo.LEFT_INTRINSICS["fx"] * 2.0, places=9)
+        self.assertAlmostEqual(cpu["fx"], geo.LEFT_INTRINSICS["fx"] * 0.5, places=9)
+        self.assertAlmostEqual(cpu["cx"], geo.LEFT_INTRINSICS["cx"] * 0.5, places=9)
+        self.assertEqual(hw["fx"], full["fx"])
+        for profile in (geo.FULL_PROFILE, geo.CPU_PROFILE, geo.HW_PROFILE):
             src = geo.stereo_intrinsics(profile)
             left = geo.rectified_p(False, profile=profile)
             right = geo.rectified_p(True, profile=profile)
@@ -138,12 +146,18 @@ class GeometryTest(unittest.TestCase):
             self.assertEqual(shared[0], right[0])
             self.assertEqual(left[3], 0.0)
             self.assertAlmostEqual(right[3], -src["fx"] * geo.BASELINE_M, places=9)
+            self.assertAlmostEqual(right[3] / right[0], -geo.BASELINE_M, places=9)
             self.assertNotEqual(right[3], geo.stereo_tx(geo.RIGHT_INTRINSICS["fx"]))
+            self.assertAlmostEqual(geo.hfov_from_intrinsics(src), geo.hfov_from_intrinsics(geo.LEFT_INTRINSICS), places=9)
+            self.assertAlmostEqual(geo.vfov_from_intrinsics(src), geo.vfov_from_intrinsics(geo.LEFT_INTRINSICS), places=9)
         color_full = geo.color_intrinsics(geo.FULL_PROFILE)
         color_cpu = geo.color_intrinsics(geo.CPU_PROFILE)
+        color_hw = geo.color_intrinsics(geo.HW_PROFILE)
         self.assertEqual((color_cpu["width"], color_cpu["height"]), (320, 240))
+        self.assertEqual((color_hw["width"], color_hw["height"]), (640, 480))
         self.assertAlmostEqual(geo.hfov_from_intrinsics(color_full), geo.hfov_from_intrinsics(color_cpu), places=9)
         self.assertAlmostEqual(geo.vfov_from_intrinsics(color_full), geo.vfov_from_intrinsics(color_cpu), places=9)
+        self.assertEqual(color_hw["fx"], color_full["fx"])
 
     def test_profile_overrides_win_over_cpu_defaults(self):
         cpu = geo.profile_from_env({"VISION_PROFILE": "cpu"})
@@ -154,21 +168,74 @@ class GeometryTest(unittest.TestCase):
         mixed = geo.profile_from_env(
             {
                 "VISION_PROFILE": "cpu",
-                "CAM_STEREO_WIDTH": "160",
+                "CAM_STEREO_RES": "640x400",
                 "CAM_RATE_HZ": "8",
                 "CAM_COLOR_HEIGHT": "",
             }
         )
-        self.assertEqual(mixed.stereo_width, 160)
-        self.assertEqual(mixed.stereo_height, 200)
+        self.assertEqual((mixed.stereo_width, mixed.stereo_height), (640, 400))
         self.assertEqual(mixed.camera_hz, 8)
         self.assertEqual(mixed.color_height, 240)
         self.assertEqual(mixed.imu_hz, 100)
         full = geo.profile_from_env({})
         self.assertEqual(full.name, "full")
-        self.assertEqual(full.stereo_width, 640)
+        self.assertEqual((full.stereo_width, full.stereo_height), (1280, 800))
+        self.assertEqual(full.camera_hz, 30)
+        hw = geo.profile_from_env({"VISION_PROFILE": "HW"})
+        self.assertEqual(hw.name, "hw")
+        self.assertEqual((hw.stereo_width, hw.stereo_height), (1280, 800))
+        self.assertEqual((hw.color_width, hw.color_height), (640, 480))
+        self.assertEqual(hw.camera_hz, 15)
+        self.assertEqual(hw.imu_hz, 200)
         with self.assertRaises(ValueError):
             geo.profile_from_env({"VISION_PROFILE": "gpu"})
+
+    def test_stereo_override_accepts_only_calibration_scales(self):
+        for width, height in geo.ALLOWED_STEREO_RESOLUTIONS:
+            chosen = geo.profile_from_env(
+                {"VISION_PROFILE": "hw", "CAM_STEREO_WIDTH": str(width), "CAM_STEREO_HEIGHT": str(height)}
+            )
+            self.assertEqual((chosen.stereo_width, chosen.stereo_height), (width, height))
+            src = geo.stereo_intrinsics(chosen)
+            scale = width / geo.LEFT_INTRINSICS["width"]
+            self.assertAlmostEqual(src["fx"], geo.LEFT_INTRINSICS["fx"] * scale, places=9)
+            self.assertAlmostEqual(src["fy"], geo.LEFT_INTRINSICS["fy"] * scale, places=9)
+            self.assertAlmostEqual(src["cx"], geo.LEFT_INTRINSICS["cx"] * scale, places=9)
+            self.assertAlmostEqual(src["cy"], geo.LEFT_INTRINSICS["cy"] * scale, places=9)
+            right = geo.rectified_p(True, profile=chosen)
+            self.assertAlmostEqual(right[3] / right[0], -0.075, places=12)
+            self.assertEqual(geo.rectified_p(False, profile=chosen)[3], 0.0)
+        agreed = geo.profile_from_env(
+            {"CAM_STEREO_RES": "320x200", "CAM_STEREO_WIDTH": "320", "CAM_STEREO_HEIGHT": "200"}
+        )
+        self.assertEqual((agreed.stereo_width, agreed.stereo_height), (320, 200))
+        for bad in ("1280x720", "160x100", "800x800", "1280", "640x200", "0x800"):
+            with self.assertRaises(ValueError) as caught:
+                geo.profile_from_env({"VISION_PROFILE": "full", "CAM_STEREO_RES": bad})
+            self.assertIn("1280x800", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            geo.profile_from_env({"VISION_PROFILE": "cpu", "CAM_STEREO_WIDTH": "160"})
+        self.assertIn("160x200", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            geo.profile_from_env(
+                {"CAM_STEREO_RES": "1280x800", "CAM_STEREO_WIDTH": "640", "CAM_STEREO_HEIGHT": "400"}
+            )
+        self.assertIn("disagrees", str(caught.exception))
+        with self.assertRaises(ValueError):
+            geo.profile_from_env({"CAM_RATE_HZ": "0"})
+
+    def test_sub_hd_warning_is_only_for_full_and_hw(self):
+        self.assertIsNone(geo.sub_hd_warning(geo.FULL_PROFILE))
+        self.assertIsNone(geo.sub_hd_warning(geo.HW_PROFILE))
+        self.assertIsNone(geo.sub_hd_warning(geo.CPU_PROFILE))
+        low = geo.profile_from_env({"VISION_PROFILE": "full", "CAM_STEREO_RES": "640x400"})
+        warning = geo.sub_hd_warning(low)
+        self.assertIn("below 1280x720", warning)
+        self.assertIn("VISION_PROFILE=full", warning)
+        hw_low = geo.profile_from_env({"VISION_PROFILE": "hw", "CAM_STEREO_RES": "320x200"})
+        self.assertIn("VISION_PROFILE=hw", geo.sub_hd_warning(hw_low))
+        cpu_native = geo.profile_from_env({"VISION_PROFILE": "cpu", "CAM_STEREO_RES": "1280x800"})
+        self.assertIsNone(geo.sub_hd_warning(cpu_native))
 
 
 class RenderTest(unittest.TestCase):
@@ -252,8 +319,12 @@ class RenderTest(unittest.TestCase):
         ):
             sensor = self._sensor(stereo, sensor_name)
             self.assertIn(child_text(sensor, "gz_frame_id"), links)
+        full_k = geo.stereo_intrinsics(geo.FULL_PROFILE)
         right_tx = float(self._nested(stereo, "OV9282_right", "tx"))
-        self.assertAlmostEqual(right_tx, geo.stereo_tx(geo.LEFT_INTRINSICS["fx"]), places=4)
+        self.assertAlmostEqual(right_tx, geo.stereo_tx(full_k["fx"]), places=4)
+        self.assertAlmostEqual(right_tx / full_k["fx"], -0.075, places=6)
+        self.assertEqual(self._nested(stereo, "OV9282_left", "width"), "1280")
+        self.assertEqual(self._nested(stereo, "OV9282_left", "height"), "800")
         self.assertAlmostEqual(float(self._nested(stereo, "OV9282_left", "tx")), 0.0, places=6)
         for field in ("fx", "fy", "cx", "cy"):
             self.assertAlmostEqual(
@@ -263,7 +334,7 @@ class RenderTest(unittest.TestCase):
             )
             self.assertAlmostEqual(
                 float(self._nested(stereo, "OV9282_left", field)),
-                geo.LEFT_INTRINSICS[field],
+                full_k[field],
                 places=4,
             )
         self.assertGreater(float(self._nested(stereo, "OV9282_left", "stddev")), 0.0)
@@ -307,6 +378,25 @@ class RenderTest(unittest.TestCase):
         # The URDF has the mount and the frames. Image size and rate are SDF-only,
         # so the full-profile URDF stays the checked-in file.
         self.assertIn(geo.LINK_NAME, render.render_urdf(geo.Mount()))
+
+    def test_hw_sdf_matches_full_stereo_at_a_lower_rate(self):
+        full = ET.fromstring(render.render_sdf("stereo", geo.Mount(), geo.FULL_PROFILE))
+        hw = ET.fromstring(render.render_sdf("stereo", geo.Mount(), geo.HW_PROFILE))
+        hw_rgbd = ET.fromstring(render.render_sdf("rgbd", geo.Mount(), geo.HW_PROFILE))
+        self.assertEqual(self._nested(hw, "OV9282_left", "width"), "1280")
+        self.assertEqual(self._nested(hw, "OV9282_left", "height"), "800")
+        self.assertEqual(self._nested(full, "OV9282_left", "fx"), self._nested(hw, "OV9282_left", "fx"))
+        self.assertEqual(self._nested(hw, "OV9282_left", "update_rate"), "15")
+        self.assertEqual(self._nested(full, "OV9282_left", "update_rate"), "30")
+        self.assertEqual(self._nested(hw, "BNO086", "update_rate"), "200")
+        fx = float(self._nested(hw, "OV9282_right", "fx"))
+        tx = float(self._nested(hw, "OV9282_right", "tx"))
+        self.assertAlmostEqual(tx / fx, -0.075, places=6)
+        self.assertEqual(self._nested(hw_rgbd, "IMX378", "width"), "640")
+        self.assertEqual(self._nested(hw_rgbd, "IMX378", "height"), "480")
+        self.assertEqual(self._nested(hw_rgbd, "rgb_aligned_depth", "width"), "640")
+        self.assertEqual(self._nested(hw_rgbd, "IMX378", "update_rate"), "15")
+        self.assertEqual(self._nested(hw_rgbd, "rgb_aligned_depth", "update_rate"), "15")
 
     def test_rendered_urdf_loads_as_a_yaml_string(self):
         # launch_ros runs yaml.safe_load on robot_description. A colon-space
@@ -431,16 +521,19 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertNotIn("approx_sync_max_interval", text)
             self.assertNotIn("approx_sync:=true", text)
 
-    def _profile_args(self, profile: str, camera: str) -> dict:
+    def _profile_args(self, profile: str, camera: str, extra_env: str = "") -> dict:
         script = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profile.sh"
         command = (
-            f'set -euo pipefail; source "{script}"; '
-            f"VISION_PROFILE={profile} rtabmap_profile_args {camera}; "
-            'printf "%s\\n%s\\n" "$RTAB_ARGS" "$RTAB_ODOM"'
+            "set -euo pipefail; "
+            "unset CAM_STEREO_RES CAM_STEREO_WIDTH CAM_STEREO_HEIGHT CAM_RATE_HZ "
+            "CAM_COLOR_WIDTH CAM_COLOR_HEIGHT IMU_RATE_HZ; "
+            f'source "{script}"; '
+            f"{extra_env}VISION_PROFILE={profile} rtabmap_profile_args {camera}; "
+            'printf "%s\\n%s\\n%s\\n" "$RTAB_CFG" "$RTAB_ARGS" "$RTAB_ODOM"'
         )
         completed = subprocess.run(["bash", "-c", command], check=True, text=True, capture_output=True)
-        args, odom = completed.stdout.splitlines()
-        return {"RTAB_ARGS": args, "RTAB_ODOM": odom}
+        cfg, args, odom = completed.stdout.splitlines()
+        return {"RTAB_CFG": cfg, "RTAB_ARGS": args, "RTAB_ODOM": odom, "stderr": completed.stderr}
 
     def test_launch_scripts_use_real_parameter_names(self):
         root = Path(__file__).resolve().parents[1] / "startFiles"
@@ -457,12 +550,17 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertNotIn("rtabmapviz:=", text)
             self.assertNotIn("MaxFeatures:=", text)
         profile = texts["rtabmap_profile.sh"]
-        self.assertIn("Odom/ResetCountdown 1", profile)
-        self.assertIn("--Grid/NormalsSegmentation false", profile)
-        self.assertIn("--Vis/MaxFeatures 1000", profile)
+        self.assertIn("rtabmap_params.py", profile)
+        self.assertNotIn("--Vis/MaxFeatures", profile)
+        self.assertNotIn("--Grid/NormalsSegmentation", profile)
+        full_ini = rtab.load_profile_ini("full")[1]
+        self.assertEqual(full_ini["Odom/ResetCountdown"], "1")
+        self.assertEqual(full_ini["Grid/NormalsSegmentation"], "false")
+        self.assertEqual(full_ini["Vis/MaxFeatures"], "1000")
         for name in ("gz_start_rtabmap.sh", "gz_start_rtabmap_stereo.sh", "gz_start_rtabmap_rgbd.sh"):
             self.assertIn("rtabmap_profile.sh", texts[name])
             self.assertIn("rtabmap_viz:=", texts[name])
+            self.assertIn('cfg:="${RTAB_CFG}"', texts[name])
         wrapper = texts["gz_start_rtabmap.sh"]
         stereo_branch, rgbd_branch = wrapper.split("elif", 1)
         self.assertIn("approx_sync:=false", stereo_branch)
@@ -519,6 +617,8 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("VISION_MIN_MEDIAN_FEATURES=40", text)
             self.assertIn("VISION_MIN_INLIERS=20", text)
             self.assertIn("VISION_MIN_INLIERS=15", text)
+            self.assertIn("VISION_MIN_MEDIAN_FEATURES=80", text)
+            self.assertIn("not yet measured", text)
 
     def test_thresholds_from_env_and_file(self):
         saved = self._without_vision_env()
@@ -690,41 +790,75 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertEqual(log.loop_count, 1)
 
     def test_cpu_profile_parameters_only_when_selected(self):
+        # The cpu stereo set is the previous command line, including VisKeyFrameThr 30.
+        cpu_stereo = {
+            "Optimizer/GravitySigma": "0.1",
+            "Vis/FeatureType": "10",
+            "Kp/DetectorStrategy": "10",
+            "Vis/MaxFeatures": "400",
+            "Vis/MinInliers": "15",
+            "Kp/MaxFeatures": "300",
+            "Grid/MapFrameProjection": "true",
+            "Grid/NormalsSegmentation": "false",
+            "Grid/MaxGroundHeight": "1.0",
+            "Grid/MaxObstacleHeight": "2.0",
+            "Grid/CellSize": "0.1",
+            "Grid/RangeMax": "5",
+            "Rtabmap/DetectionRate": "1",
+            "RGBD/StartAtOrigin": "true",
+            "Stereo/MaxDisparity": "64",
+            "Odom/Strategy": "0",
+            "Odom/ResetCountdown": "1",
+            "Odom/VisKeyFrameThr": "30",
+            "OdomF2M/MaxSize": "1000",
+            "Vis/CorGuessWinSize": "20",
+            "Vis/EstimationType": "1",
+        }
+        self.assertEqual(rtab.effective_parameters("cpu", "stereo"), cpu_stereo)
+        cpu_ini = rtab.load_profile_ini("cpu")[1]
+        full_ini = rtab.load_profile_ini("full")[1]
+        hw_ini = rtab.load_profile_ini("hw")[1]
+        self.assertEqual(cpu_ini["Odom/VisKeyFrameThr"], "30")
+        self.assertNotIn("Odom/VisKeyFrameThr", full_ini)
+        self.assertEqual(hw_ini["Odom/VisKeyFrameThr"], "40")
+        self.assertEqual(hw_ini["Vis/MaxFeatures"], "600")
+        self.assertNotIn("Grid/CellSize", hw_ini)
+        self.assertNotIn("Stereo/MaxDisparity", hw_ini)
+        self.assertNotIn("Rtabmap/DetectionRate", full_ini)
+        for name in ("cpu", "full", "hw"):
+            for camera in ("stereo", "rgbd", "rgbd-wrapper"):
+                launched = self._profile_args(name, camera)
+                self.assertTrue(launched["RTAB_CFG"].endswith(f"/{name}.ini"), launched["RTAB_CFG"])
+                self.assertIn(f"vision profile={name} camera={camera}", launched["stderr"])
+                self.assertIn("stereo=", launched["stderr"])
+                logged = {}
+                for line in launched["stderr"].splitlines():
+                    if line.startswith("rtabmap_param source=ini "):
+                        key, value = line[len("rtabmap_param source=ini ") :].split("=", 1)
+                        logged[key] = value
+                self.assertEqual(logged, rtab.load_profile_ini(name)[1])
+                self.assertNotIn("--Vis/MaxFeatures", launched["RTAB_ARGS"])
+                self.assertNotIn("VisKeyFrameThr", launched["RTAB_ARGS"] + launched["RTAB_ODOM"])
         cpu = self._profile_args("cpu", "stereo")
         full = self._profile_args("full", "stereo")
-        for key in (
-            "--Vis/MaxFeatures 400",
-            "--Vis/MinInliers 15",
-            "--Kp/MaxFeatures 300",
-            "--Stereo/MaxDisparity 64",
-            "--Grid/CellSize 0.1",
-            "--Grid/RangeMax 5",
-            "--Rtabmap/DetectionRate 1",
-        ):
-            self.assertIn(key, cpu["RTAB_ARGS"])
-            self.assertNotIn(key, full["RTAB_ARGS"])
-        for key in ("--Vis/FeatureType 10", "--Kp/DetectorStrategy 10"):
-            self.assertIn(key, cpu["RTAB_ARGS"])
-            self.assertIn(key, full["RTAB_ARGS"])
-        for key in (
-            "--OdomF2M/MaxSize 1000",
-            "--Vis/CorGuessWinSize 20",
-            "--Odom/VisKeyFrameThr 30",
-        ):
-            self.assertIn(key, cpu["RTAB_ODOM"])
-            self.assertNotIn(key, full["RTAB_ODOM"])
-        for odom in (cpu["RTAB_ODOM"], full["RTAB_ODOM"]):
-            self.assertIn("--Odom/ResetCountdown 1", odom)
-            self.assertIn("--Odom/Strategy 0", odom)
-            self.assertIn("--Vis/EstimationType 1", odom)
-        self.assertIn("--Vis/MaxFeatures 1000", full["RTAB_ARGS"])
-        self.assertIn("--OdomF2M/MaxSize 2000", full["RTAB_ODOM"])
+        self.assertIn("--Stereo/MaxDisparity 64", cpu["RTAB_ARGS"])
+        self.assertNotIn("MaxDisparity", full["RTAB_ARGS"])
         self.assertNotIn("MaxDisparity", self._profile_args("cpu", "rgbd")["RTAB_ARGS"])
-        self.assertNotIn("MaxDisparity", self._profile_args("full", "rgbd")["RTAB_ARGS"])
+        self.assertNotIn("MaxDisparity", self._profile_args("hw", "rgbd")["RTAB_ARGS"])
         self.assertIn("--Vis/DepthAsMask true", self._profile_args("cpu", "rgbd")["RTAB_ODOM"])
+        self.assertIn("--Vis/DepthAsMask true", self._profile_args("hw", "rgbd")["RTAB_ODOM"])
+        self.assertNotIn("DepthAsMask", cpu["RTAB_ODOM"])
         wrapper = self._profile_args("cpu", "rgbd-wrapper")
         self.assertIn("--Grid/3D true", wrapper["RTAB_ARGS"])
         self.assertNotIn("MaxDisparity", wrapper["RTAB_ARGS"])
+        self.assertIn("--Grid/3D true", self._profile_args("full", "rgbd-wrapper")["RTAB_ARGS"])
+        self.assertIn("--Grid/3D true", self._profile_args("hw", "rgbd-wrapper")["RTAB_ARGS"])
+        low = self._profile_args("full", "rgbd", extra_env="CAM_STEREO_RES=640x400 ")
+        self.assertIn("below 1280x720", low["stderr"])
+        self.assertIn("stereo=640x400", low["stderr"])
+        self.assertNotIn("below 1280x720", full["stderr"])
+        self.assertNotIn("below 1280x720", cpu["stderr"])
+        self.assertIn("below 1280x720", self._profile_args("hw", "stereo", extra_env="CAM_STEREO_RES=320x200 ")["stderr"])
         for name in ("gz_start_rtabmap.sh", "gz_start_rtabmap_stereo.sh", "gz_start_rtabmap_rgbd.sh"):
             text = (Path(__file__).resolve().parents[1] / "startFiles" / name).read_text(encoding="utf-8")
             self.assertIn("source ", text)
@@ -761,6 +895,16 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertEqual(got.min_median_features, 40)
             self.assertEqual(got.min_inliers, 15)
             self.assertEqual(got.min_odom_hz, 7)
+            os.environ["VISION_PROFILE"] = "hw"
+            os.environ.pop("VISION_MIN_MEDIAN_FEATURES", None)
+            os.environ.pop("VISION_MIN_INLIERS", None)
+            hw = HEALTH.thresholds_from_env()
+            self.assertEqual(hw.min_median_features, 80)
+            self.assertEqual(hw.min_inliers, 20)
+            os.environ["VISION_PROFILE"] = "nope"
+            with self.assertRaises(ValueError):
+                HEALTH.thresholds_from_env()
+            os.environ["VISION_PROFILE"] = "cpu"
             os.environ["VISION_MIN_MEDIAN_FEATURES"] = "500"
             os.environ["VISION_MIN_INLIERS"] = "20"
             explicit = HEALTH.thresholds_from_env()

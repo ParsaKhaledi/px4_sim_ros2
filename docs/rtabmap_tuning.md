@@ -1,7 +1,9 @@
 # RTAB-Map parameters for this sim
 
-The three scripts under `includes/gz/startFiles/gz_start_rtabmap*.sh` pass these
-on purpose. Names were checked against `corelib/include/rtabmap/core/Parameters.h`
+The three scripts under `includes/gz/startFiles/gz_start_rtabmap*.sh` pass the
+camera-mode keys on purpose. The per-profile keys live in
+`includes/gz/startFiles/rtabmap_profiles/{cpu,full,hw}.ini` and reach both
+nodes through the launch argument `cfg:=` (`config_path`). Names were checked against `corelib/include/rtabmap/core/Parameters.h`
 on the current rtabmap master (the same keys Jazzy and Humble ship) and against
 `rtabmap_launch/launch/rtabmap.launch.py` on the `ros2` branch. This machine
 does not have the image installed, so the launch-argument name was not read
@@ -96,8 +98,8 @@ subscribes to that topic and scores the run from `.env`. The defaults are:
 
 - `VISION_MAX_LOST_STREAK=3`: `lost` is not true for more than this many frames in a row
 - `VISION_MAX_RECOVERY_FRAMES=2`: after each loss, the first frame with `lost` false arrives within this many frames (`Odom/ResetCountdown 1` is what makes that possible). A loss that is still open at the end of the log fails this gate.
-- `VISION_MIN_MEDIAN_FEATURES`: median of `features`. Default 120. `VISION_PROFILE=cpu` uses 40 unless the variable is set.
-- `VISION_MIN_INLIERS`: `inliers` on frames that are not lost (`Vis/MinInliers`). Default 20. `VISION_PROFILE=cpu` uses 15 unless the variable is set. Lost frames are in the distribution, and the streak and recovery gates cover them. The first frame after an automatic odometry reset is not lost and reports 0 inliers, because the local map was just cleared. That frame stays in the distribution and is left out of this gate.
+- `VISION_MIN_MEDIAN_FEATURES`: median of `features`. `full` uses 120, `cpu` uses 40, `hw` uses 80, unless the variable is set. 40 was measured at 320x200. 120 was measured when `full` was 640x400 and is not yet remeasured at 1280x800. 80 is not yet measured.
+- `VISION_MIN_INLIERS`: `inliers` on frames that are not lost (`Vis/MinInliers`). `full` and `hw` use 20, `cpu` uses 15, unless the variable is set. The `hw` floor and the 1280x800 `full` floor are not yet measured. Lost frames are in the distribution, and the streak and recovery gates cover them. The first frame after an automatic odometry reset is not lost and reports 0 inliers, because the local map was just cleared. That frame stays in the distribution and is left out of this gate.
 - `VISION_MIN_ODOM_HZ=7`: rate from `odom_info` header stamps (simulation time, which PX4's EKF sees). The summary also reports the wall-clock rate and `ratio` = wall Hz / sim Hz. That ratio is not gated.
 
 The last JSONL line is `event=summary`. Each metric has `value`, `threshold`,
@@ -127,22 +129,46 @@ ros2 param get /rtabmap/rtabmap Vis/MaxFeatures
 ```
 
 `ResetCountdown` should be `1`, `Grid/NormalsSegmentation` `false`,
-`Optimizer/GravitySigma` `0.1`, `Vis/MaxFeatures` `1000` on `full` and `400`
-on `cpu`. If `ros2 param get`
+`Optimizer/GravitySigma` `0.1`, `Vis/MaxFeatures` `1000` on `full`, `600` on
+`hw`, and `400` on `cpu`. If `ros2 param get`
 says the parameter was not declared, the log line
 `Update parameter "Odom/ResetCountdown"="1"` from the odometry node is the
 check instead. Values passed only in `odom_args` will not appear on the
 SLAM node, and grid keys passed only in `args` will not appear on the
 odometry node.
 
-## CPU profile
+## Profiles
 
-`VISION_PROFILE=full` is the OAK-D S2 spec and the default. `VISION_PROFILE=cpu`
-is for Gazebo on llvmpipe (EGL headless, no GPU) with RTAB-Map in the same
-box. Measured on an 8-core CPU-only machine in `apt_world` with stereo:
+`VISION_PROFILE` defaults to `full`. Each profile has one ini file. The
+launch passes it as `cfg:=`. At start, stderr logs the profile, stereo size,
+color size, camera rate, IMU rate, the ini path, and every parameter.
+`rtabmap_param source=ini` is the file. `rtabmap_param source=camera` is the
+stereo-versus-RGB-D override (`Grid/MaxGroundHeight`, `Grid/MaxObstacleHeight`,
+`Vis/DepthAsMask`, the wrapper grid flags, and `Stereo/MaxDisparity` on cpu
+stereo). Both camera modes load the same ini.
 
-- full (640x400 at 30 Hz): RTF 0.125, odometry 30.3 Hz in sim time and 3.8 Hz on the wall, 64 ms per frame.
-- cpu (320x200 at 10 Hz): RTF 0.43-0.46, odometry 10.0 Hz in sim time and 4.3-4.6 Hz on the wall, 25-35 ms per frame.
+| Profile | Stereo | Color | Rate | IMU | Intended machine |
+|---|---|---|---|---|---|
+| `cpu` | 320x200 | 320x240 | 10 Hz | 100 Hz | CPU-only simulation and CI. Not for a real OAK-D. |
+| `full` | 1280x800 | 640x480 | 30 Hz | 200 Hz | Simulation on a machine with a GPU. |
+| `hw` | 1280x800 | 640x480 | 15 Hz | 200 Hz | Real OAK-D S2 on a LattePanda or Jetson Orin NX. |
+
+On a real OAK-D the stereo cameras compute depth on the device. `CameraType=rgbd`
+then uses that depth, which is the light path for the host. Host-side stereo
+matching is the heavier path. `hw` does not add grid ray tracing, a detection-rate
+cap, or a wider disparity search.
+
+`cpu` is the previous light set, including `Odom/VisKeyFrameThr 30`. `full`
+keeps the previous standard parameters. Only its stereo size changed, from
+640x400 to 1280x800. `hw` uses 600 features, a 1500-word local map, and
+`Odom/VisKeyFrameThr 40`. Those `hw` numbers, and the 1280x800 `full` health
+floors, are not yet measured.
+
+Measured on an 8-core CPU-only machine in `apt_world` with stereo, before
+`full` moved to 1280x800:
+
+- full at 640x400 and 30 Hz: RTF 0.125, odometry 30.3 Hz in sim time and 3.8 Hz on the wall, 64 ms per frame.
+- cpu at 320x200 and 10 Hz: RTF 0.43-0.46, odometry 10.0 Hz in sim time and 4.3-4.6 Hz on the wall, 25-35 ms per frame.
 - cpu with `CAM_RATE_HZ=15`: RTF 0.31, odometry 15.2 Hz in sim time and 4.7 Hz on the wall.
 
 Gazebo renders in lockstep, so the sim-time rate equals the camera rate as long as the per-frame odometry time stays below the wall-time gap between frames. On the cpu profile that gap is set by rendering: 25-35 ms of odometry fits inside it, so every camera frame is tracked and the sim-time odometry rate is the camera rate. Wall-clock 7 Hz is not reachable with CPU rendering, because Gazebo rendering alone takes about 200% CPU.
@@ -151,42 +177,49 @@ Mapping-side tweaks do not help. The SLAM node uses 5-8% CPU. In rtabmap 0.22.1 
 
 `CAM_RATE_HZ=15` is an option for steadier tracking in motion. In one hover trial it had 0 lost frames, against 1 lost frame at 10 Hz. It is not the cpu default. The cpu default stays 10 Hz cameras and 320x200 stereo.
 
-Set it in `.env` and recreate the PX4, StatePublisher, and Rtabmap containers.
-`CAM_RATE_HZ`, `CAM_STEREO_WIDTH`, `CAM_STEREO_HEIGHT`, `CAM_COLOR_WIDTH`,
+Set the profile in `.env` and recreate the PX4, StatePublisher, and Rtabmap containers.
+`CAM_STEREO_RES` sets the stereo size. `CAM_STEREO_WIDTH` and `CAM_STEREO_HEIGHT`
+do the same and must form one allowed pair. Allowed sizes are `1280x800`,
+`640x400`, and `320x200`. Any other size, including `1280x720`, is an error:
+that crop would move the principal point, and this tree does not adjust it.
+`full` or `hw` below 1280x720 logs a warning. `CAM_RATE_HZ`, `CAM_COLOR_WIDTH`,
 `CAM_COLOR_HEIGHT`, and `IMU_RATE_HZ` override one field and leave the rest
 of the profile. The mount (`CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, `CAM_Z`) is
 unchanged. `geometry.py` is still the only copy of the intrinsics: fx, fy,
 cx, and cy scale with the resolution ratio, so the field of view stays, and
-the right `P[3]` is `-fx_scaled * 0.075`. Both stereo cameras still share the
-left K. The checked-in SDF and URDF are the full profile. Container start
-re-renders them the same way it applies the mount.
+the right `P[3]` is `-fx_scaled * 0.075` (`P[3] / P[0] = -0.075`). Both stereo
+cameras still share the left K. The checked-in SDF and URDF are the full
+profile (1280x800 stereo, 640x480 color). Container start re-renders them
+the same way it applies the mount.
 
-What the cpu numbers cost and save:
+| Setting | full | hw | cpu | Effect |
+|---|---|---|---|---|
+| Stereo size | 1280x800 | 1280x800 | 320x200 | Native OV9282 size, or the quarter-size calibration bin. |
+| Color and depth | 640x480 | 640x480 | 320x240 | Depth in the sim uses the color size. |
+| Camera rate | 30 | 15 | 10 | Frames Gazebo has to render, and the rate the host tracks. |
+| IMU rate | 200 | 200 | 100 | Noise bandwidth follows the rate. |
+| `Vis/MaxFeatures` | 1000 | 600 | 400 | Features to extract and match. Default is 1000. `hw` 600 is not yet measured. |
+| `OdomF2M/MaxSize` | 2000 | 1500 | 1000 | Frame-to-map local map. Default is 2000. `hw` 1500 is not yet measured. |
+| `Vis/CorGuessWinSize` | 40 | 40 | 20 | Matching window in pixels when a motion guess exists. cpu halves it with the resolution. |
+| `Vis/MinInliers` | 20 | 20 | 15 | Minimum matches. The health floor follows it. |
+| `Odom/VisKeyFrameThr` | 150 (default, unset) | 40 | 30 | Keyframe when inliers drop under this count. The default 150 makes every frame a keyframe. cpu 30 is not yet measured live. hw 40 is not yet measured. |
+| `Kp/MaxFeatures` | 500 (default, unset) | 400 | 300 | Words for the loop-closure vocabulary. Default is 500. |
+| `Stereo/MaxDisparity` | unset | unset | 64, stereo only | Disparity search limit in pixels. Default is 128 on current master. cpu 64 matches that minimum depth at half of the 640x400 calibration. At 1280x800 the same default 128 is a farther minimum depth, because fx doubles. `hw` leaves the default so the search stays the standard width. |
+| `Grid/CellSize` | 0.05 (default, unset) | 0.05 (unset) | 0.1 | cpu uses four times fewer occupancy cells. **Nav2's costmap uses this grid.** |
+| `Grid/RangeMax` | 5 (default) | 5 (unset) | 5 | cpu pins the default so a later default cannot grow the grid. |
+| `Rtabmap/DetectionRate` | 1 (default) | 1 (unset) | 1 | How often the SLAM node accepts an image, in Hz. Not the odometry rate. cpu pins the default. |
 
-| Setting | full | cpu | Effect |
-|---|---|---|---|
-| Stereo size | 640x400 | 320x200 | Quarter of the pixels. Render and bridge cost drop with the pixel count. |
-| Color and depth | 640x480 | 320x240 | Same, quarter of the pixels. Depth uses the color size. |
-| `CAM_RATE_HZ` | 30 | 10 | A third of the frames Gazebo has to render. |
-| `IMU_RATE_HZ` | 200 | 100 | Half the IMU samples. Noise bandwidth follows the rate. |
-| `Vis/MaxFeatures` | 1000 | 400 | Fewer features to extract and match. Default is 1000 (`Parameters.h`, "0 no limits"). |
-| `OdomF2M/MaxSize` | 2000 | 1000 | Smaller frame-to-map local map. Default is 2000. |
-| `Vis/CorGuessWinSize` | 40 | 20 | Matching window in pixels when a motion guess exists. Half the window matches half the resolution. Default on current master is 40. |
-| `Vis/MinInliers` | 20 | 15 | Accept a pose with fewer matches. Small CPU effect; the health floor follows it. |
-| `Odom/VisKeyFrameThr` | 150 (default, unset) | 30 | Create a keyframe when inliers drop under this count. The default 150 is above typical inliers, so every frame becomes a keyframe and frame time grows over a run (23 to 36 ms on cpu). Not yet measured live. Passed in `odom_args`. |
-| `Kp/MaxFeatures` | 500 (default, unset) | 300 | Fewer words for the loop-closure vocabulary. Default is 500. |
-| `Stereo/MaxDisparity` | unset | 64, stereo only | Disparity search limit in pixels. Current master defaults to 128 (float); older headers default to 64 (int). Disparity is `fx * baseline / depth`, and fx scales with width, so 64 at half resolution is the same minimum depth as 128 at full resolution. |
-| `Grid/CellSize` | 0.05 (default, unset) | 0.1 | Four times fewer cells in the occupancy grid. **Nav2's costmap uses this grid, so the cells get coarser.** |
-| `Grid/RangeMax` | 5 (default) | 5 | Already the default ("Maximum range from sensor. 0=inf."). Pinned so a later default cannot grow the grid. No saving against today's full profile. |
-| `Rtabmap/DetectionRate` | 1 (default) | 1 | How often the SLAM node accepts an image, in Hz (`Parameters.h`). This is not the odometry rate. Stereo odometry is a separate node and is not capped by it. Pinned at the default. |
-
-Nothing from that list was dropped. Each name is a `RTABMAP_PARAM` in
+Nothing from the cpu list was dropped. Each name is a `RTABMAP_PARAM` in
 `corelib/include/rtabmap/core/Parameters.h` on current master, and the same
-names are in the 0.21-era header. They are passed inside `args:=` and
-`odom_args:=`. `Parameters::parseArguments` would silently ignore a key that
-is not in that map. `Odom/ResetCountdown 1`, `Odom/Strategy 0` (F2M),
+names are in the 0.21-era header. Profile keys are in the ini under `[Core]`,
+with `\` in the key the way RTAB-Map writes it. `readINI` turns that back
+into `Vis/MaxFeatures`. The SLAM node drops keys that start with `Odom` after
+loading the file. The odometry node keeps the odometry keys from the same
+file. Camera-mode keys stay in `args:=` and `odom_args:=` and override the
+file. `Parameters::parseArguments` would silently ignore a key that is not
+in that map. `Odom/ResetCountdown 1`, `Odom/Strategy 0` (F2M),
 `Vis/FeatureType 10` and `Kp/DetectorStrategy 10` (ORB-OCTREE), and
-`Vis/EstimationType 1` (PnP) stay on both profiles. Stereo stays on exact
+`Vis/EstimationType 1` (PnP) stay on every profile. Stereo stays on exact
 sync. RGB-D stays on approximate sync. `wait_imu_to_init` stays.
 
 `HealthCheck/vision_rate_probe.py` counts the image topics, `/imu`, and

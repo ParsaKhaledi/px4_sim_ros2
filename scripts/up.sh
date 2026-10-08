@@ -40,6 +40,7 @@ _keep_if_set CAM_Z
 _keep_if_set RTABMAPVIZ
 _keep_if_set VISION_PROFILE
 _keep_if_set CAM_RATE_HZ
+_keep_if_set CAM_STEREO_RES
 _keep_if_set CAM_STEREO_WIDTH
 _keep_if_set CAM_STEREO_HEIGHT
 _keep_if_set CAM_COLOR_WIDTH
@@ -57,6 +58,7 @@ _restore_or_default RTABMAPVIZ false
 _restore_or_default VISION_PROFILE full
 # Empty means "use the profile". Do not invent a number here.
 _restore_if_caller_set CAM_RATE_HZ
+_restore_if_caller_set CAM_STEREO_RES
 _restore_if_caller_set CAM_STEREO_WIDTH
 _restore_if_caller_set CAM_STEREO_HEIGHT
 _restore_if_caller_set CAM_COLOR_WIDTH
