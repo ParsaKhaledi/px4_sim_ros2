@@ -11,6 +11,7 @@ import argparse
 import importlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -61,15 +62,39 @@ def topic_matches_env(spec: dict, env: dict) -> bool:
     return True
 
 
+def topic_version(name: str) -> int:
+    """PX4 appends _vN when the uORB message version is non-zero."""
+    match = re.search(r"_v(\d+)$", name)
+    return int(match.group(1)) if match else 0
+
+
 def choose_topic(candidates, graph_topics, publisher_counts) -> str | None:
-    """Prefer a candidate that already has a publisher, else any that exists."""
-    for name in candidates:
-        if publisher_counts.get(name, 0) > 0:
-            return name
-    for name in candidates:
-        if name in graph_topics:
-            return name
-    return None
+    """Prefer a live publisher, then the versioned topic name.
+
+    A subscriber can put the unversioned name in the graph with no
+    publisher. That name must not win over vehicle_status_v1.
+    """
+    best = None
+    best_key = None
+    for index, name in enumerate(candidates):
+        publishers = publisher_counts.get(name, 0)
+        if publishers <= 0 and name not in graph_topics:
+            continue
+        key = (publishers > 0, topic_version(name), -index)
+        if best_key is None or key > best_key:
+            best = name
+            best_key = key
+    return best
+
+
+def effective_min_rate(spec: dict, env: dict | None = None) -> float:
+    """Software rendering cannot hold the 5 Hz camera floor."""
+    source = os.environ if env is None else env
+    if spec.get("group") == "camera":
+        override = source.get("HEALTH_CAMERA_MIN_HZ")
+        if override not in (None, ""):
+            return float(override)
+    return float(spec.get("min_rate_hz", 0))
 
 
 def judge_rate(publishers, count, window_s, min_rate, skip_if_absent, optional):
@@ -386,11 +411,12 @@ class HealthRunner:
             target = item["target"]
             bucket = measurements.get(target)
             count = bucket["count"] if bucket else 0
+            min_rate = effective_min_rate(spec, self.env)
             status, rate, reason = judge_rate(
                 publishers=item["publishers"],
                 count=count,
                 window_s=window_s,
-                min_rate=spec.get("min_rate_hz", 0),
+                min_rate=min_rate,
                 skip_if_absent=bool(spec.get("skip_if_absent")),
                 optional=bool(spec.get("optional")),
             )
@@ -409,7 +435,7 @@ class HealthRunner:
                 status=status,
                 publishers=item["publishers"],
                 rate_hz=round(rate, 3),
-                min_rate_hz=spec.get("min_rate_hz", 0),
+                min_rate_hz=min_rate,
                 last_msg_age_s=age,
                 reason=reason,
                 fields=extra or None,

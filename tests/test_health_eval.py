@@ -25,6 +25,23 @@ def test_auto_detect_falls_back_to_existing_topic():
     assert chosen == "/fmu/out/vehicle_status"
 
 
+def test_auto_detect_prefers_version_when_neither_has_a_publisher():
+    chosen = healthcheck.choose_topic(
+        ["/fmu/out/vehicle_status", "/fmu/out/vehicle_status_v1"],
+        {"/fmu/out/vehicle_status", "/fmu/out/vehicle_status_v1"},
+        {"/fmu/out/vehicle_status": 0, "/fmu/out/vehicle_status_v1": 0},
+    )
+    assert chosen == "/fmu/out/vehicle_status_v1"
+
+
+def test_software_camera_rate_override():
+    spec = {"group": "camera", "min_rate_hz": 5}
+    assert healthcheck.effective_min_rate(spec, {}) == 5
+    assert healthcheck.effective_min_rate(spec, {"HEALTH_CAMERA_MIN_HZ": "1"}) == 1
+    core = {"group": "core", "min_rate_hz": 20}
+    assert healthcheck.effective_min_rate(core, {"HEALTH_CAMERA_MIN_HZ": "1"}) == 20
+
+
 def test_absent_optional_topic_skips():
     status, rate, reason = healthcheck.judge_rate(0, 0, 2.0, 45, True, False)
     assert status == "skip"
@@ -64,3 +81,9 @@ def test_check_files_cover_services():
     assert "/clock" in topics
     assert "/ground_truth/odom" in topics
     assert any("vehicle_status_v1" in topic for topic in topics)
+    assert any("vehicle_local_position_v1" in topic for topic in topics)
+    status = next(
+        spec for spec in px4["topics"]
+        if any(name.endswith("vehicle_status_v1") for name in spec.get("auto_detect", []))
+    )
+    assert status["auto_detect"][0].endswith("_v1")

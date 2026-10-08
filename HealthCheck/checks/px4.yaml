@@ -16,17 +16,25 @@ topics:
     min_rate_hz: 50
     qos: sensor
     group: core
-  - topic: /fmu/out/vehicle_odometry
+  - auto_detect:
+      - /fmu/out/vehicle_odometry_v1
+      - /fmu/out/vehicle_odometry
     min_rate_hz: 20
     qos: sensor
     group: core
   - auto_detect:
-      - /fmu/out/vehicle_status
       - /fmu/out/vehicle_status_v1
+      - /fmu/out/vehicle_status
     min_rate_hz: 1
     qos: sensor
     group: core
     capture_fields: true
+  - auto_detect:
+      - /fmu/out/vehicle_local_position_v1
+      - /fmu/out/vehicle_local_position
+    min_rate_hz: 1
+    qos: sensor
+    group: core
   - topic: /camera/rgb/image_raw
     min_rate_hz: 5
     qos: sensor

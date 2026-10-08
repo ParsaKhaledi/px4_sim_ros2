@@ -224,6 +224,11 @@ class FlightWatch:
             self._close_ros()
         return self._result(crashed=False)
 
+    @staticmethod
+    def _subscribe(node, msg_type, topics, callback, qos) -> None:
+        for topic in topics:
+            node.create_subscription(msg_type, topic, callback, qos)
+
     def _open_ros(self) -> None:
         try:
             import rclpy
@@ -277,17 +282,27 @@ class FlightWatch:
             "mode_cmd": getattr(VehicleCommand, "VEHICLE_CMD_DO_SET_MODE", 176),
             "land_cmd": getattr(VehicleCommand, "VEHICLE_CMD_NAV_LAND", 21),
         }
-        for topic in ("/fmu/out/vehicle_status", "/fmu/out/vehicle_status_v1"):
-            node.create_subscription(VehicleStatus, topic, self._on_status, qos_sub)
-        node.create_subscription(
-            VehicleLocalPosition, "/fmu/out/vehicle_local_position", self._on_local, qos_sub
-        )
-        node.create_subscription(
-            VehicleLandDetected, "/fmu/out/vehicle_land_detected", self._on_landed, qos_sub
-        )
-        node.create_subscription(
-            VehicleAttitude, "/fmu/out/vehicle_attitude", self._on_attitude, qos_sub
-        )
+        # PX4 1.17 publishes _vN only when MESSAGE_VERSION is non-zero.
+        # vehicle_status and vehicle_local_position are version 1.
+        # Attitude, land, and the inbound command topics are version 0,
+        # so the plain name is what the autopilot uses. Both names are
+        # bound so a publisher on either one is enough.
+        self._subscribe(node, VehicleStatus, (
+            "/fmu/out/vehicle_status_v1",
+            "/fmu/out/vehicle_status",
+        ), self._on_status, qos_sub)
+        self._subscribe(node, VehicleLocalPosition, (
+            "/fmu/out/vehicle_local_position_v1",
+            "/fmu/out/vehicle_local_position",
+        ), self._on_local, qos_sub)
+        self._subscribe(node, VehicleLandDetected, (
+            "/fmu/out/vehicle_land_detected_v1",
+            "/fmu/out/vehicle_land_detected",
+        ), self._on_landed, qos_sub)
+        self._subscribe(node, VehicleAttitude, (
+            "/fmu/out/vehicle_attitude_v1",
+            "/fmu/out/vehicle_attitude",
+        ), self._on_attitude, qos_sub)
         try:
             from nav_msgs.msg import Odometry
 
