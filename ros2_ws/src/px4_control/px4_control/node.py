@@ -28,7 +28,6 @@ from px4_control.lidar_height import (
     DISTANCE_SENSOR_ACTIVE_LOG,
     LidarHeightGuard,
     lidar_height_log,
-    tilt_compensated_height,
 )
 from px4_control.arming import (
     ack_failure_text,
@@ -164,8 +163,12 @@ class Px4ControlNode(Node):
         self._lidar_guard = LidarHeightGuard(
             float(self.get_parameter('lidar_height_tolerance_m').value),
             float(self.get_parameter('lidar_height_duration_s').value),
+            float(self.get_parameter('lidar_mount_offset_m').value),
         )
         self._distance_m: float | None = None
+        self._distance_min = 0.0
+        self._distance_max = 0.0
+        self._distance_quality = 0
         self._non_downward_range = False
         self._lidar_orientation_logged = False
         self._body_down_cosine = 1.0
@@ -279,6 +282,7 @@ class Px4ControlNode(Node):
             'ground_truth_odom_topic': '/ground_truth/odom',
             'lidar_height_tolerance_m': 0.3,
             'lidar_height_duration_s': 0.5,
+            'lidar_mount_offset_m': 0.19,
         }
         for name, value in defaults.items():
             if not self.has_parameter(name):
@@ -352,15 +356,13 @@ class Px4ControlNode(Node):
             with self._lock:
                 self._non_downward_range = True
             return
-        distance = float(msg.current_distance)
-        minimum = float(msg.min_distance)
-        maximum = float(msg.max_distance)
-        if not math.isfinite(distance) or distance < minimum or (maximum > minimum and distance > maximum):
-            return
         announce = False
         with self._lock:
             announce = self._distance_m is None
-            self._distance_m = distance
+            self._distance_m = float(msg.current_distance)
+            self._distance_min = float(msg.min_distance)
+            self._distance_max = float(msg.max_distance)
+            self._distance_quality = int(msg.signal_quality)
         if announce:
             self.get_logger().info(DISTANCE_SENSOR_ACTIVE_LOG)
 
@@ -572,11 +574,18 @@ class Px4ControlNode(Node):
             return self._lidar_guard.absence(now, False)
         if not self._armed or snap is None:
             return None
-        lidar_height = tilt_compensated_height(self._distance_m, self._body_down_cosine)
         ekf_height = self._ekf_height_above_ground()
-        if lidar_height is None or ekf_height is None:
+        if ekf_height is None:
             return None
-        reason = self._lidar_guard.observe(now, lidar_height, ekf_height)
+        reason = self._lidar_guard.observe(
+            now,
+            self._distance_m,
+            self._body_down_cosine,
+            ekf_height,
+            self._distance_min,
+            self._distance_max,
+            self._distance_quality,
+        )
         if reason is None:
             return None
         self._motion.abort_brake_hold_land(now, snap, reason)
