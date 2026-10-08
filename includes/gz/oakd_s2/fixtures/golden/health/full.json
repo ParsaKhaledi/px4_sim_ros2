@@ -1,0 +1,8 @@
+{
+  "max_lost_streak": 3,
+  "max_recovery_frames": 2,
+  "min_inliers": 20.0,
+  "min_median_features": 120.0,
+  "min_odom_hz": 7.0,
+  "profile": "full"
+}

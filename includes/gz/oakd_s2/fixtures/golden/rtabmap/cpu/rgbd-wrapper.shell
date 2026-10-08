@@ -1,0 +1,3 @@
+RTAB_CFG=rtabmap_profiles/cpu.ini
+RTAB_ARGS='-d --Grid/MaxGroundHeight 0.5 --Grid/MaxObstacleHeight 2.2 --Grid/RayTracing true --Grid/3D true --Grid/FlatObstacleDetected true'
+RTAB_ODOM='--Vis/DepthAsMask true'

@@ -1,0 +1,18 @@
+vision profile=hw camera=stereo stereo=1280x800 color=640x480 camera_hz=15 imu_hz=200 ini=rtabmap_profiles/hw.ini
+rtabmap_param source=ini Grid/MapFrameProjection=true
+rtabmap_param source=ini Grid/NormalsSegmentation=false
+rtabmap_param source=ini Kp/DetectorStrategy=10
+rtabmap_param source=ini Kp/MaxFeatures=400
+rtabmap_param source=ini Odom/ResetCountdown=1
+rtabmap_param source=ini Odom/Strategy=0
+rtabmap_param source=ini Odom/VisKeyFrameThr=40
+rtabmap_param source=ini OdomF2M/MaxSize=1500
+rtabmap_param source=ini Optimizer/GravitySigma=0.1
+rtabmap_param source=ini RGBD/StartAtOrigin=true
+rtabmap_param source=ini Vis/CorGuessWinSize=40
+rtabmap_param source=ini Vis/EstimationType=1
+rtabmap_param source=ini Vis/FeatureType=10
+rtabmap_param source=ini Vis/MaxFeatures=600
+rtabmap_param source=ini Vis/MinInliers=20
+rtabmap_param source=camera Grid/MaxGroundHeight=1.0
+rtabmap_param source=camera Grid/MaxObstacleHeight=2.0

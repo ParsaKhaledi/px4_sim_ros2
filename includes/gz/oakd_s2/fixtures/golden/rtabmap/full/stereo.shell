@@ -1,0 +1,3 @@
+RTAB_CFG=rtabmap_profiles/full.ini
+RTAB_ARGS='-d --Grid/MaxGroundHeight 1.0 --Grid/MaxObstacleHeight 2.0'
+RTAB_ODOM=''

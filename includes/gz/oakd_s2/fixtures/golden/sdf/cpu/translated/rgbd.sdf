@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from includes/gz/oakd_s2. Mount on base_link: 0.200000 -0.010000 0.300000 0.000000 0.296706 0.000000 (pitch 17 deg down). Model name stays OakD-Lite so PX4 x500_depth can include it. -->
+<sdf version="1.9">
+  <model name="OakD-Lite">
+    <pose>0 0 0 0 0 0</pose>
+    <self_collide>false</self_collide>
+    <static>false</static>
+    <link name="camera_link">
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.091</mass>
+        <inertia>
+          <ixx>7.795097916666666e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.057617166666667e-05</iyy>
+          <iyz>0</iyz>
+          <izz>7.532835916666667e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="housing">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.0229 0.097 0.0295</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.12 0.12 0.13 1</ambient>
+          <diffuse>0.2 0.2 0.22 1</diffuse>
+        </material>
+      </visual>
+      <collision name="housing">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.0229 0.097 0.0295</size>
+          </box>
+        </geometry>
+      </collision>
+      <sensor name="IMX378" type="camera">
+        <pose>0.011450 0.000000 0.000000 0.000000 0.000000 0.000000</pose>
+        <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
+        <topic>/camera/rgb/image_raw</topic>
+        <always_on>true</always_on>
+        <update_rate>10</update_rate>
+        <visualize>true</visualize>
+        <camera name="IMX378">
+          <horizontal_fov>1.151917306316258</horizontal_fov>
+          <image>
+            <width>320</width>
+            <height>240</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.08</near>
+            <far>50</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+          <distortion>
+            <k1>0</k1>
+            <k2>0</k2>
+            <k3>0</k3>
+            <p1>0</p1>
+            <p2>0</p2>
+          </distortion>
+          <lens>
+            <type>gnomonical</type>
+            <scale_to_hfov>false</scale_to_hfov>
+            <intrinsics>
+              <fx>246.3783942103333</fx>
+              <fy>246.3783942103333</fy>
+              <cx>160</cx>
+              <cy>120</cy>
+              <s>0</s>
+            </intrinsics>
+            <projection>
+              <p_fx>246.3783942103333</p_fx>
+              <p_fy>246.3783942103333</p_fy>
+              <p_cx>160</p_cx>
+              <p_cy>120</p_cy>
+              <tx>0</tx>
+              <ty>0</ty>
+            </projection>
+          </lens>
+          <optical_frame_id>camera_rgb_optical_frame</optical_frame_id>
+          <camera_info_topic>/camera/rgb/camera_info</camera_info_topic>
+        </camera>
+      </sensor>
+      <sensor name="rgb_aligned_depth" type="depth_camera">
+        <pose>0.011450 0.000000 0.000000 0.000000 0.000000 0.000000</pose>
+        <gz_frame_id>camera_rgb_optical_frame</gz_frame_id>
+        <topic>/camera/depth/image_raw</topic>
+        <always_on>true</always_on>
+        <update_rate>10</update_rate>
+        <visualize>true</visualize>
+        <camera name="rgb_aligned_depth">
+          <horizontal_fov>1.151917306316258</horizontal_fov>
+          <image>
+            <width>320</width>
+            <height>240</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.2</near>
+            <far>12</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+          <lens>
+            <type>gnomonical</type>
+            <scale_to_hfov>false</scale_to_hfov>
+            <intrinsics>
+              <fx>246.3783942103333</fx>
+              <fy>246.3783942103333</fy>
+              <cx>160</cx>
+              <cy>120</cy>
+              <s>0</s>
+            </intrinsics>
+            <projection>
+              <p_fx>246.3783942103333</p_fx>
+              <p_fy>246.3783942103333</p_fy>
+              <p_cx>160</p_cx>
+              <p_cy>120</p_cy>
+              <tx>0</tx>
+              <ty>0</ty>
+            </projection>
+          </lens>
+          <optical_frame_id>camera_rgb_optical_frame</optical_frame_id>
+          <camera_info_topic>/camera/depth/camera_info</camera_info_topic>
+        </camera>
+      </sensor>
+      <sensor name="BNO086" type="imu">
+        <pose>0.000000 0.000000 0.000000 0.000000 0.000000 0.000000</pose>
+        <gz_frame_id>imu_link</gz_frame_id>
+        <topic>/imu</topic>
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+        <imu>
+          <orientation_reference_frame>
+            <localization>ENU</localization>
+          </orientation_reference_frame>
+          <angular_velocity>
+          <x>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.0009873073195907479</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.0001</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.0009873073195907479</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.0001</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.0009873073195907479</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.0001</bias_stddev>
+            </noise>
+          </z>
+          </angular_velocity>
+          <linear_acceleration>
+          <x>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01109495794515689</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01109495794515689</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>0.01109495794515689</stddev>
+              <bias_mean>0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+      <gravity>true</gravity>
+    </link>
+  </model>
+</sdf>

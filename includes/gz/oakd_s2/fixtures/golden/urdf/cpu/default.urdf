@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<!-- Generated from includes/gz/oakd_s2. camera_joint matches PX4 x500_depth pose 0.120000 0.030000 0.242000 0.000000 0.296706 0.000000. -->
+<robot name="x500_depth">
+  <link name="base_link"/>
+  <link name="camera_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.091"/>
+      <inertia ixx="7.795097916666666e-05" ixy="0" ixz="0" iyy="1.057617166666667e-05" iyz="0" izz="7.532835916666667e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.0229 0.097 0.0295"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.0229 0.097 0.0295"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.120000 0.030000 0.242000" rpy="0.000000 0.296706 0.000000"/>
+  </joint>
+
+  <joint name="stereo_left_camera_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="stereo_left_camera_frame"/>
+    <origin xyz="0.011450 0.037500 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="stereo_left_camera_frame"/>
+  <joint name="stereo_left_camera_optical_frame_joint" type="fixed">
+    <parent link="stereo_left_camera_frame"/>
+    <child link="stereo_left_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
+  </joint>
+  <link name="stereo_left_camera_optical_frame"/>
+
+  <joint name="stereo_right_camera_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="stereo_right_camera_frame"/>
+    <origin xyz="0.011450 -0.037500 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="stereo_right_camera_frame"/>
+  <joint name="stereo_right_camera_optical_frame_joint" type="fixed">
+    <parent link="stereo_right_camera_frame"/>
+    <child link="stereo_right_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
+  </joint>
+  <link name="stereo_right_camera_optical_frame"/>
+
+  <joint name="camera_rgb_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_rgb_frame"/>
+    <origin xyz="0.011450 0.000000 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="camera_rgb_frame"/>
+  <joint name="camera_rgb_optical_frame_joint" type="fixed">
+    <parent link="camera_rgb_frame"/>
+    <child link="camera_rgb_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079633 0.00000000 -1.57079633"/>
+  </joint>
+  <link name="camera_rgb_optical_frame"/>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="imu_link"/>
+
+</robot>
