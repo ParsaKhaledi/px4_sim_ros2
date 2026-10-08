@@ -37,8 +37,10 @@
       <!-- IMU Sensor -->
       <sensor name="IMU" type="imu">
         <pose>0.01233 -0.03 .014 0 0 0</pose>
+        <gz_frame_id>imu_link</gz_frame_id>
+        <topic>/imu</topic>
         <imu>
-          <topic>imu/data</topic>
+          <topic>/imu</topic>
           <orientation>
             <covariance>0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</covariance>
           </orientation>
@@ -93,6 +95,7 @@
       </sensor> -->
       <sensor name="stereo_right" type="camera">
         <pose>0.1233 -0.037 0.013 0 0.3 0</pose>
+        <gz_frame_id>stereo_right_camera_frame</gz_frame_id>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>
@@ -118,6 +121,7 @@
       </sensor>
       <sensor name="stereo_left" type="camera">
         <pose>0.1233 0.037 0.013 0 0.3 0</pose>
+        <gz_frame_id>stereo_left_camera_frame</gz_frame_id>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <update_rate>30</update_rate>

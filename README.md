@@ -38,6 +38,8 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `registry` | Image registry | `docker.io/alienkh` |
 | `px4TAG` | Image tag in `.env` | `v3.0.0` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
+| `VISION_PROFILE` | `full` (30 Hz cameras, 200 Hz IMU) or `cpu` (10 Hz cameras, 100 Hz IMU) | `full` |
+| `IMU_SOURCE` | `oak` (camera IMU) or `px4` (flight IMU on `/imu`) | `oak` |
 | `World` | Gazebo world filename stem | `default` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
 
@@ -105,6 +107,31 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
 Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation. Headless Gazebo, sim time, ground truth, offline worlds, wall maps, trajectory scoring, and preflight checks are described in [docs/simulation.md](docs/simulation.md).
+
+## IMU source
+
+`IMU_SOURCE` selects the `sensor_msgs/Imu` publisher on `/imu`. RTAB-Map already subscribes to that topic. Both modes publish the same static camera tree, parsed from the `x500_depth` model and the Oak-D SDF (`CAM_PITCH_DEG`, `CAM_X`, `CAM_Y`, and `CAM_Z` override the mount when they are set).
+
+| | `oak` (default) | `px4` |
+| --- | --- | --- |
+| When | The camera IMU is on the Oak-D, so no lever arm and no PX4 time sync | EKF2 and RTAB-Map should share the flight IMU |
+| Publisher | Gazebo `/imu` bridged to ROS `/imu` | `px4_imu_relay` from `/fmu/out/sensor_combined` and `/fmu/out/vehicle_attitude` |
+| `frame_id` | `imu_link` | `base_link` |
+| Expected sim rate | `IMU_RATE_HZ`, or the `VISION_PROFILE` rate | `PX4_IMU_RATE_HZ` (default 100) |
+
+`oak` frame tree for `CameraType=rgbd`. The stereo model uses `stereo_left_camera_frame` and `stereo_right_camera_frame` in place of the RGB and depth frames. The 0.3 rad pitch is the sensor pose in the current Oak-D SDF. The mount itself is untilted unless `CAM_PITCH_DEG` is set.
+
+```
+base_link
+└── OakD-Lite/base_link                 0.12  0.03  0.242
+    ├── camera_rgb_frame                sensor pose, pitch 0.3 rad
+    │   └── camera_rgb_optical_frame    rpy -pi/2  0  -pi/2
+    ├── depth_camera_frame
+    │   └── depth_camera_optical_frame
+    └── imu_link                        /imu in oak mode
+```
+
+`px4` uses that same tree. `/imu` is stamped in `base_link`, and RTAB-Map rotates it into the camera optical frame through TF. The relay converts PX4 FRD/NED specific force, gyro, and attitude into FLU/ENU. At rest the z acceleration is about +9.81 m/s².
 
 Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
 

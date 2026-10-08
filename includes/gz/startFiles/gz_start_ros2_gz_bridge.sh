@@ -10,13 +10,30 @@ source "${SCRIPT_DIR}/gz_resolve_dir.sh"
 gz_resolve_dir || exit 1
 BASE_CONFIG="${GZ_DIR}/config_gz_bridge.yaml"
 SIM_CONFIG="${GZ_DIR}/config_gz_bridge_sim.yaml"
+IMU_CONFIG="${GZ_DIR}/config_gz_bridge_imu.yaml"
 MERGED_CONFIG="/tmp/px4_gz_bridge.yaml"
+IMU_SOURCE="${IMU_SOURCE:-oak}"
 
 cat "${BASE_CONFIG}" > "${MERGED_CONFIG}"
 printf '\n' >> "${MERGED_CONFIG}"
 if [ -f "${SIM_CONFIG}" ]; then
   cat "${SIM_CONFIG}" >> "${MERGED_CONFIG}"
 fi
+case "${IMU_SOURCE}" in
+  oak|OAK)
+    if [ -f "${IMU_CONFIG}" ]; then
+      printf '\n' >> "${MERGED_CONFIG}"
+      cat "${IMU_CONFIG}" >> "${MERGED_CONFIG}"
+    fi
+    ;;
+  px4|PX4)
+    echo "IMU_SOURCE=px4: Gazebo /imu is not bridged"
+    ;;
+  *)
+    echo "ERROR: IMU_SOURCE must be oak or px4, got ${IMU_SOURCE}" >&2
+    exit 1
+    ;;
+esac
 
 USE_SIM_TIME="${USE_SIM_TIME:-true}"
 

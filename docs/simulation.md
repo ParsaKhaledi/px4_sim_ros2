@@ -140,11 +140,11 @@ python3 -m pytest
 Checks:
 
 * `/sim/real_time_factor` >= `PREFLIGHT_MIN_RTF` and `/clock` is fresh and advancing. When `PREFLIGHT_MIN_RTF` is unset, the minimum is 0.15 if `HEADLESS_SOFTWARE` is 1 (measured about 0.20 on `apt_world` and 0.47 on `default.sdf` with llvmpipe) and 0.8 otherwise.
-* camera, IMU, and `/ground_truth/odom` rates in sim time. The line also shows the wall rate, for example `/ground_truth/odom: 50.0 Hz sim (10.4 Hz wall)`. Messages without a header fall back to wall Hz divided by the measured real-time factor. Camera and IMU minimums are half of `CAM_RATE_HZ` / `IMU_RATE_HZ` when those are set, otherwise half of the `VISION_PROFILE` rate (`full`: camera 30 Hz, IMU 200 Hz; `cpu`: camera 10 Hz, IMU 100 Hz; no profile uses the full rates). `PREFLIGHT_MIN_CAMERA_HZ` and `PREFLIGHT_MIN_IMU_HZ` override that. Ground truth stays at `PREFLIGHT_MIN_GT_HZ` (default 20). The IMU topic is `/imu`.
+* camera, IMU, and `/ground_truth/odom` rates in sim time. The line also shows the wall rate, for example `/ground_truth/odom: 50.0 Hz sim (10.4 Hz wall)`. Messages without a header fall back to wall Hz divided by the measured real-time factor. Camera and oak-IMU minimums are half of `CAM_RATE_HZ` / `IMU_RATE_HZ` when those are set, otherwise half of the `VISION_PROFILE` rate (`full`: camera 30 Hz, IMU 200 Hz; `cpu`: camera 10 Hz, IMU 100 Hz; no profile uses the full rates). `IMU_SOURCE=px4` uses half of `PX4_IMU_RATE_HZ` (default 100). `PREFLIGHT_MIN_CAMERA_HZ` and `PREFLIGHT_MIN_IMU_HZ` override that. Ground truth stays at `PREFLIGHT_MIN_GT_HZ` (default 20). The IMU topic is `/imu`. The check also requires a TF path from that message's `frame_id` to the camera optical frame (`camera_rgb_optical_frame`, or `stereo_left_camera_optical_frame` when `CameraType=stereo`).
 * RTAB-Map `/rtabmap/odom_info` has `lost=false`, and the RTAB-Map pose relative to its start is within `PREFLIGHT_MAX_POSE_ERR_M` (default 0.10 m) of ground truth relative to its start
 * PX4 `pre_flight_checks_pass` on `vehicle_status` or `vehicle_status_vN` (highest version)
 * EKF2 external-vision fusion: any of `cs_ev_pos`, `cs_ev_vel`, `cs_ev_hgt`, `cs_ev_yaw` on `estimator_status_flags` or a versioned name
-* TF pairs in `PREFLIGHT_TF_PAIRS` (default `world:spawn,world:base_link_gt,base_link:camera_rgb_frame,base_link:imu_link`)
+* TF pairs in `PREFLIGHT_TF_PAIRS` (default `world:spawn`, `world:base_link_gt`, `base_link:imu_link`, and `base_link:camera_rgb_frame`, or `base_link:stereo_left_camera_frame` when `CameraType=stereo`)
 
 Thresholds are environment variables, listed in `.env.example` and forwarded by Compose. The bridge script starts the service next to the real-time-factor publisher and the spawn frame.
 
@@ -152,7 +152,7 @@ Thresholds are environment variables, listed in `.env.example` and forwarded by 
 ros2 service call /sim/preflight_check std_srvs/srv/Trigger
 ```
 
-IMU is bridged from gz `/imu` to ROS `/imu` in `config_gz_bridge_sim.yaml`. The Oak-D model publishes `/imu`, and RTAB-Map subscribes to that ROS name. Camera image topics stay in `config_gz_bridge.yaml`. Do not add a second `/imu` bridge there.
+`IMU_SOURCE=oak` (the default) bridges gz `/imu` to ROS `/imu` from `config_gz_bridge_imu.yaml`. The Oak-D sensor frame is `imu_link`. `IMU_SOURCE=px4` does not bridge that topic. `px4_imu_relay` publishes `/imu` in `base_link` from `/fmu/out/sensor_combined` and `/fmu/out/vehicle_attitude`, which PX4 v1.17 exports in `dds_topics.yaml` with no version suffix. `sim_monitor.camera_tf` publishes the static camera tree from the x500_depth and Oak-D SDFs, including the optical frames, so either IMU can be rotated into the camera. Camera image topics stay in `config_gz_bridge.yaml`. Do not add a second `/imu` bridge there. The frame tree for both modes is in the root README.
 
 Each world under `includes/gz/worlds` loads NavSat, magnetometer, IMU, air pressure, and the sensors system with the ogre2 render engine. PX4's `GZ_SIM_SERVER_CONFIG_PATH` also adds those systems; the world files carry them so a world still has GPS and a compass if that server config is not applied. `apt_world` was missing the magnetometer, so `vehicle_global_position` never published and pre-arm failed.
 

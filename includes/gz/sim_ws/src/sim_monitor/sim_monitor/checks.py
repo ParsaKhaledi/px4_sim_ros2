@@ -101,6 +101,21 @@ def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> floa
     return 200.0
 
 
+def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
+    """Sim-time IMU rate for the selected ``IMU_SOURCE``.
+
+    ``oak`` uses ``IMU_RATE_HZ`` or ``VISION_PROFILE``. ``px4`` uses
+    ``PX4_IMU_RATE_HZ``, default 100 Hz, which is the sensor_combined
+    expectation when the live rate has not been measured.
+    """
+    env = os.environ if environ is None else environ
+    source = env.get("IMU_SOURCE", "").strip().lower()
+    if source == "px4":
+        override = _env_float(env, "PX4_IMU_RATE_HZ")
+        return 100.0 if override is None else override
+    return expected_sensor_hz("imu", env)
+
+
 def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
     """Preflight minimum. An explicit PREFLIGHT_MIN_*_HZ wins, else half the expected rate."""
     env = os.environ if environ is None else environ
@@ -108,6 +123,8 @@ def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
     override = _env_float(env, name)
     if override is not None:
         return override
+    if kind == "imu":
+        return 0.5 * expected_imu_hz(env)
     return 0.5 * expected_sensor_hz(kind, env)
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import time
 
+from sim_monitor.imu_source import default_tf_pairs, optical_frame
 from sim_monitor.checks import (
     RateTracker,
     check_max,
@@ -61,10 +62,7 @@ def main() -> None:
             self.gt_topic = os.environ.get("PREFLIGHT_GT_TOPIC", "/ground_truth/odom")
             self.rtab_topic = os.environ.get("PREFLIGHT_RTABMAP_ODOM_TOPIC", "/rtabmap/odom")
             self.rtab_info_topic = os.environ.get("PREFLIGHT_RTABMAP_INFO_TOPIC", "/rtabmap/odom_info")
-            self.tf_pairs = os.environ.get(
-                "PREFLIGHT_TF_PAIRS",
-                "world:spawn,world:base_link_gt,base_link:camera_rgb_frame,base_link:imu_link",
-            )
+            self.tf_pairs = default_tf_pairs()
             self.rates = {
                 self.camera_topic: RateTracker(2.0),
                 self.imu_topic: RateTracker(2.0),
@@ -85,6 +83,7 @@ def main() -> None:
             self.vision_flags = None
             self.status_topic = None
             self.flags_topic = None
+            self.imu_frame_id = ""
             self._subscribed = set()
             self.type_errors: dict[str, str] = {}
             self.tf_buffer = Buffer()
@@ -130,6 +129,11 @@ def main() -> None:
             now = time.monotonic()
             if topic in self.rates:
                 self.rates[topic].add(now, header_stamp_s(msg))
+            if topic == self.imu_topic:
+                header = getattr(msg, "header", None)
+                frame = getattr(header, "frame_id", "") if header is not None else ""
+                if frame:
+                    self.imu_frame_id = frame
             if topic == "/sim/real_time_factor":
                 self.rtf = float(msg.data)
             elif topic == "/clock":
@@ -181,6 +185,7 @@ def main() -> None:
                 ))
             results.append(self._rate(self.camera_topic, self.min_camera, now))
             results.append(self._rate(self.imu_topic, self.min_imu, now))
+            results.append(self._imu_to_optical())
             results.append(self._rate(self.gt_topic, self.min_gt, now))
             results.extend(self._rtabmap())
             results.extend(self._px4())
@@ -199,6 +204,19 @@ def main() -> None:
                 sim_hz = tracker.hz_sim(tracker.sim_times[-1])
             gated = gated_rate_hz(sim_hz, wall_hz, self.rtf)
             return check_rate(topic, gated, wall_hz, minimum)
+
+        def _imu_to_optical(self):
+            target = optical_frame()
+            frame = self.imu_frame_id
+            if not frame:
+                return False, line(False, "imu frame: /imu has no frame_id yet")
+            try:
+                ok = self.tf_buffer.can_transform(
+                    target, frame, Time(), timeout=Duration(seconds=0.2),
+                )
+            except Exception as exc:
+                return False, line(False, f"imu frame: {frame} -> {target} ({exc})")
+            return ok, line(ok, f"imu frame: {frame} -> {target}")
 
         def _rtabmap(self):
             if self.rtab_lost is None:

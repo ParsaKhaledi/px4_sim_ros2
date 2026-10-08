@@ -37,8 +37,10 @@
       <!-- IMU Sensor -->
       <sensor name="IMU" type="imu">
         <pose>0.01233 -0.03 .014 0 0 0</pose>
+        <gz_frame_id>imu_link</gz_frame_id>
+        <topic>/imu</topic>
         <imu>
-          <topic>imu/data</topic>
+          <topic>/imu</topic>
           <orientation>
             <covariance>0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</covariance>
           </orientation>
@@ -74,6 +76,7 @@
       </sensor>
       <sensor name="StereoOV7251" type="depth_camera">
         <pose>0.01233 -0.03 .01878 0 0.3 0</pose>
+        <gz_frame_id>depth_camera_frame</gz_frame_id>
         <camera>
           <horizontal_fov>1.274</horizontal_fov>
           <image>

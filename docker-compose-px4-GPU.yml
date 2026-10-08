@@ -22,6 +22,12 @@ services:
       DISPLAY: ${DISPLAY}
       XAUTHORITY: ${XAUTH}
       CameraType: ${CameraType}
+      IMU_SOURCE: ${IMU_SOURCE:-oak}
+      PX4_IMU_RATE_HZ: ${PX4_IMU_RATE_HZ:-}
+      CAM_PITCH_DEG: ${CAM_PITCH_DEG:-}
+      CAM_X: ${CAM_X:-}
+      CAM_Y: ${CAM_Y:-}
+      CAM_Z: ${CAM_Z:-}
       HEADLESS: ${HEADLESS:-0}
       HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}
       PX4_GZ_MODEL_POSE: ${PX4_GZ_MODEL_POSE:-}
