@@ -16,11 +16,13 @@ import numpy as np
 
 
 def _span_hz(stamps: deque[float], now: float, window_s: float) -> float:
+    """Rate inside a window whose right edge is ``now``, not the last stamp."""
     while stamps and now - stamps[0] > window_s:
         stamps.popleft()
     if len(stamps) < 2:
         return 0.0
-    span = stamps[-1] - stamps[0]
+    end = now if now > stamps[-1] else stamps[-1]
+    span = end - stamps[0]
     if span <= 0.0:
         return 0.0
     return (len(stamps) - 1) / span
@@ -62,6 +64,39 @@ def header_stamp_s(msg) -> float | None:
     if not hasattr(stamp, "sec"):
         return None
     return float(stamp.sec) + float(getattr(stamp, "nanosec", 0)) * 1e-9
+
+
+def stale_limit_s(minimum_hz: float) -> float:
+    """Silence allowed before a topic is stale: three periods, and at least 0.5 s."""
+    period = (1.0 / minimum_hz) if minimum_hz > 0.0 else 0.5
+    return max(3.0 * period, 0.5)
+
+
+def topic_rate_line(
+    topic: str,
+    tracker: RateTracker | None,
+    now_wall: float,
+    now_sim: float | None,
+    minimum: float,
+    rtf: float | None,
+) -> tuple[bool, str]:
+    """Sim-time rate over a window that ends at ``/clock``, or a stale failure.
+
+    The window's right edge is the current sim time. A topic whose newest
+    header is older than :func:`stale_limit_s` fails even when the samples
+    it did publish were fast.
+    """
+    wall_hz = tracker.hz_wall(now_wall) if tracker is not None else 0.0
+    sim_hz = None
+    if tracker is not None and tracker.sim_times and now_sim is not None:
+        age = now_sim - tracker.sim_times[-1]
+        if age > stale_limit_s(minimum):
+            return False, line(False, f"{topic}: stale: last message {age:.3f} s sim ago")
+        if len(tracker.sim_times) >= 2:
+            sim_hz = tracker.hz_sim(now_sim)
+    elif tracker is not None and len(tracker.sim_times) >= 2:
+        sim_hz = tracker.hz_sim(tracker.sim_times[-1])
+    return check_rate(topic, gated_rate_hz(sim_hz, wall_hz, rtf), wall_hz, minimum)
 
 
 def gated_rate_hz(sim_hz: float | None, wall_hz: float, rtf: float | None) -> float:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sim_monitor.preflight_check import PoseOrigins, default_camera_topic
+from sim_monitor.preflight_check import PoseOrigins, camera_info_topic, default_camera_topic
 from sim_monitor.spawn_frame import DEFAULT_POSE, spawn_ground_pose
 from sim_monitor.checks import (
     RateTracker,
@@ -27,6 +27,7 @@ from sim_monitor.checks import (
     quat_from_rpy,
     relative_position_error,
     summarize,
+    topic_rate_line,
     with_rtf_hint,
 )
 from sim_monitor.preflight_check import check_ground_truth_vision_leak
@@ -215,6 +216,35 @@ def test_windowed_rtf_ignores_the_gz_field():
     # Window keeps the samples whose wall age is <= 5 s: (6, 1) and (10, 2).
     assert abs(windowed_rtf(longer, 5.0) - 0.25) < 1e-9
     assert windowed_rtf([(1.0, 1.0)], 5.0) is None
+
+
+def test_stopped_topic_is_stale_against_the_clock():
+    tracker = RateTracker(2.0)
+    for index in range(11):
+        stamp = index * 0.05
+        tracker.add(stamp, stamp)
+    # Samples run at 20 Hz through t=0.5. Ending the window on the last
+    # sample still reports ~20 Hz and would pass a 10 Hz gate.
+    assert tracker.hz_sim(tracker.sim_times[-1]) > 10.0
+    ok, text = topic_rate_line("/imu", tracker, 2.0, 2.0, 10.0, 1.0)
+    assert ok is False
+    assert "stale: last message 1.500 s sim ago" in text
+    live = RateTracker(2.0)
+    for index in range(21):
+        stamp = index * 0.05
+        live.add(stamp, stamp)
+    ok, text = topic_rate_line("/imu", live, 1.0, 1.0, 10.0, 1.0)
+    assert ok is True
+    assert "stale" not in text
+
+
+def test_camera_info_topic_replaces_the_image():
+    assert camera_info_topic("/camera/rgb/image_raw", {}) == "/camera/rgb/camera_info"
+    assert camera_info_topic("/camera/stereo/left/image_raw", {}) == "/camera/stereo/left/camera_info"
+    assert camera_info_topic(
+        "/camera/rgb/image_raw",
+        {"PREFLIGHT_CAMERA_INFO_TOPIC": "/custom/camera_info"},
+    ) == "/custom/camera_info"
 
 
 def test_sim_rate_and_wall_fallback():

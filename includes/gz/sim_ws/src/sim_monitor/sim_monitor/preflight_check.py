@@ -19,9 +19,8 @@ from sim_monitor.checks import (
     RateTracker,
     check_max,
     check_min,
-    check_rate,
     default_min_rtf,
-    gated_rate_hz,
+    topic_rate_line,
     distance_sensor_result,
     distance_sensor_topic,
     ground_truth_leak_from_info,
@@ -43,6 +42,27 @@ STEREO_LEFT_CAMERA_TOPIC = "/camera/stereo/left/image_raw"
 # A pose this close to the origin, after a much larger step, is a map reset.
 _IDENTITY_M = 0.05
 _JUMP_M = 0.50
+
+
+def camera_info_topic(image_topic: str, environ: dict[str, str] | None = None) -> str:
+    """CameraInfo topic used for the camera rate.
+
+    ``PREFLIGHT_CAMERA_INFO_TOPIC`` wins. Otherwise ``.../image_raw`` becomes
+    ``.../camera_info``.
+    """
+    env = os.environ if environ is None else environ
+    override = env.get("PREFLIGHT_CAMERA_INFO_TOPIC", "").strip()
+    if override:
+        return override
+    marker = "/image_raw"
+    if image_topic.endswith(marker):
+        return image_topic[: -len(marker)] + "/camera_info"
+    if image_topic.endswith("/image"):
+        return image_topic[: -len("/image")] + "/camera_info"
+    parent, _sep, _leaf = image_topic.rpartition("/")
+    if parent:
+        return parent + "/camera_info"
+    return image_topic + "/camera_info"
 
 
 def default_camera_topic(environ: dict[str, str] | None = None) -> str:
@@ -180,13 +200,14 @@ def main() -> None:
             self.min_gt = _env_float("PREFLIGHT_MIN_GT_HZ", 20.0)
             self.clock_max_age = _env_float("PREFLIGHT_CLOCK_MAX_AGE_S", 1.0)
             self.camera_topic = default_camera_topic()
+            self.camera_info_topic = camera_info_topic(self.camera_topic)
             self.imu_topic = os.environ.get("PREFLIGHT_IMU_TOPIC", "/imu")
             self.gt_topic = os.environ.get("PREFLIGHT_GT_TOPIC", "/ground_truth/odom")
             self.rtab_topic = os.environ.get("PREFLIGHT_RTABMAP_ODOM_TOPIC", "/rtabmap/odom")
             self.rtab_info_topic = os.environ.get("PREFLIGHT_RTABMAP_INFO_TOPIC", "/rtabmap/odom_info")
             self.tf_pairs = default_tf_pairs()
             self.rates = {
-                self.camera_topic: RateTracker(2.0),
+                self.camera_info_topic: RateTracker(2.0),
                 self.imu_topic: RateTracker(2.0),
                 self.gt_topic: RateTracker(2.0),
                 "/sim/real_time_factor": RateTracker(2.0),
@@ -194,7 +215,6 @@ def main() -> None:
             self.rtf = None
             self.clock_wall = None
             self.clock_sim = None
-            self.previous_clock_sim = None
             self.clock_advanced = False
             self.origins = PoseOrigins()
             self.preflight_pass = None
@@ -217,7 +237,7 @@ def main() -> None:
         def _discover(self) -> None:
             try:
                 names_and_types = dict(self.get_topic_names_and_types())
-                for topic in (self.camera_topic, self.imu_topic, self.gt_topic, self.rtab_topic, "/clock", "/sim/real_time_factor"):
+                for topic in (self.camera_info_topic, self.imu_topic, self.gt_topic, self.rtab_topic, "/clock", "/sim/real_time_factor"):
                     self._subscribe(names_and_types, topic)
                 self._subscribe(names_and_types, self.rtab_info_topic)
                 names = list(names_and_types)
@@ -252,6 +272,15 @@ def main() -> None:
             self._subscribed.add(topic)
 
         def _on_msg(self, topic: str, msg) -> None:
+            if topic == "/clock":
+                # One scalar stamp. /clock can arrive every sim step; do not
+                # append it to a rate window.
+                sim = float(msg.clock.sec) + float(msg.clock.nanosec) * 1e-9
+                if self.clock_sim is not None and sim > self.clock_sim:
+                    self.clock_advanced = True
+                self.clock_sim = sim
+                self.clock_wall = time.monotonic()
+                return
             now = time.monotonic()
             if topic in self.rates:
                 self.rates[topic].add(now, header_stamp_s(msg))
@@ -262,13 +291,6 @@ def main() -> None:
                     self.imu_frame_id = frame
             if topic == "/sim/real_time_factor":
                 self.rtf = float(msg.data)
-            elif topic == "/clock":
-                self.clock_wall = now
-                sim = float(msg.clock.sec) + float(msg.clock.nanosec) * 1e-9
-                if self.clock_sim is not None and sim > self.clock_sim:
-                    self.clock_advanced = True
-                self.previous_clock_sim = self.clock_sim
-                self.clock_sim = sim
             elif topic == self.gt_topic:
                 self.origins.ground_truth(_xyz(msg.pose.pose.position))
             elif topic == self.rtab_topic:
@@ -308,7 +330,7 @@ def main() -> None:
                     self.clock_advanced,
                     line(self.clock_advanced, "clock: sim time is advancing" if self.clock_advanced else "clock: sim time is not advancing"),
                 ))
-            results.append(self._rate(self.camera_topic, self.min_camera, now))
+            results.append(self._rate(self.camera_info_topic, self.min_camera, now))
             results.append(self._rate(self.imu_topic, self.min_imu, now))
             results.append(self._imu_to_optical())
             results.append(self._rate(self.gt_topic, self.min_gt, now))
@@ -326,13 +348,9 @@ def main() -> None:
         def _rate(self, topic: str, minimum: float, now: float):
             if topic in self.type_errors:
                 return False, line(False, f"{topic}: message type unavailable ({self.type_errors[topic]})")
-            tracker = self.rates.get(topic)
-            wall_hz = tracker.hz_wall(now) if tracker else 0.0
-            sim_hz = None
-            if tracker is not None and len(tracker.sim_times) >= 2:
-                sim_hz = tracker.hz_sim(tracker.sim_times[-1])
-            gated = gated_rate_hz(sim_hz, wall_hz, self.rtf)
-            return check_rate(topic, gated, wall_hz, minimum)
+            return topic_rate_line(
+                topic, self.rates.get(topic), now, self.clock_sim, minimum, self.rtf,
+            )
 
         def _imu_to_optical(self):
             target = optical_frame()
