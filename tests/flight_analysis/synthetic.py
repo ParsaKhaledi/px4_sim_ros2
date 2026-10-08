@@ -20,7 +20,7 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "e2e.env"
 def load_fixture_limits() -> E2ELimits:
     """Load limits from the test fixture, ignoring the developer environment."""
 
-    return load_limits(environ={}, env_path=FIXTURE, example_path=FIXTURE)
+    return load_limits(environ={}, env_path=FIXTURE)
 
 
 def fixture_values() -> dict[str, str]:

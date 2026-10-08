@@ -1,4 +1,4 @@
-"""TUM ground truth: ENU to NED, then line the ROS clock up with the ULog."""
+"""TUM ground truth: spawn frame, ENU to NED, then the ROS clock onto the ULog."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from flight_analysis.frames import enu_flu_to_ned_frd
+from flight_analysis.frames import world_enu_to_spawn_enu
 from flight_analysis.log import Track
 
 
@@ -28,8 +29,10 @@ class TimeAlignmentError(RuntimeError):
 class TimeAlignment:
     """How a TUM clock was placed onto the ULog clock.
 
-    ``offset_s`` is added to each TUM timestamp. Both clocks are sim time;
-    their zeros are not assumed to match.
+    ``offset_s`` is added to each TUM timestamp. Both clocks are sim time.
+    When the offset comes from ``px4_offset_s`` (ROS sim time minus PX4
+    boot time), ``offset_s = -px4_offset_s``, because
+    ``t_px4 = t_ros - px4_offset_s``.
     """
 
     offset_s: float
@@ -38,11 +41,18 @@ class TimeAlignment:
     overlap_s: float
 
 
-def load_tum(path: Path) -> Track:
-    """Read a TUM file and convert every pose into NED/FRD.
+def load_tum(
+    path: Path,
+    spawn_xyz: tuple[float, float, float],
+    spawn_yaw_rad: float,
+) -> Track:
+    """Read a TUM file, move it into the spawn frame, and convert to NED/FRD.
 
     Each data line is ``timestamp tx ty tz qx qy qz qw`` with time in
-    seconds. ``timestamp`` is ROS sim time, not the ULog microsecond clock.
+    seconds of ROS sim time. Position is Gazebo world ENU. ``spawn_xyz``
+    and ``spawn_yaw_rad`` are the takeoff pose in that same world; they
+    are not optional. Passing the origin would silently treat world ENU
+    as the PX4 local frame.
     """
 
     times: list[float] = []
@@ -59,7 +69,9 @@ def load_tum(path: Path) -> Track:
             raise TimeAlignmentError(f"{path}:{line_number} is not a TUM pose")
         try:
             stamp = float(parts[0])
-            pose = enu_flu_to_ned_frd(*(float(part) for part in parts[1:8]))
+            values = [float(part) for part in parts[1:8]]
+            local = world_enu_to_spawn_enu(*values, spawn_xyz, spawn_yaw_rad)
+            pose = enu_flu_to_ned_frd(*local)
         except ValueError as exc:
             raise TimeAlignmentError(f"{path}:{line_number} is not a TUM pose") from exc
         times.append(stamp)
@@ -108,6 +120,33 @@ def align_tum_to_ulog(ulog: Track, tum: Track) -> TimeAlignment:
     if abs(offset) <= 0.1 and overlap0 >= MIN_OVERLAP_S and corr0 >= correlation - 0.02:
         return TimeAlignment(0.0, corr0, "already_aligned", overlap0)
     return TimeAlignment(float(offset), float(correlation), "vertical_velocity", float(overlap))
+
+
+def alignment_from_px4_offset(ulog: Track, tum: Track, px4_offset_s: float) -> TimeAlignment:
+    """Place TUM time on the ULog clock with a known ``px4_offset_s``.
+
+    The convention is ROS sim time minus PX4 boot time:
+
+        px4_offset_s = t_ros - t_px4
+        t_px4 = t_ros - px4_offset_s
+
+    ``TimeAlignment.offset_s`` is what gets added to each TUM timestamp, so
+    it is ``-px4_offset_s``. A positive ``px4_offset_s`` means the ROS
+    clock is ahead of PX4 boot time and TUM stamps move backward.
+    """
+
+    applied = -float(px4_offset_s)
+    t_ref, v_ref = _up_velocity(ulog)
+    t_other, v_other = _up_velocity(tum)
+    correlation, overlap = _correlation(t_ref, v_ref, t_other, v_other, applied)
+    if overlap < MIN_OVERLAP_S:
+        raise TimeAlignmentError(
+            f"TUM ground truth overlaps the ULog for {overlap:.2f} s "
+            f"with px4_offset_s={px4_offset_s:.3f} "
+            f"(TUM timestamps shifted by {applied:.3f} s); "
+            f"need at least {MIN_OVERLAP_S:.0f} s"
+        )
+    return TimeAlignment(applied, float(correlation), "explicit", float(overlap))
 
 
 def shift_track(track: Track, offset_s: float) -> Track:

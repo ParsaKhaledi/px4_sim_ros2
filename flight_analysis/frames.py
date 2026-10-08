@@ -94,6 +94,92 @@ def enu_flu_to_ned_frd(
     return NedPose(north_m, east_m, down_m, qw_n, qx_n, qy_n, qz_n)
 
 
+def world_enu_to_spawn_enu(
+    x: float,
+    y: float,
+    z: float,
+    qx: float,
+    qy: float,
+    qz: float,
+    qw: float,
+    spawn_xyz: tuple[float, float, float],
+    spawn_yaw_rad: float,
+) -> tuple[float, float, float, float, float, float, float]:
+    """Move a Gazebo world ENU/FLU pose into the spawn frame.
+
+    ``spawn_xyz`` is the spawn origin in world ENU metres. ``spawn_yaw_rad``
+    is the spawn heading in that frame: 0 faces east, positive toward north.
+    The world pose is the spawn pose composed with the local pose:
+
+        p_world = R_z(spawn_yaw) p_local + spawn_xyz
+        q_world = q_z(spawn_yaw) ⊗ q_local
+
+    This returns the local pose, still ENU/FLU (``x y z qx qy qz qw``), so
+    ``enu_flu_to_ned_frd`` can turn it into the PX4 takeoff frame. The
+    rotation is only the spawn yaw. It does not tilt the local axes.
+    """
+
+    sx, sy, sz = spawn_xyz
+    dx = x - sx
+    dy = y - sy
+    cosine = math.cos(spawn_yaw_rad)
+    sine = math.sin(spawn_yaw_rad)
+    local_x = cosine * dx + sine * dy
+    local_y = -sine * dx + cosine * dy
+    local_z = z - sz
+    local_q = _quat_mul(_yaw_quaternion(-spawn_yaw_rad), (qw, qx, qy, qz))
+    qx_l, qy_l, qz_l, qw_l = _tum_quaternion(local_q)
+    return (local_x, local_y, local_z, qx_l, qy_l, qz_l, qw_l)
+
+
+def spawn_enu_to_world_enu(
+    x: float,
+    y: float,
+    z: float,
+    qx: float,
+    qy: float,
+    qz: float,
+    qw: float,
+    spawn_xyz: tuple[float, float, float],
+    spawn_yaw_rad: float,
+) -> tuple[float, float, float, float, float, float, float]:
+    """Apply the spawn pose, the inverse of ``world_enu_to_spawn_enu``.
+
+    ``x y z qx qy qz qw`` is a pose in the spawn ENU/FLU frame. The result
+    is that same pose in Gazebo world ENU.
+    """
+
+    sx, sy, sz = spawn_xyz
+    cosine = math.cos(spawn_yaw_rad)
+    sine = math.sin(spawn_yaw_rad)
+    world_x = cosine * x - sine * y + sx
+    world_y = sine * x + cosine * y + sy
+    world_z = z + sz
+    world_q = _quat_mul(_yaw_quaternion(spawn_yaw_rad), (qw, qx, qy, qz))
+    qx_w, qy_w, qz_w, qw_w = _tum_quaternion(world_q)
+    return (world_x, world_y, world_z, qx_w, qy_w, qz_w, qw_w)
+
+
+def _yaw_quaternion(yaw_rad: float) -> tuple[float, float, float, float]:
+    """Unit quaternion for a yaw about ENU up, ``(w, x, y, z)``."""
+
+    half = 0.5 * yaw_rad
+    return (math.cos(half), 0.0, 0.0, math.sin(half))
+
+
+def _tum_quaternion(
+    quaternion: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Normalize ``(w, x, y, z)`` and return TUM order ``qx qy qz qw``."""
+
+    w, x, y, z = quaternion
+    norm = math.sqrt(w * w + x * x + y * y + z * z)
+    if norm == 0.0:
+        return (0.0, 0.0, 0.0, 1.0)
+    w, x, y, z = w / norm, x / norm, y / norm, z / norm
+    return (x, y, z, w)
+
+
 def _quat_mul(
     left: tuple[float, float, float, float],
     right: tuple[float, float, float, float],

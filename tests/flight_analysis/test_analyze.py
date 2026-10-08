@@ -107,7 +107,14 @@ class MissionTests(unittest.TestCase):
                 # ENU: east, north, up. The bias is extra up, so NED down is more negative.
                 lines.append(f"{stamp:.3f} 0 {n:.4f} {-d + bias:.4f} 0 0 0 1")
             path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            report = analyze_flight(log, limits, tum_path=path)
+            report = analyze_flight(
+                log,
+                limits,
+                tum_path=path,
+                spawn_xyz=(0.0, 0.0, 0.0),
+                spawn_yaw=0.0,
+                clock_offset_s=0.0,
+            )
         self.assertEqual(report["ground_truth"]["source"], "tum")
         self.assertIn("not used", report["ground_truth"]["detail"])
         self.assertAlmostEqual(report["ground_truth"]["time_offset_s"], 0.0, delta=0.05)

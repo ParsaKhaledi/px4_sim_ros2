@@ -157,10 +157,10 @@ After a SITL flight, grade the PX4 ULog offline. This does not need ROS or Docke
 
 ```bash
 python3 -m pip install -r flight_analysis/requirements.txt
-python3 -m flight_analysis path/to/flight.ulg --ground-truth path/to/ground_truth.tum
+python3 -m flight_analysis logs/<run_id>/flight.ulg --ground-truth logs/<run_id>/ground_truth.tum
 ```
 
-`metrics.json` and the plots are written to `logs/<run_id>/control/`. Pass/fail limits are the shared `E2E_*` settings (`e2e_limits.py`). See [flight_analysis/README.md](flight_analysis/README.md) for the checks, the TUM ground-truth file, and the tests.
+`metrics.json` and the plots are written to `logs/<run_id>/control/`. A TUM file also needs `spawn.json` beside the `.ulg` (Gazebo spawn pose and `px4_offset_s`). Pass/fail limits are the shared `E2E_*` settings (`e2e_limits.py`): the process environment, then `.env`. See [flight_analysis/README.md](flight_analysis/README.md) for the checks, the spawn frame, and the tests.
 
 ## CI
 

@@ -11,12 +11,13 @@ From the repository root, with Python 3.12:
 ```bash
 python3 -m pip install -r flight_analysis/requirements.txt
 python3 -m flight_analysis path/to/flight.ulg
-python3 -m flight_analysis path/to/flight.ulg --ground-truth path/to/ground_truth.tum --run-id demo
+python3 -m flight_analysis logs/<run_id>/flight.ulg \
+    --ground-truth logs/<run_id>/ground_truth.tum --run-id demo
 ```
 
 `--output` defaults to `logs/<run_id>/control/`. `--run-id` defaults to the log file name without `.ulg`.
 
-Exit codes: `0` when every graded check passes, `1` when a check fails (the report is still written), `2` when the log, the ground-truth overlap, or a limit cannot be read.
+Exit codes: `0` when every graded check passes, `1` when a check fails (the report is still written), `2` when the log, the ground-truth overlap, the spawn pose, or a limit cannot be read.
 
 The three packages in `requirements.txt` (`pyulog`, `numpy`, `matplotlib`) are for this tool only. They are not added to the simulation image.
 
@@ -33,7 +34,8 @@ The tests build signals in memory. They do not need a real `.ulg`. Limit numbers
 | Input | What it is |
 | --- | --- |
 | `.ulg` | PX4 flight log. Topic timestamps are sim-time microseconds. The tool converts those to seconds at the loader boundary. |
-| TUM file, optional | `timestamp tx ty tz qx qy qz qw`, one pose per line, seconds of ROS sim time. Position is ENU (x east, y north, z up) and the quaternion is body FLU. |
+| TUM file, optional | `timestamp tx ty tz qx qy qz qw`, one pose per line, seconds of ROS sim time. Position is Gazebo world ENU (x east, y north, z up) and the quaternion is body FLU. |
+| `spawn.json`, with a TUM file | Beside the `.ulg` (`logs/<run_id>/spawn.json`), or `--spawn-json PATH`. |
 
 `trajectory_setpoint` is the command. If that topic is missing, `vehicle_local_position_setpoint` is used. The estimate is EKF2 `vehicle_local_position`. Tilt comes from `vehicle_attitude`. Body rates come from `vehicle_angular_velocity`. Motor stops come from `actuator_motors` (0 idle, 1 full) or, if that is absent, `actuator_outputs` PWM.
 
@@ -41,9 +43,21 @@ The tests build signals in memory. They do not need a real `.ulg`. Limit numbers
 
 A TUM file is preferred over `vehicle_local_position_groundtruth` and `vehicle_attitude_groundtruth`. `metrics.json` records which source was used. If neither is present, estimation error and the height check are skipped and the run does not fail for that reason.
 
-Both clocks are sim time, but the zeros need not match. The tool correlates up-velocity (the climb) and adds `time_offset_s` to each TUM timestamp to land on the ULog clock. A clock that already agrees is reported as `already_aligned`. The overlap after that shift must cover at least a few seconds, and the correlation has to be a real match; otherwise the command exits with an error instead of grading a bad alignment.
+The TUM poses are Gazebo world ENU. Before they are compared with the PX4 log they are moved into the takeoff frame with the spawn pose, then converted from ENU/FLU to NED/FRD. The spawn file looks like this:
 
-ENU/FLU is converted to NED/FRD in `frames.enu_flu_to_ned_frd`. North is the ENU y, east is the ENU x, down is the negated ENU z. Yaw follows `yaw_ned = π/2 - yaw_enu` (0 is north, positive toward east).
+```json
+{
+  "spawn_xyz": [1.0, 2.0, 0.1],
+  "spawn_yaw": 0.3,
+  "px4_offset_s": 12.5
+}
+```
+
+`spawn_xyz` is `[x, y, z]` in metres, Gazebo world ENU. `spawn_yaw` is the spawn heading in that frame, radians, 0 facing east and positive toward north. The world pose is the spawn pose composed with the local pose: `p_world = R_z(spawn_yaw) p_local + spawn_xyz`. The tool applies the inverse, then `frames.enu_flu_to_ned_frd`. North is the local ENU y, east is the local ENU x, down is the negated local ENU z. Yaw follows `yaw_ned = π/2 - yaw_enu` (0 is north, positive toward east).
+
+`--spawn-xyz X Y Z` and `--spawn-yaw RAD` override the matching file fields. If a ground-truth file is given and neither the file nor those options supply a complete pose, the command stops. It does not assume the vehicle spawned at the origin, because that would shift every error.
+
+`px4_offset_s` is ROS sim time minus PX4 boot time, in seconds: `t_px4 = t_ros - px4_offset_s`. The seconds added to each TUM timestamp are therefore `-px4_offset_s`. `--clock-offset` is the same quantity and wins over the file. If neither is present, the tool estimates the offset from the climb (up-velocity) and prints a warning. `metrics.json` records `spawn.xyz_source`, `spawn.yaw_source`, and `clock.source` as `spawn_json`, `cli`, or, for the clock only, `climb_edge_estimate`, plus the values that were used. The overlap after the shift must cover at least a few seconds. An estimated clock also has to correlate with the climb; an explicit clock does not, but a short overlap is still an error.
 
 ## Outputs
 
@@ -104,9 +118,9 @@ These names are also loaded so the in-flight grader can share one module, but th
 
 ## Where the numbers come from
 
-`e2e_limits.py` (repository root) lists the limit names and parses them. It does not store default numbers. For each name it uses the process environment, then `.env` at the repo root, then `.env.example`. If a name is missing from all three, the tool exits and names it.
+`e2e_limits.py` (repository root) lists the limit names and parses them. It does not store default numbers. For each name it uses the process environment, then `.env` at the repo root. If a name is missing from both, the tool exits and names every missing key. `.env.example` is not read as a fallback. When both files exist, a test requires their `E2E_*` keys and values to match. A separate test fails if a value is assigned outside those two files and the test fixture.
 
-This branch's `.env.example` does not contain those keys yet. Until they land, put them in the environment or in `.env`. A test fails if a value is assigned anywhere except `.env.example` and the test fixture.
+This branch's `.env` and `.env.example` do not contain those keys yet. Until they land, put them in the environment or in `.env`.
 
 ## Files
 
@@ -121,6 +135,7 @@ This branch's `.env.example` does not contain those keys yet. Until they land, p
 | `flight_analysis/metrics.py` | Overshoot, settling, stopping distance, errors, tilt, rates, height, flags, vision delay, leak check. |
 | `flight_analysis/grade.py` | Pass/fail against the loaded limits. |
 | `flight_analysis/plots.py` | The four PNGs. |
-| `flight_analysis/frames.py` | ENU/FLU to NED/FRD. |
+| `flight_analysis/frames.py` | Spawn-frame transform, then ENU/FLU to NED/FRD. |
+| `flight_analysis/spawn.py` | `spawn.json` and the CLI pose and clock overrides. |
 | `flight_analysis/tum.py` | TUM reader and clock alignment. |
 | `flight_analysis/requirements.txt` | Pinned `pyulog`, `numpy`, and `matplotlib`. |

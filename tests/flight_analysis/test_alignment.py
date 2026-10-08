@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 from flight_analysis.log import Track  # noqa: E402
 from flight_analysis.tum import TimeAlignmentError  # noqa: E402
 from flight_analysis.tum import align_tum_to_ulog  # noqa: E402
+from flight_analysis.tum import alignment_from_px4_offset  # noqa: E402
 from flight_analysis.tum import load_tum  # noqa: E402
 
 
@@ -87,10 +88,34 @@ class AlignmentTests(unittest.TestCase):
                 "# comment\n0.0 1.0 2.0 3.0 0 0 0 1\n0.1 1.0 2.0 3.0 0 0 0 1\n",
                 encoding="utf-8",
             )
-            track = load_tum(path)
+            track = load_tum(path, (0.0, 0.0, 0.0), 0.0)
         self.assertAlmostEqual(float(track.north_m[0]), 2.0)
         self.assertAlmostEqual(float(track.east_m[0]), 1.0)
         self.assertAlmostEqual(float(track.down_m[0]), -3.0)
+
+    def test_px4_offset_subtracts_ros_time_from_the_ulog(self) -> None:
+        """px4_offset_s is t_ros - t_px4, so TUM stamps move backward by that amount.
+
+        The climb is at PX4 t=3 and ROS t=10, so the offset is 7 s. Adding
+        7 s instead would slide the TUM climb off the log and the overlap
+        check fails.
+        """
+
+        ulog_time = np.arange(0.0, 12.0, 0.02)
+        tum_time = ulog_time + 7.0
+        alignment = alignment_from_px4_offset(
+            _track(ulog_time, _bump(ulog_time, 3.0)),
+            _track(tum_time, _bump(tum_time, 10.0)),
+            7.0,
+        )
+        self.assertAlmostEqual(alignment.offset_s, -7.0)
+        self.assertGreater(alignment.correlation, 0.9)
+        with self.assertRaises(TimeAlignmentError):
+            alignment_from_px4_offset(
+                _track(ulog_time, _bump(ulog_time, 3.0)),
+                _track(tum_time, _bump(tum_time, 10.0)),
+                -7.0,
+            )
 
 
 if __name__ == "__main__":

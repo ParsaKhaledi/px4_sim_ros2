@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +25,11 @@ from flight_analysis.log import vision_delay_seconds
 from flight_analysis.metrics import measure_flight
 from flight_analysis.plots import write_plots
 from flight_analysis.segment import segment_command
+from flight_analysis.spawn import ResolvedSpawn
+from flight_analysis.spawn import resolve_spawn
 from flight_analysis.tum import TimeAlignment
 from flight_analysis.tum import align_tum_to_ulog
+from flight_analysis.tum import alignment_from_px4_offset
 from flight_analysis.tum import load_tum
 from flight_analysis.tum import shift_track
 
@@ -35,17 +40,36 @@ def analyze_flight(
     tum_path: Path | None = None,
     log_path: Path | None = None,
     run_id: str = "flight",
+    spawn_json: Path | None = None,
+    spawn_xyz: tuple[float, float, float] | None = None,
+    spawn_yaw: float | None = None,
+    clock_offset_s: float | None = None,
+    warn: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Grade one flight and return the ``metrics.json`` document.
 
-    A TUM file is preferred over ``*_groundtruth`` topics. Raises
-    ``TimeAlignmentError`` when that file does not overlap the log.
+    A TUM file is preferred over ``*_groundtruth`` topics. The file is
+    Gazebo world ENU, so a spawn pose is required: ``spawn.json`` beside
+    the log, or ``spawn_xyz`` and ``spawn_yaw``. ``clock_offset_s`` is
+    ``px4_offset_s`` (ROS sim time minus PX4 boot time) and wins over the
+    file. Without either clock, the climb edge is estimated and ``warn``
+    is called. Raises ``SpawnError`` when the pose is missing and
+    ``TimeAlignmentError`` when the clocks do not overlap.
     """
 
     command = command_track(log)
     estimate = estimate_track(log)
     logged_truth = ground_truth_track(log)
-    truth, truth_meta = _resolve_truth(estimate, logged_truth, tum_path)
+    spawn = None
+    if tum_path is not None:
+        spawn = resolve_spawn(log_path, spawn_json, spawn_xyz, spawn_yaw, clock_offset_s)
+    truth, truth_meta = _resolve_truth(
+        estimate,
+        logged_truth,
+        tum_path,
+        spawn,
+        _warn if warn is None else warn,
+    )
     legs = segment_command(command)
     tilt = tilt_series(log)
     rates = rate_series(log)
@@ -103,20 +127,56 @@ def write_report(report: dict[str, Any], output: Path) -> None:
     )
 
 
+def _warn(message: str) -> None:
+    """Print a ground-truth warning on stderr."""
+
+    print(f"flight_analysis: {message}", file=sys.stderr)
+
+
 def _resolve_truth(
     estimate: Track,
     logged: Track | None,
     tum_path: Path | None,
+    spawn: ResolvedSpawn | None,
+    warn: Callable[[str], None],
 ) -> tuple[Track | None, dict[str, Any]]:
     """Pick TUM truth when a file is given, otherwise the logged topics."""
 
     if tum_path is not None:
-        tum = load_tum(tum_path)
-        alignment = align_tum_to_ulog(estimate, tum)
-        detail = "TUM trajectory converted from ENU/FLU to NED/FRD"
+        if spawn is None:
+            raise RuntimeError("TUM ground truth requires a resolved spawn pose")
+        tum = load_tum(tum_path, spawn.xyz_m, spawn.yaw_rad)
+        if spawn.px4_offset_s is None:
+            alignment = align_tum_to_ulog(estimate, tum)
+            clock_source = "climb_edge_estimate"
+            warn(
+                "no px4_offset_s in spawn.json and no --clock-offset; "
+                "using the climb-edge estimate "
+                f"(px4_offset_s={-alignment.offset_s:.3f} s, "
+                "ROS sim time minus PX4 boot time)"
+            )
+        else:
+            alignment = alignment_from_px4_offset(estimate, tum, spawn.px4_offset_s)
+            clock_source = spawn.clock_source or "cli"
+        detail = (
+            "TUM trajectory in Gazebo world ENU, moved into the spawn frame, "
+            "then converted from ENU/FLU to NED/FRD"
+        )
         if logged is not None:
             detail += "; vehicle_local_position_groundtruth was logged and was not used"
-        return shift_track(tum, alignment.offset_s), _truth_meta("tum", detail, alignment)
+        meta = _truth_meta("tum", detail, alignment)
+        meta["spawn"] = {
+            "xyz_m": list(spawn.xyz_m),
+            "yaw_rad": spawn.yaw_rad,
+            "xyz_source": spawn.xyz_source,
+            "yaw_source": spawn.yaw_source,
+        }
+        meta["clock"] = {
+            "source": clock_source,
+            "px4_offset_s": -alignment.offset_s,
+            "applied_offset_s": alignment.offset_s,
+        }
+        return shift_track(tum, alignment.offset_s), meta
     if logged is not None:
         return logged, _truth_meta(
             "ulog",

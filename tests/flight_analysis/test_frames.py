@@ -12,7 +12,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from flight_analysis.frames import enu_flu_to_ned_frd  # noqa: E402
+from flight_analysis.frames import spawn_enu_to_world_enu  # noqa: E402
 from flight_analysis.frames import tilt_rad_from_quaternion  # noqa: E402
+from flight_analysis.frames import world_enu_to_spawn_enu  # noqa: E402
 from flight_analysis.frames import yaw_from_ned_quaternion  # noqa: E402
 
 
@@ -60,6 +62,34 @@ class FrameConversionTests(unittest.TestCase):
         tilt = tilt_rad_from_quaternion(math.cos(roll / 2), math.sin(roll / 2), 0.0, 0.0)
         self.assertAlmostEqual(math.degrees(tilt), 20.0, places=5)
         self.assertAlmostEqual(yaw_from_ned_quaternion(1.0, 0.0, 0.0, 0.0), 0.0)
+
+    def test_yawed_spawn_round_trip(self) -> None:
+        """A pose in the spawn frame survives a trip out to world ENU and back.
+
+        Spawn yaw is +90 deg, so one metre along the spawn x axis is one
+        metre north in the Gazebo world, not one metre east. Forgetting
+        the yaw would leave the point at world (1, 0) and the round trip
+        would not recover (1, 0) in the spawn frame.
+        """
+
+        spawn = (10.0, -4.0, 0.5)
+        yaw = math.pi / 2.0
+        local_yaw = 0.4
+        half = local_yaw / 2.0
+        local = (1.0, -0.25, 2.0, 0.0, 0.0, math.sin(half), math.cos(half))
+        world = spawn_enu_to_world_enu(*local, spawn, yaw)
+        self.assertAlmostEqual(world[0], spawn[0] + 0.25, places=6)
+        self.assertAlmostEqual(world[1], spawn[1] + 1.0, places=6)
+        self.assertAlmostEqual(world[2], spawn[2] + 2.0, places=6)
+        back = world_enu_to_spawn_enu(*world, spawn, yaw)
+        for got, expected in zip(back, local, strict=True):
+            self.assertAlmostEqual(got, expected, places=6)
+        ned = enu_flu_to_ned_frd(*back)
+        direct = enu_flu_to_ned_frd(*local)
+        self.assertAlmostEqual(ned.north_m, direct.north_m, places=6)
+        self.assertAlmostEqual(ned.east_m, direct.east_m, places=6)
+        self.assertAlmostEqual(ned.down_m, direct.down_m, places=6)
+        self.assertAlmostEqual(ned.yaw_rad(), direct.yaw_rad(), places=6)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,9 @@
 The offline log tool and the in-flight grader (``tests/e2e/grading.py``, once
 that file is on the branch) both import this module so each limit is named
 in one place. This file stores names only. Numbers come from the process
-environment, then ``.env`` at the repo root, then ``.env.example``.
+environment, then ``.env`` at the repo root. ``.env.example`` is not a
+fallback: it is checked in separately so its ``E2E_*`` entries stay equal
+to ``.env``.
 """
 
 from __future__ import annotations
@@ -110,19 +112,20 @@ def parse_env_file(path: Path) -> dict[str, str]:
 def load_limits(
     environ: Mapping[str, str] | None = None,
     env_path: Path | None = None,
-    example_path: Path | None = None,
     root: Path | None = None,
 ) -> E2ELimits:
-    """Load every limit. Process environment wins, then ``.env``, then ``.env.example``."""
+    """Load every limit. Process environment wins, then ``.env``.
+
+    A name that is absent from both stops the load. The error lists every
+    missing ``E2E_*`` key. ``.env.example`` is never read here.
+    """
 
     base = root if root is not None else repo_root()
     dotenv = env_path if env_path is not None else base / ".env"
-    example = example_path if example_path is not None else base / ".env.example"
     process = os.environ if environ is None else environ
 
-    # Lowest priority first, so a higher-priority source overwrites it.
+    # ``.env`` first, so the process environment overwrites it.
     resolved: dict[str, tuple[str, str]] = {}
-    _fill(parse_env_file(example), str(example), resolved)
     _fill(parse_env_file(dotenv), str(dotenv), resolved)
     _fill(process, "process environment", resolved)
 
@@ -130,7 +133,7 @@ def load_limits(
     if missing:
         names = ", ".join(missing)
         raise E2ELimitError(
-            f"E2E limits missing from the process environment, {dotenv}, and {example}: {names}"
+            f"E2E limits missing from the process environment and {dotenv}: {names}"
         )
 
     kwargs: dict[str, float | int] = {}
