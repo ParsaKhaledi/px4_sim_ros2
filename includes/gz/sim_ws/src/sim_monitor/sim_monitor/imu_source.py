@@ -69,8 +69,10 @@ def optical_frame(environ: dict[str, str] | None = None) -> str:
 
 RECEIVE = "receive"
 PX4_OFFSET = "px4_offset"
-# RTAB-Map's IMU path wants 100 Hz or more. The relay warns under this.
-PX4_RATE_WARN_HZ = 100.0
+# Default for the relay's rate_warn_hz parameter. XRCE copies sensor_combined
+# at most once per 10 ms, so 100 Hz is a ceiling. Warn below 80 so jitter
+# under that ceiling is not treated as a fault. RTAB-Map still wants 100 Hz.
+PX4_RATE_WARN_HZ = 80.0
 DEFAULT_YAW_VARIANCE = 1.0e3
 
 

@@ -95,8 +95,8 @@ def test_only_one_imu_publisher_per_mode():
 
 def test_px4_rate_minimum_and_optical_frame():
     assert expected_imu_hz({"IMU_SOURCE": "oak", "IMU_RATE_HZ": "200"}) == 200.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 100.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 80.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
     assert "camera_rgb_frame" in default_tf_pairs({"CameraType": "rgbd"})
     assert "stereo_left_camera_frame" in default_tf_pairs({"CameraType": "stereo"})
     assert default_tf_pairs({"PREFLIGHT_TF_PAIRS": "world:spawn"}) == "world:spawn"
@@ -121,16 +121,18 @@ def test_receive_stamp_is_the_default_and_raw_boot_time_is_not_published():
     assert px4_sample_us(10, 7) == 7
 
 
-def test_sensor_combined_rate_is_sim_time_and_warns_below_100():
+def test_sensor_combined_rate_is_sim_time_and_warns_below_80():
     start = 1_000_000_000
     fast = [start + i * 10_000_000 for i in range(11)]
     assert abs(input_rate_hz(fast) - 100.0) < 1e-6
     slow = [start + i * 20_000_000 for i in range(6)]
     assert abs(input_rate_hz(slow) - 50.0) < 1e-6
-    assert rate_log(100.0) == ("info", "sensor_combined 100.0 Hz sim")
+    assert rate_log(80.0) == ("info", "sensor_combined 80.0 Hz sim")
     level, text = rate_log(50.0)
     assert level == "warn"
-    assert "below 100 Hz" in text
+    assert "below 80 Hz" in text
+    level, text = rate_log(70.0, warn_below=60.0)
+    assert level == "info"
     assert rate_log(None) is None
 
 

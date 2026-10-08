@@ -117,7 +117,7 @@ Simulation assets and startup scripts live under [includes/](includes/). See [in
 | When | The camera IMU is on the Oak-D, so no lever arm | EKF2 and RTAB-Map should share the flight IMU |
 | Publisher | Gazebo `/imu` bridged to ROS `/imu` | `px4_imu_relay` from `/fmu/out/sensor_combined` and `/fmu/out/vehicle_attitude` |
 | `frame_id` | `imu_link` | `base_link` |
-| Preflight minimum | half of `IMU_RATE_HZ`, or half the `VISION_PROFILE` IMU rate | 100 Hz in sim time, unless `PREFLIGHT_MIN_IMU_HZ` is set |
+| Preflight minimum | half of `IMU_RATE_HZ`, or half the `VISION_PROFILE` IMU rate | 80 Hz in sim time, unless `PREFLIGHT_MIN_IMU_HZ` is set |
 
 `px4` stamps each sample with ROS time when it is received (`IMU_STAMP_MODE=receive`, the default). With `use_sim_time` that clock is Gazebo `/clock`. `IMU_STAMP_MODE=px4_offset` adds one fixed offset, measured once at startup, from the PX4 sample time to `/clock`. SITL lockstep keeps PX4's clock on Gazebo time, so that constant stays valid. `sensor_combined` in px4_msgs v1.17 has `timestamp` and no `timestamp_sample`; the relay uses `timestamp_sample` when the message has it. A raw PX4 boot timestamp is not published. RTAB-Map's `wait_imu_to_init` compares IMU stamps with image stamps and would drop those samples.
 
@@ -125,7 +125,7 @@ Orientation is roll and pitch after the full NED/FRD to ENU/FLU conversion, with
 
 Gyro and specific force stay in the body frame and map FRD to FLU as `(x, -y, -z)`. At rest the z acceleration is about +9.81 m/s².
 
-The relay logs the measured `sensor_combined` input rate in sim time and warns below 100 Hz. RTAB-Map's IMU path wants 100 Hz or more. The `px4` preflight minimum is that same 100 Hz.
+The relay logs the measured `sensor_combined` input rate in sim time and warns below `rate_warn_hz` (default 80). XRCE copies that topic at most once per 10 ms, so 100 Hz is a ceiling and a 100 Hz gate would fail on ordinary jitter. RTAB-Map's IMU path still wants 100 Hz or more. The `px4` preflight minimum is that same 80 Hz when `PREFLIGHT_MIN_IMU_HZ` is unset.
 
 Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
 

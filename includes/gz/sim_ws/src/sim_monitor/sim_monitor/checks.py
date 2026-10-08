@@ -104,7 +104,7 @@ def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> floa
 def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
     """Oak IMU rate from ``IMU_RATE_HZ`` or ``VISION_PROFILE``.
 
-    ``px4`` does not use this. Its preflight minimum is 100 Hz in sim time.
+    ``px4`` does not use this. Its preflight minimum is 80 Hz in sim time.
     """
     env = os.environ if environ is None else environ
     return expected_sensor_hz("imu", env)
@@ -115,7 +115,8 @@ def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
 
     An explicit ``PREFLIGHT_MIN_*_HZ`` wins. Otherwise the camera minimum and
     the oak IMU minimum are half the expected rate. ``IMU_SOURCE=px4`` uses
-    100 Hz in sim time.
+    80 Hz in sim time. XRCE copies ``sensor_combined`` at most once per 10 ms,
+    so 100 Hz is a ceiling and ordinary jitter would fail a 100 Hz gate.
     """
     env = os.environ if environ is None else environ
     name = "PREFLIGHT_MIN_CAMERA_HZ" if kind == "camera" else "PREFLIGHT_MIN_IMU_HZ"
@@ -123,7 +124,7 @@ def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
     if override is not None:
         return override
     if kind == "imu" and env.get("IMU_SOURCE", "").strip().lower() == "px4":
-        return 100.0
+        return 80.0
     if kind == "imu":
         return 0.5 * expected_imu_hz(env)
     return 0.5 * expected_sensor_hz(kind, env)

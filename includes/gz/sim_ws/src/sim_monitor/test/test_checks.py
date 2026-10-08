@@ -98,8 +98,8 @@ def test_preflight_thresholds_follow_profile_and_overrides():
     assert expected_sensor_hz("camera", {"CAM_RATE_HZ": "15"}) == 15.0
     assert minimum_rate_hz("camera", {"VISION_PROFILE": "full"}) == 15.0
     assert minimum_rate_hz("imu", {"VISION_PROFILE": "cpu", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 100.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 80.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
     assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "IMU_RATE_HZ": "80"}) == 40.0
     assert default_min_rtf({"HEADLESS_SOFTWARE": "1"}) == 0.15
     assert default_min_rtf({}) == 0.8

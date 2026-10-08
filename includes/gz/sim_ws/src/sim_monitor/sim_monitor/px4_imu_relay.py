@@ -88,6 +88,8 @@ def main() -> None:
             self.declare_parameter("angular_velocity_stddev", 0.01)
             self.declare_parameter("linear_acceleration_stddev", 0.1)
             self.declare_parameter("yaw_variance", 1.0e3)
+            self.declare_parameter("rate_warn_hz", PX4_RATE_WARN_HZ)
+            self._rate_warn_hz = float(self.get_parameter("rate_warn_hz").value)
             self._mode = stamp_mode()
             self._gyro_cov = diagonal_covariance(self.get_parameter("angular_velocity_stddev").value)
             self._accel_cov = diagonal_covariance(self.get_parameter("linear_acceleration_stddev").value)
@@ -183,7 +185,7 @@ def main() -> None:
         def _log_rate(self, now_ns: int) -> None:
             if self._last_rate_log_ns is not None and now_ns - self._last_rate_log_ns < RATE_LOG_PERIOD_NS:
                 return
-            entry = rate_log(input_rate_hz(self._rate_stamps), PX4_RATE_WARN_HZ)
+            entry = rate_log(input_rate_hz(self._rate_stamps), self._rate_warn_hz)
             if entry is None:
                 return
             level, text = entry
