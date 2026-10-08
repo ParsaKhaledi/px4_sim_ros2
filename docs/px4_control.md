@@ -107,7 +107,7 @@ The bridge keeps the odometry header stamp. It does not re-stamp the last pose. 
 
 ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. Default is `vision`.
 
-`includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites one marked block in `ROMFS/px4fmu_common/init.d-posix/px4-rc.params`. PX4 v1.17 does not source that file on its own (the previous `>>` append never ran). The installer also inserts one source of it into `rcS`, after the airframe and immediately before `ekf2 start`. Re-running it does not stack lines. Values are `param set`, so a later start overrides a value stored from a previous run. The mode is expanded when the container starts, so the PX4 shell does not need the variable itself.
+`includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites one marked block in `ROMFS/px4fmu_common/init.d-posix/px4-rc.params`. PX4 v1.17 does not source that file on its own (the previous `>>` append never ran). The installer also inserts one source of it into `rcS`, after the airframe and immediately before `ekf2 start`, and adds `px4-rc.params` to the posix ROMFS file list so the SITL rootfs actually contains it. Re-running it does not stack lines. Values are `param set`, so a later start overrides a value stored from a previous run. The mode is expanded when the container starts, so the PX4 shell does not need the variable itself.
 
 Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, and `NAV_RCL_ACT 1`.
 

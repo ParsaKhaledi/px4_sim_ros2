@@ -65,3 +65,18 @@ def test_missing_params_file_is_created_and_rcs_is_hooked_once(tmp_path):
     assert hooked.count('# BEGIN px4_control source') == 1
     assert hooked.count('. ${R}etc/init.d-posix/px4-rc.params') == 1
     assert hooked.index('# BEGIN px4_control source') < hooked.index('ekf2 start')
+
+
+def test_romfs_cmake_lists_the_params_file_once(tmp_path):
+    rc = tmp_path / 'px4-rc.params'
+    cmake = tmp_path / 'CMakeLists.txt'
+    cmake.write_text('px4_add_romfs_files(\n\trcS\n)\n', encoding='utf-8')
+    subprocess.check_call(
+        ['bash', '-c', f'. "{INSTALLER}"; install_px4_control_params "{rc}" vision'],
+    )
+    subprocess.check_call(
+        ['bash', '-c', f'. "{INSTALLER}"; install_px4_control_params "{rc}" vision'],
+    )
+    text = cmake.read_text(encoding='utf-8')
+    assert text.count('px4-rc.params') == 1
+    assert text.index('px4-rc.params') < text.index('rcS')

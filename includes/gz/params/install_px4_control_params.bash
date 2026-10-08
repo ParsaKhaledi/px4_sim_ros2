@@ -69,6 +69,7 @@ install_px4_control_params() {
   } >> "$tmp"
   mv "$tmp" "$rc_file"
   _px4_control_hook_rcs "$dir/rcS"
+  _px4_control_hook_cmake "$dir/CMakeLists.txt"
 }
 
 # Insert one source of px4-rc.params immediately before EKF2 starts.
@@ -95,6 +96,28 @@ _px4_control_hook_rcs() {
     { print }
   ' "$rcs" > "$tmp"
   mv "$tmp" "$rcs"
+}
+
+# px4_add_romfs_files() only copies names listed here. Without this entry
+# the params file never reaches the SITL rootfs.
+_px4_control_hook_cmake() {
+  local cmake="$1"
+  if [ ! -f "$cmake" ]; then
+    return 0
+  fi
+  if grep -q 'px4-rc.params' "$cmake"; then
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  awk '
+    $0 == "\trcS" && !inserted {
+      print "\tpx4-rc.params"
+      inserted = 1
+    }
+    { print }
+  ' "$cmake" > "$tmp"
+  mv "$tmp" "$cmake"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
