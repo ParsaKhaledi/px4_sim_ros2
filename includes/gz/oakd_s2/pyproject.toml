@@ -1,0 +1,7 @@
+[project]
+name = "oakd-s2"
+requires-python = ">=3.12"
+description = "OAK-D S2 geometry and Gazebo renderers for the PX4 simulation."
+
+[tool.ruff]
+target-version = "py312"

@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import geometry as geo
+from profiles import rate_text
 
 
 INI_DIR = Path(__file__).resolve().parents[1] / "startFiles" / "rtabmap_profiles"
@@ -74,28 +75,30 @@ def camera_overrides(profile_name: str, camera: str) -> tuple[list[tuple[str, st
     name = str(profile_name).strip().lower()
     if name not in geo.PROFILES:
         raise ValueError(f"VISION_PROFILE must be cpu, full, or hw, got {profile_name}")
-    if camera == "stereo":
-        slam = [("Grid/MaxGroundHeight", "1.0"), ("Grid/MaxObstacleHeight", "2.0")]
-        if name == "cpu":
-            slam.append(("Stereo/MaxDisparity", "64"))
-        return slam, []
-    if camera == "rgbd":
-        return (
-            [("Grid/MaxGroundHeight", "0.5"), ("Grid/MaxObstacleHeight", "2.2")],
-            [("Vis/DepthAsMask", "true")],
-        )
-    if camera == "rgbd-wrapper":
-        return (
-            [
-                ("Grid/MaxGroundHeight", "0.5"),
-                ("Grid/MaxObstacleHeight", "2.2"),
-                ("Grid/RayTracing", "true"),
-                ("Grid/3D", "true"),
-                ("Grid/FlatObstacleDetected", "true"),
-            ],
-            [("Vis/DepthAsMask", "true")],
-        )
-    raise ValueError(f"camera must be stereo, rgbd, or rgbd-wrapper, got {camera}")
+    match camera:
+        case "stereo":
+            slam = [("Grid/MaxGroundHeight", "1.0"), ("Grid/MaxObstacleHeight", "2.0")]
+            if name == "cpu":
+                slam.append(("Stereo/MaxDisparity", "64"))
+            return slam, []
+        case "rgbd":
+            return (
+                [("Grid/MaxGroundHeight", "0.5"), ("Grid/MaxObstacleHeight", "2.2")],
+                [("Vis/DepthAsMask", "true")],
+            )
+        case "rgbd-wrapper":
+            return (
+                [
+                    ("Grid/MaxGroundHeight", "0.5"),
+                    ("Grid/MaxObstacleHeight", "2.2"),
+                    ("Grid/RayTracing", "true"),
+                    ("Grid/3D", "true"),
+                    ("Grid/FlatObstacleDetected", "true"),
+                ],
+                [("Vis/DepthAsMask", "true")],
+            )
+        case _:
+            raise ValueError(f"camera must be stereo, rgbd, or rgbd-wrapper, got {camera}")
 
 
 def effective_parameters(profile_name: str, camera: str) -> dict[str, str]:
@@ -121,13 +124,6 @@ def launch_strings(profile_name: str, camera: str) -> tuple[Path, str, str]:
     return path, " ".join(args), " ".join(odom_args)
 
 
-def _rate_text(value: float) -> str:
-    """Whole-number rates print as ints."""
-    if float(value).is_integer():
-        return str(int(value))
-    return str(value)
-
-
 def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
     """Stderr lines: the profile summary, ini keys, then camera overrides."""
     path, params = load_profile_ini(profile.name)
@@ -137,8 +133,8 @@ def startup_log_lines(profile: geo.VisionProfile, camera: str) -> list[str]:
             f"vision profile={profile.name} camera={camera} "
             f"stereo={profile.stereo_width}x{profile.stereo_height} "
             f"color={profile.color_width}x{profile.color_height} "
-            f"camera_hz={_rate_text(profile.camera_hz)} "
-            f"imu_hz={_rate_text(profile.imu_hz)} ini={path}"
+            f"camera_hz={rate_text(profile.camera_hz)} "
+            f"imu_hz={rate_text(profile.imu_hz)} ini={path}"
         )
     ]
     # No GPU line here. This process runs in the Rtabmap container, which
