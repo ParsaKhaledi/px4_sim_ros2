@@ -14,7 +14,7 @@
 #
 # Vision-mode environment overrides (see docs/px4_control.md):
 #   EKF2_EV_DELAY   milliseconds, 0..300, default 0
-#   EKF2_EV_CTRL    integer bitmask 0..15, default 11 (no velocity)
+#   EKF2_EV_CTRL    integer bitmask 0..15, default 9 (horizontal position and yaw)
 
 _px4_control_number() {
   local name="$1"
@@ -49,7 +49,7 @@ install_px4_control_params() {
   local ev_ctrl=""
   if [ "$mode" != "gps" ]; then
     ev_delay="$(_px4_control_number EKF2_EV_DELAY "${EKF2_EV_DELAY:-0}" 0 300 0)" || return 1
-    ev_ctrl="$(_px4_control_number EKF2_EV_CTRL "${EKF2_EV_CTRL:-11}" 0 15 1)" || return 1
+    ev_ctrl="$(_px4_control_number EKF2_EV_CTRL "${EKF2_EV_CTRL:-9}" 0 15 1)" || return 1
   fi
   local tmp
   tmp="$(mktemp)"
@@ -72,11 +72,14 @@ install_px4_control_params() {
     else
       echo "export PX4_PARAM_EKF2_EV_CTRL=${ev_ctrl}"
       echo "export PX4_PARAM_EKF2_MAG_TYPE=5"
-      echo "export PX4_PARAM_EKF2_HGT_REF=3"
+      echo "export PX4_PARAM_EKF2_HGT_REF=0"
       echo "export PX4_PARAM_EKF2_EV_DELAY=${ev_delay}"
       echo "export PX4_PARAM_EKF2_EV_NOISE_MD=0"
       echo "export PX4_PARAM_EKF2_GPS_CTRL=0"
+      echo "export PX4_PARAM_EKF2_RNG_CTRL=1"
       echo "export PX4_PARAM_COM_ARM_WO_GPS=1"
+      echo "export PX4_PARAM_GF_MAX_VER_DIST=3.0"
+      echo "export PX4_PARAM_GF_ACTION=5"
     fi
   } > "$tmp"
   mv "$tmp" "$env_file"

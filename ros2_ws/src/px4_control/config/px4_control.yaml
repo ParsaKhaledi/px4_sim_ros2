@@ -30,3 +30,6 @@ px4_control:
     takeoff_timeout_s: 90.0
     land_timeout_s: 90.0
     goto_timeout_s: 120.0
+    # 0 disables the end-to-end height abort. Set E2E_HEIGHT_TOLERANCE_M to enable it.
+    e2e_height_tolerance_m: 0.0
+    ground_truth_odom_topic: /ground_truth/odom

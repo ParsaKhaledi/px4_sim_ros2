@@ -116,7 +116,7 @@ ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. D
 
 `includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites `PX4-Autopilot/px4_control_params.env`. `gz_start_px4_gz_sim.sh` sources that file. Stock PX4 v1.17 `rcS` applies every `PX4_PARAM_<NAME>` before the airframe and before `ekf2 start` (`ROMFS/px4fmu_common/init.d-posix/rcS`). Appending `param set` to `px4-rc.params` does not: that file is not sourced, which is why a flight log can still show `NAV_RCL_ACT` 2 after the old append. Re-running the installer replaces the env file. `param set` inside rcS overrides a value stored from a previous run.
 
-After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_EV_DELAY`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `EKF2_MAG_TYPE`, `SYS_HAS_MAG`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. `EKF2_EV_DELAY` is checked in vision mode. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
+After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_EV_DELAY`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `EKF2_MAG_TYPE`, `EKF2_RNG_CTRL`, `SYS_HAS_MAG`, `GF_MAX_VER_DIST`, `GF_ACTION`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. `EKF2_EV_DELAY`, `EKF2_RNG_CTRL`, `GF_MAX_VER_DIST`, and `GF_ACTION` are checked in vision mode. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
 
 Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, `NAV_DLL_ACT 0`, and `UXRCE_DDS_SYNCT 0`.
 
@@ -130,23 +130,28 @@ External vision is the primary aid. GPS stays on the vehicle and keeps publishin
 
 | Parameter | Value | Meaning |
 |-----------|-------|---------|
-| `EKF2_EV_CTRL` | 11 | bits 0, 1, and 3: horizontal position, vertical position, yaw. Velocity (bit 2) stays off |
+| `EKF2_EV_CTRL` | 9 | bits 0 and 3: horizontal position and yaw. Vertical position (bit 1) and velocity (bit 2) stay off |
 | `EKF2_MAG_TYPE` | 5 | None. Magnetometer fusion is off |
 | `SYS_HAS_MAG` | 1 | firmware default, not exported. The compass stays required |
-| `EKF2_HGT_REF` | 3 | height from vision |
+| `EKF2_HGT_REF` | 0 | barometric height |
 | `EKF2_EV_DELAY` | 0 | ms, from `EKF2_EV_DELAY` if set. Read at EKF start |
 | `EKF2_EV_NOISE_MD` | 0 | use the variances on the message |
 | `EKF2_GPS_CTRL` | 0 | GNSS fusion off. The navsat sensor still publishes |
+| `EKF2_RNG_CTRL` | 1 | conditional range aid. It fuses nothing until a downward lidar is on the model |
 | `COM_ARM_WO_GPS` | 1 | arming is allowed if the GPS check fails |
+| `GF_MAX_VER_DIST` | 3.0 | metres above home. The vertical fence is off while this is 0 |
+| `GF_ACTION` | 5 | Land mode in PX4 v1.17. Value 3 is Return mode |
 | `UXRCE_DDS_SYNCT` | 0 | do not sync PX4 time to the agent OS clock |
 
-`EKF2_EV_CTRL` in v1.17 is a bitmask: bit 0 horizontal position, bit 1 vertical position, bit 2 3D velocity, bit 3 yaw. 11 is `0b1011`. 15 is `0b1111` and adds velocity.
+`EKF2_EV_CTRL` in v1.17 is a bitmask: bit 0 horizontal position, bit 1 vertical position, bit 2 3D velocity, bit 3 yaw. 9 is `0b1001`. 15 is `0b1111` and adds velocity and vision height.
 
 Vision mode disables magnetometer fusion (`EKF2_MAG_TYPE` 5, None in `src/modules/ekf2/EKF/common.h`). Yaw comes from external vision (`EKF2_EV_CTRL` bit 3), and an indoor magnetometer would fight that heading. The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe does the same. GPS mode leaves `EKF2_MAG_TYPE` at the firmware default 0 (Automatic) and does not export it.
 
 `EKF2_MAG_TYPE` stops EKF2 from fusing the magnetometer. It does not remove the sensor. `SYS_HAS_MAG` stays at the firmware default of 1 in both modes (`system_params.c`), and neither profile exports it, so the commander's compass presence check still runs (`magnetometerCheck.cpp`). The x500 keeps its magnetometer. Vision yaw comes from external vision (`EKF2_EV_CTRL` bit 3), so the vision profile sets `EKF2_MAG_TYPE` to 5 and the compass is present but not fused. GPS mode leaves `EKF2_MAG_TYPE` at 0 (Automatic).
 
-The [rtabmap_drone_example](https://github.com/matlabbe/rtabmap_drone_example) airframe uses 11. RTAB-Map's twist is body velocity with a covariance that is often too small or not a real velocity uncertainty, so fusing it pulls the EKF off the pose. Velocity fusion stays off unless `EKF2_EV_CTRL=15` is set in the environment before the params installer runs. The bridge still fills the velocity fields; EKF2 ignores them while bit 2 is clear.
+RTAB-Map's twist is body velocity with a covariance that is often too small or not a real velocity uncertainty, so fusing it pulls the EKF off the pose. Velocity fusion stays off unless `EKF2_EV_CTRL=15` is set in the environment before the params installer runs. The bridge still fills the velocity fields; EKF2 ignores them while bit 2 is clear. Bit 1 stays clear so a vision pose cannot move the height estimate. Height is the barometer (`EKF2_HGT_REF` 0). `EKF2_RNG_CTRL` 1 is conditional range aid and starts fusing only after the x500 has a downward lidar.
+
+`GF_MAX_VER_DIST` 3.0 m is a hard ceiling above home altitude. PX4 v1.17 `geofence_params.c` defines `GF_ACTION` 3 as Return mode and 5 as Land mode, so this profile exports 5. The check in `Geofence::isBelowMaxAltitude` runs when home altitude is valid.
 
 ### Tuning `EKF2_EV_DELAY`
 
@@ -157,7 +162,7 @@ It is not on the uXRCE topic list. In the PX4 shell, or in the log, read uORB `e
 - innovation the same sign as the acceleration means vision is late: raise the delay
 - the opposite sign means vision is early: lower the delay
 
-Use the value that leaves the innovation near zero and uncorrelated with acceleration. One 30 Hz camera frame is about 33 ms. RTAB-Map's processing is often 50 to 100 ms. Height uses `estimator_aid_src_ev_hgt` the same way. `estimator_aid_src_ev_vel` stays empty while bit 2 is off.
+Use the value that leaves the innovation near zero and uncorrelated with acceleration. One 30 Hz camera frame is about 33 ms. RTAB-Map's processing is often 50 to 100 ms. `estimator_aid_src_ev_hgt` stays empty while bit 1 is off. `estimator_aid_src_ev_vel` stays empty while bit 2 is off.
 
 `vision_timeout_s` sits next to that delay. It is the age, node clock minus the odometry header stamp, after which a stalled publisher is stale and the vehicle holds. It is not itself tracking loss, and a frame that is merely slow does not bump `reset_counter`. Default 0.3 s. With `use_sim_time` that is 0.3 s of sim time (`/clock`), not wall time, so a low real-time factor does not by itself trip the hold. `VISION_PROFILE=cpu` runs the cameras at 10 Hz, and RTAB-Map odometry then arrives at about 7–10 Hz in sim time. 0.3 s is a few frame periods at 10 Hz, so a CPU run does not hold on every late frame. Raise the parameter if the odometry rate is closer to 7 Hz.
 
@@ -175,10 +180,17 @@ These are read by the params installer and `gz_start_px4_control.sh`. They are n
 |----------|---------|----------|
 | `ESTIMATION_MODE` | `vision` | `vision` or `gps` |
 | `EKF2_EV_DELAY` | `0` | vision delay in milliseconds, 0..300 |
-| `EKF2_EV_CTRL` | `11` | vision bitmask, 0..15. `15` also fuses velocity |
+| `EKF2_EV_CTRL` | `9` | vision bitmask, 0..15. `15` also fuses velocity and vision height |
+| `E2E_HEIGHT_TOLERANCE_M` | unset | when set, abort and land if estimate or setpoint height leaves ground truth by more than this many metres |
 | `PX4_MAX_YAW_RATE_DEG_S` | `30` | ROS `max_yaw_rate_deg_s` |
 | `PX4_WALL_SEGMENTS_FILE` | empty | wall segments, if the file exists |
 | `USE_SIM_TIME` | `true` | launch `use_sim_time` |
+
+## End-to-end height check
+
+`E2E_HEIGHT_TOLERANCE_M` (ROS `e2e_height_tolerance_m`, default 0) turns on a flight check. The node subscribes to `/ground_truth/odom` and, on each setpoint, compares up-positive heights: estimator z is the negated NED down position, setpoint z is the negated trajectory z, and ground truth z is the Gazebo ENU z. The first sample where either absolute error exceeds the tolerance aborts the active goal and lands, including during takeoff. The log line is `height abort: ...; fault_to_abort_s=<seconds>` with the sim-time gap from that fault sample to the land command. After the land detector reports landed, the node disarms.
+
+A vision hover is graded `suspect` when every EKF height error against ground truth is within 1 mm. That match means ground truth is being fused as vision. GPS mode is not failed for the same match. `grade_hover` in `px4_control/grading.py` returns that grade.
 
 ## Arming
 

@@ -19,7 +19,10 @@ READBACK_PARAMS = (
     'EKF2_GPS_CTRL',
     'EKF2_HGT_REF',
     'EKF2_MAG_TYPE',
+    'EKF2_RNG_CTRL',
     'SYS_HAS_MAG',
+    'GF_MAX_VER_DIST',
+    'GF_ACTION',
     'NAV_RCL_ACT',
     'NAV_DLL_ACT',
     'UXRCE_DDS_SYNCT',
@@ -28,7 +31,7 @@ READBACK_PARAMS = (
 
 def expected_sim_params(
     mode: str,
-    ev_ctrl: float = 11.0,
+    ev_ctrl: float = 9.0,
     ev_delay: float = 0.0,
 ) -> dict[str, float]:
     """Parameter values the SITL process must show for ``mode``."""
@@ -62,13 +65,19 @@ def expected_sim_params(
             'EKF2_MAG_TYPE': 5.0,
             # Firmware default. The compass stays present; fusion is EKF2_MAG_TYPE.
             'SYS_HAS_MAG': 1.0,
-            'EKF2_HGT_REF': 3.0,
+            # Baro. Vision height is not fused (EKF2_EV_CTRL bit 1 stays clear).
+            'EKF2_HGT_REF': 0.0,
             'EKF2_EV_DELAY': float(ev_delay),
             'EKF2_EV_NOISE_MD': 0.0,
             # GNSS fusion off. With gnss_pos active, EV horizontal position is
             # bias-corrected and its variance is floored at GPS_P_NOISE^2.
             'EKF2_GPS_CTRL': 0.0,
+            # Conditional range aid. It fuses nothing until a downward lidar exists.
+            'EKF2_RNG_CTRL': 1.0,
             'COM_ARM_WO_GPS': 1.0,
+            # Hard ceiling above home. v1.17 GF_ACTION 5 is Land; 3 is Return.
+            'GF_MAX_VER_DIST': 3.0,
+            'GF_ACTION': 5.0,
         })
     return values
 

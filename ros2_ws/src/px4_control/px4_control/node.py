@@ -23,6 +23,7 @@ from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_srvs.srv import Trigger
 
+from px4_control.e2e_height import HeightGuard, height_abort_log
 from px4_control.arming import (
     ack_failure_text,
     combine_failure,
@@ -148,11 +149,16 @@ class Px4ControlNode(Node):
         self._live_topics: dict[str, str] = {}
         self._preflight_client = None
         self._warned_vision_loss = False
+        self._gt_z_up: float | None = None
+        self._height_land = False
+        self._e2e_disarm_started = False
+        tolerance_m = float(self.get_parameter('e2e_height_tolerance_m').value)
+        self._height_guard = HeightGuard(tolerance_m) if tolerance_m > 0.0 else None
         self._topics = load_px4_topics()
         self._param_report: str | None = None
         self._expected_params = expected_sim_params(
             self._estimation_mode,
-            ev_ctrl=float(os.environ.get('EKF2_EV_CTRL', '11')),
+            ev_ctrl=float(os.environ.get('EKF2_EV_CTRL', '9')),
             ev_delay=float(os.environ.get('EKF2_EV_DELAY', '0')),
         )
 
@@ -185,6 +191,14 @@ class Px4ControlNode(Node):
             callback_group=self._cb,
         )
         self._try_odom_info()
+        if self._height_guard is not None:
+            gt_topic = str(self.get_parameter('ground_truth_odom_topic').value)
+            self.create_subscription(
+                Odometry, gt_topic, self._on_ground_truth, cmd_qos, callback_group=self._cb,
+            )
+            self.get_logger().info(
+                f'e2e height tolerance {self._height_guard.tolerance_m:.3f} m on {gt_topic}'
+            )
 
         self._state_pub = self.create_publisher(VehicleState, '/px4_control/state', 10)
         self._odom_pub = self.create_publisher(Odometry, '/px4_control/odom', 10)
@@ -244,6 +258,8 @@ class Px4ControlNode(Node):
             'takeoff_timeout_s': 90.0,
             'land_timeout_s': 90.0,
             'goto_timeout_s': 120.0,
+            'e2e_height_tolerance_m': float(os.environ.get('E2E_HEIGHT_TOLERANCE_M', '0') or 0),
+            'ground_truth_odom_topic': '/ground_truth/odom',
         }
         for name, value in defaults.items():
             if not self.has_parameter(name):
@@ -444,10 +460,52 @@ class Px4ControlNode(Node):
                 else:
                     self._motion.note_vision_regained()
             setpoint = self._motion.update(now, snap)
+            height_log = self._check_e2e_height(now, snap, setpoint)
+            if height_log is not None:
+                setpoint = self._motion.update(now, snap)
+            disarm_now = (
+                self._height_land
+                and self._motion.needs_disarm
+                and not self._e2e_disarm_started
+            )
+            if disarm_now:
+                self._e2e_disarm_started = True
             self._gate.tick(now)
             phase = self._motion.phase
+        if height_log is not None:
+            self.get_logger().error(height_log)
+        if disarm_now:
+            threading.Thread(
+                target=self._do_arm,
+                args=(False, float(self.get_parameter('arm_timeout_s').value)),
+                name='e2e_disarm',
+                daemon=True,
+            ).start()
         self._publish_offboard(setpoint)
         self._publish_state(phase)
+
+    def _on_ground_truth(self, msg: Odometry) -> None:
+        with self._lock:
+            self._gt_z_up = float(msg.pose.pose.position.z)
+
+    def _check_e2e_height(self, now: float, snap: Snapshot | None, setpoint) -> str | None:
+        """Abort and land when estimate or setpoint height leaves ground truth."""
+        if self._height_guard is None or snap is None or self._gt_z_up is None:
+            return None
+        if not setpoint.use_position:
+            return None
+        reason = self._height_guard.observe(
+            now,
+            -float(snap.position_ned[2]),
+            -float(setpoint.position[2]),
+            self._gt_z_up,
+        )
+        if reason is None:
+            return None
+        self._motion.abort_and_land(now, snap, reason)
+        self._height_land = True
+        gap = self._height_guard.fault_to_abort_s
+        return height_abort_log(reason, 0.0 if gap is None else gap)
 
     def _publish_offboard(self, setpoint) -> None:
         stamp = self._now_us()

@@ -28,8 +28,12 @@ def test_topic_config_uses_v1_only_where_px4_msgs_does():
 def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     expected = expected_sim_params('vision')
     assert expected['NAV_DLL_ACT'] == 0.0
-    assert expected['EKF2_EV_CTRL'] == 11.0
+    assert expected['EKF2_EV_CTRL'] == 9.0
     assert expected['EKF2_EV_DELAY'] == 0.0
+    assert expected['EKF2_HGT_REF'] == 0.0
+    assert expected['EKF2_RNG_CTRL'] == 1.0
+    assert expected['GF_MAX_VER_DIST'] == 3.0
+    assert expected['GF_ACTION'] == 5.0
     assert expected['EKF2_GPS_CTRL'] == 0.0
     assert 'EKF2_GPS_P_NOISE' not in expected
     assert 'EKF2_GPS_V_NOISE' not in expected
@@ -58,7 +62,8 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     assert readback_mismatch(
         {name: expected[name] for name in (
             'EKF2_EV_CTRL', 'EKF2_EV_DELAY', 'EKF2_GPS_CTRL', 'EKF2_HGT_REF', 'EKF2_MAG_TYPE',
-            'SYS_HAS_MAG', 'NAV_RCL_ACT', 'NAV_DLL_ACT', 'UXRCE_DDS_SYNCT',
+            'EKF2_RNG_CTRL', 'SYS_HAS_MAG', 'GF_MAX_VER_DIST', 'GF_ACTION',
+            'NAV_RCL_ACT', 'NAV_DLL_ACT', 'UXRCE_DDS_SYNCT',
         )},
         expected,
     ) is None

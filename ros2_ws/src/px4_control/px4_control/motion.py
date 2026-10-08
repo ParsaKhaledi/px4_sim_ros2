@@ -242,6 +242,24 @@ class MotionExecutive:
             return self._reject('rejected: takeoff in progress')
         self._preempt_active()
         self._seed_if_needed(snap, time_s)
+        return self._begin_land()
+
+    def abort_and_land(self, time_s: float, snap: Snapshot, message: str) -> int:
+        """Fail the active goal and land. This includes a takeoff in progress."""
+        if self.phase == Phase.LAND and self._active is not None and not self._status[self._active].done:
+            return self._active
+        self._seed_if_needed(snap, time_s)
+        if self._active is not None and not self._status[self._active].done:
+            status = self._status[self._active]
+            status.done = True
+            status.success = False
+            status.message = message
+            self._active = None
+        self._holding = False
+        self._hold_since = None
+        return self._begin_land()
+
+    def _begin_land(self) -> int:
         assert self._p is not None
         ground = self._ground_d if self._ground_d is not None else float(self._p[2])
         # Half a metre below the recorded ground. A setpoint on the surface

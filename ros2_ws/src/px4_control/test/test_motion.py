@@ -353,3 +353,24 @@ def test_hold_does_not_count_without_a_vehicle_snapshot():
     for index in range(1, 40):
         executive.update(index * 0.05, None)
     assert executive.poll(goal_id).done is False
+
+
+def test_abort_and_land_preempts_takeoff():
+    executive = MotionExecutive(_limits())
+    ground = _snap(np.zeros(3), landed=True)
+    executive.update(0.0, ground)
+    air = _snap(np.array([0.0, 0.0, -0.4]), landed=False)
+    takeoff_id = executive.request_takeoff(0.05, air, 2.0)
+    climbing = executive.update(0.1, air)
+    assert executive.phase == Phase.TAKEOFF
+    assert float(climbing.velocity[2]) < 0.0
+    land_id = executive.abort_and_land(0.15, air, 'height tolerance exceeded')
+    assert executive.poll(takeoff_id).success is False
+    assert executive.poll(takeoff_id).message == 'height tolerance exceeded'
+    assert executive.phase == Phase.LAND
+    landing = executive.update(0.2, air)
+    assert float(landing.velocity[2]) >= 0.40
+    assert executive.poll(land_id).done is False
+    again = executive.abort_and_land(0.25, air, 'again')
+    assert again == land_id
+    assert executive.poll(land_id).done is False
