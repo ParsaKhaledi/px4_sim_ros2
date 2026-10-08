@@ -96,8 +96,11 @@ class Drone:
         frame: str = 'enu',
         timeout: float = 180.0,
     ) -> None:
-        """Go to a pose. ``frame`` is ``enu`` or ``body``. ``yaw`` is NED radians
-        in ENU, or a relative counter-clockwise angle in the body frame.
+        """Go to a pose. ``frame`` is ``enu`` or ``body``.
+
+        In the ENU frame ``yaw`` is an absolute ENU heading in radians and is
+        converted to NED (``pi/2 - yaw``). In the body frame it is a relative
+        counter-clockwise angle.
         """
         goal = GoTo.Goal()
         goal.frame = GoTo.Goal.FRAME_BODY if frame == 'body' else GoTo.Goal.FRAME_LOCAL_ENU

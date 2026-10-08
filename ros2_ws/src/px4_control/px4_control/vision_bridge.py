@@ -1,12 +1,14 @@
 """RTAB-Map odometry to a PX4 ``VehicleOdometry`` sample.
 
-The bridge keeps the SLAM header stamp. On tracking loss, or when the last
-sample is older than the timeout, it returns nothing. It does not publish the
-previous pose under a new timestamp.
+A frame is lost tracking only when RTAB-Map says so: a null pose, a pose
+covariance of 9999 (``publish_null_when_lost``), or ``OdomInfo.lost``. Those
+samples are never forwarded. The age check compares the caller clock, which
+is sim time when the node uses ``use_sim_time``, against the last accepted
+header stamp. It only notices a stalled publisher. It does not mark the
+stream lost and it does not change ``reset_counter``.
 
-``reset_counter`` increments when a valid pose jumps farther than the motion
-predicted from the previous sample, which is how an RTAB-Map relocalization
-shows up on ``nav_msgs/Odometry``.
+``reset_counter`` increments only when odometry info reports a new map or a
+reset. A slow but valid frame keeps the previous counter.
 """
 
 from __future__ import annotations
@@ -25,6 +27,11 @@ from px4_control.frames import (
     flu_to_frd,
     rotate_covariance,
 )
+
+# RTAB-Map's lost-estimate convention: a diagonal of 9999 means the pose is
+# not a measurement. The same value on a non-lost info message is how a reset
+# asks the mapper to start a new map.
+LOST_VARIANCE = 9999.0
 
 
 @dataclass(frozen=True)
@@ -71,8 +78,32 @@ def _invalid_diagonal(covariance: np.ndarray, max_variance: float) -> bool:
     return bool(np.any(diag > max_variance))
 
 
+def lost_covariance(covariance: np.ndarray) -> bool:
+    """True when a 6x6 covariance uses RTAB-Map's 9999 lost/reset value."""
+    array = np.asarray(covariance, dtype=float).reshape(-1)
+    if array.size < 36:
+        return False
+    diag = array.reshape(6, 6).diagonal()
+    return bool(np.any(np.isfinite(diag) & (diag >= LOST_VARIANCE)))
+
+
+def _is_null_pose(position: np.ndarray, quat: np.ndarray) -> bool:
+    """RTAB-Map's published null transform, not a real pose at the origin.
+
+    A pose at the origin with an identity quaternion is a real measurement.
+    The null pose is a zero translation together with a zero quaternion.
+    """
+    pos = np.asarray(position, dtype=float).reshape(-1)
+    rotation = np.asarray(quat, dtype=float).reshape(-1)
+    if pos.size != 3 or rotation.size != 4:
+        return False
+    if not np.all(np.isfinite(pos)) or not np.all(np.isfinite(rotation)):
+        return False
+    return float(np.linalg.norm(rotation)) < 1e-6 and float(np.linalg.norm(pos)) < 1e-6
+
+
 class VisionOdometryBridge:
-    """Convert ENU/FLU odometry and remember SLAM resets."""
+    """Convert ENU/FLU odometry and remember SLAM map resets."""
 
     def __init__(
         self,
@@ -83,16 +114,14 @@ class VisionOdometryBridge:
         if timeout_s <= 0.0:
             raise ValueError('timeout_s must be positive')
         self.timeout_s = float(timeout_s)
+        # Pose jumps are not a reset. The argument remains so existing callers
+        # and the ROS parameter still load.
         self.reset_jump_m = float(reset_jump_m)
         self.max_variance = float(max_variance)
         self.reset_counter = 0
         self._last: VisualOdom | None = None
         self._last_rx: float | None = None
         self._lost = False
-        self._tracked_once = False
-        self._prev_position: np.ndarray | None = None
-        self._prev_velocity_ned: np.ndarray | None = None
-        self._prev_stamp: float | None = None
 
     @property
     def tracking(self) -> bool:
@@ -103,19 +132,31 @@ class VisionOdometryBridge:
         self._lost = True
         self._last = None
 
+    def note_odom_info(self, *, lost: bool = False, new_map: bool = False) -> None:
+        """Apply an ``OdomInfo`` signal.
+
+        ``lost`` stops publishing. ``new_map`` is the reset that starts a new
+        map; it is the only event that increments ``reset_counter``.
+        """
+        if new_map:
+            self.reset_counter = (self.reset_counter + 1) % 256
+        if lost:
+            self.mark_lost()
+
     def push(self, sample: OdomSample) -> VisualOdom | None:
         """Ingest one odometry message. Returns a sample only while tracking."""
-        self._last_rx = sample.stamp_sec
-        recovering = self._lost and self._tracked_once
-        if sample.tracking_lost or sample.stamp_sec <= 0.0:
+        if sample.tracking_lost or _is_null_pose(sample.position_enu, sample.quat_xyzw):
             self.mark_lost()
             return None
-        if not _finite_vector(sample.position_enu, 3) or not _finite_vector(sample.quat_xyzw, 4):
+        if lost_covariance(sample.pose_covariance):
             self.mark_lost()
+            return None
+        if sample.stamp_sec <= 0.0:
+            return None
+        if not _finite_vector(sample.position_enu, 3) or not _finite_vector(sample.quat_xyzw, 4):
             return None
         attitude = attitude_from_enu_quat(sample.quat_xyzw)
         if attitude is None:
-            self.mark_lost()
             return None
         pose_cov = np.asarray(sample.pose_covariance, dtype=float).reshape(6, 6)
         twist_cov = np.asarray(sample.twist_covariance, dtype=float).reshape(6, 6)
@@ -127,20 +168,11 @@ class VisionOdometryBridge:
             or _invalid_diagonal(orientation_cov_enu, self.max_variance)
             or _invalid_diagonal(velocity_cov_flu, self.max_variance)
         ):
-            self.mark_lost()
             return None
 
         position_ned = enu_to_ned(sample.position_enu)
         velocity_frd = flu_to_frd(sample.linear_flu)
         angular_frd = flu_to_frd(sample.angular_flu)
-        velocity_ned = attitude.rotation @ velocity_frd
-        # One bump re-anchors EKF2. A gap and a pose jump on the same sample
-        # are the same event, so they do not increment twice.
-        if recovering:
-            self.reset_counter = (self.reset_counter + 1) % 256
-        else:
-            self._bump_reset_if_jumped(position_ned, velocity_ned, sample.stamp_sec)
-
         position_cov_ned = rotate_covariance(position_cov_enu, R_NED_FROM_ENU)
         # Pose orientation covariance is in the parent ENU frame. PX4 wants the
         # body-FRD diagonal: R_frd_enu = R_ned_frd.T @ R_ned_enu.
@@ -161,31 +193,21 @@ class VisionOdometryBridge:
             reset_counter=self.reset_counter,
             yaw_ned=attitude.yaw,
         )
-        self._prev_position = position_ned
-        self._prev_velocity_ned = velocity_ned
-        self._prev_stamp = float(sample.stamp_sec)
         self._lost = False
-        self._tracked_once = True
+        self._last_rx = float(sample.stamp_sec)
         self._last = visual
         return visual
 
     def current(self, now_sec: float) -> VisualOdom | None:
-        """Latest valid sample, or ``None`` when tracking is stale.
+        """Latest valid sample, or ``None`` when lost or the stream has stalled.
 
-        ``now_sec`` is only used for the timeout. It is never written into
-        the returned stamp.
+        ``now_sec`` is the caller clock (sim time under ``use_sim_time``). It
+        is compared with the message stamp and is never written into the
+        returned stamp. A stall does not mark tracking lost and does not
+        increment ``reset_counter``.
         """
         if self._lost or self._last is None or self._last_rx is None:
             return None
         if now_sec - self._last_rx > self.timeout_s:
-            self.mark_lost()
             return None
         return self._last
-
-    def _bump_reset_if_jumped(self, position_ned: np.ndarray, velocity_ned: np.ndarray, stamp: float) -> None:
-        if self._prev_position is None or self._prev_stamp is None or self._prev_velocity_ned is None:
-            return
-        dt = max(1e-3, stamp - self._prev_stamp)
-        predicted = self._prev_position + self._prev_velocity_ned * dt
-        if float(np.linalg.norm(position_ned - predicted)) > self.reset_jump_m:
-            self.reset_counter = (self.reset_counter + 1) % 256

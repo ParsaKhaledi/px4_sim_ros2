@@ -13,7 +13,7 @@ from enum import Enum
 import numpy as np
 
 from px4_control.frames import command_age, wrap_pi
-from px4_control.trajectory import BrakeThenHold, step_scalar, step_vector2, step_yaw
+from px4_control.trajectory import BrakeThenHold, step_scalar, step_vector2, step_yaw, step_yaw_remaining
 
 
 class Phase(str, Enum):
@@ -34,9 +34,9 @@ class Limits:
     a_brake: float = 1.0
     yaw_rate: float = np.deg2rad(30.0)
     yaw_accel: float = np.deg2rad(60.0)
-    settle_pos: float = 0.20
-    settle_yaw: float = np.deg2rad(8.0)
-    settle_time: float = 0.4
+    settle_pos: float = 0.02
+    settle_yaw: float = np.deg2rad(3.0)
+    settle_time: float = 1.0
     cmd_timeout: float = 0.5
     speed_eps: float = 0.05
 
@@ -48,6 +48,7 @@ class Snapshot:
     yaw_ned: float
     yaw_rate: float = 0.0
     landed: bool = False
+    armed: bool = True
 
 
 @dataclass
@@ -122,6 +123,7 @@ class MotionExecutive:
         self._after_brake = Phase.HOLD
         self._target = _zeros()
         self._yaw_goal: float | None = None
+        self._yaw_remaining = 0.0
         self._keep_yaw = True
         self._settle = _Settle()
         self._hold_duration = 0.0
@@ -176,6 +178,20 @@ class MotionExecutive:
     def update(self, time_s: float, snap: Snapshot | None) -> Setpoint:
         if snap is not None and snap.landed:
             self._ground_d = float(snap.position_ned[2])
+        if (
+            snap is not None
+            and self._p is not None
+            and snap.landed
+            and not snap.armed
+            and self.phase == Phase.HOLD
+            and self._active is None
+        ):
+            self._p = np.asarray(snap.position_ned, dtype=float).reshape(3).copy()
+            self._v = _zeros()
+            self._a = _zeros()
+            self._yaw = float(snap.yaw_ned)
+            self._yaw_rate = 0.0
+            self._ground_d = float(self._p[2])
         if self._p is None:
             if snap is None:
                 return Setpoint.velocity_hold()
@@ -187,7 +203,7 @@ class MotionExecutive:
             if command_age(self._cmd_time, time_s) >= self.limits.cmd_timeout:
                 self._begin_brake(time_s, Phase.HOLD)
         if self.phase == Phase.BRAKE:
-            self._tick_brake(time_s)
+            self._tick_brake(time_s, snap)
         elif self.phase == Phase.TAKEOFF:
             self._tick_path(time_s, dt, snap, vertical=True)
         elif self.phase == Phase.LAND:
@@ -202,7 +218,7 @@ class MotionExecutive:
             self._v = _zeros()
             self._a = _zeros()
             self._yaw_rate = 0.0
-            self._tick_hold_timer(time_s)
+            self._tick_hold_timer(time_s, snap)
         return self._emit()
 
     def request_takeoff(self, time_s: float, snap: Snapshot, height: float) -> int:
@@ -261,9 +277,14 @@ class MotionExecutive:
             return self._reject('rejected: takeoff or land in progress')
         self._seed_if_needed(snap, time_s)
         self._preempt_active()
-        self._yaw_goal = wrap_pi(self._yaw - delta_rad)
+        # Positive ROS delta is counter-clockwise from above, so NED yaw
+        # decreases. The remaining angle is not wrapped: +180 deg must not
+        # collapse onto the opposite short path.
+        remaining = -float(delta_rad)
+        self._yaw_goal = wrap_pi(self._yaw + remaining)
         moving = float(np.linalg.norm(self._v[:2])) > self.limits.speed_eps
         goal = self._begin(Phase.YAW if not moving else Phase.BRAKE)
+        self._yaw_remaining = remaining
         if moving:
             self._begin_brake(time_s, Phase.YAW)
             self._active = goal
@@ -287,6 +308,15 @@ class MotionExecutive:
     def note_cmd_vel(self, time_s: float, v_north: float, v_east: float, yaw_rate: float) -> None:
         if self._vision_lost or not self.accepts_cmd_vel() or self._p is None:
             return
+        # ``time_s`` is the stamp of the Twist, not the control tick. Refreshing
+        # it with the tick time would add a second timeout on top of the node.
+        if (
+            self.phase != Phase.CMD_VEL
+            and abs(float(v_north)) < 1e-9
+            and abs(float(v_east)) < 1e-9
+            and abs(float(yaw_rate)) < 1e-9
+        ):
+            return
         if self.phase != Phase.CMD_VEL:
             self._preempt_active()
             self._hold_z = float(self._p[2])
@@ -297,13 +327,23 @@ class MotionExecutive:
         self._cmd_yaw_rate = float(yaw_rate)
         self._cmd_time = time_s
 
-    def abort(self, message: str) -> None:
+    def abort(self, time_s: float, message: str) -> None:
+        """Fail the active goal and brake. Velocity is not snapped to zero."""
         if self._active is not None and not self._status[self._active].done:
-            self._finish(False, message)
-        self.phase = Phase.HOLD
-        self._v = _zeros()
-        self._a = _zeros()
-        self._yaw_rate = 0.0
+            status = self._status[self._active]
+            status.done = True
+            status.success = False
+            status.message = message
+            self._active = None
+        self._holding = False
+        self._hold_since = None
+        if self._p is None:
+            self.phase = Phase.HOLD
+            self._v = _zeros()
+            self._a = _zeros()
+            self._yaw_rate = 0.0
+            return
+        self._begin_brake(time_s, Phase.HOLD)
 
     def _seed_if_needed(self, snap: Snapshot, time_s: float) -> None:
         if self._p is None:
@@ -329,6 +369,7 @@ class MotionExecutive:
         self._settle.reset()
         self._holding = False
         self._hold_since = None
+        self._yaw_remaining = 0.0
         self.needs_disarm = False
         return goal_id
 
@@ -376,7 +417,7 @@ class MotionExecutive:
         self.phase = Phase.BRAKE
         self._settle.reset()
 
-    def _tick_brake(self, time_s: float) -> None:
+    def _tick_brake(self, time_s: float, snap: Snapshot | None) -> None:
         assert self._brake is not None and self._p is not None
         sample = self._brake.sample(time_s - self._brake_t0)
         self._p = sample.position
@@ -394,13 +435,23 @@ class MotionExecutive:
         self.phase = nxt
         self._settle.reset()
         if nxt == Phase.HOLD:
-            self._tick_hold_timer(time_s)
+            self._tick_hold_timer(time_s, snap)
 
-    def _tick_hold_timer(self, time_s: float) -> None:
-        """Count a hold only after the setpoint has been still for settle_time."""
+    def _tick_hold_timer(self, time_s: float, snap: Snapshot | None) -> None:
+        """Count a hold only while the vehicle is inside the settle tolerance."""
         if not self._holding or self._active is None or self._status[self._active].done:
             return
-        settled = self._settle.update(time_s, True, self.limits.settle_time)
+        if snap is None or self._p is None:
+            self._settle.update(time_s, False, self.limits.settle_time)
+            return
+        pos_err = float(np.linalg.norm(np.asarray(snap.position_ned, dtype=float) - self._p))
+        yaw_err = abs(wrap_pi(self._yaw - float(snap.yaw_ned)))
+        slow = (
+            float(np.linalg.norm(snap.velocity_ned)) < self.limits.speed_eps
+            and abs(float(snap.yaw_rate)) < self.limits.speed_eps
+        )
+        on_target = pos_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow
+        settled = self._settle.update(time_s, on_target, self.limits.settle_time)
         if not settled:
             return
         if self._hold_since is None:
@@ -434,7 +485,6 @@ class MotionExecutive:
         yaw_err = 0.0 if self._yaw_goal is None else abs(wrap_pi(self._yaw_goal - snap.yaw_ned))
         slow = float(np.linalg.norm(snap.velocity_ned)) < self.limits.speed_eps
         if complete and self._settle.update(time_s, pos_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow, self.limits.settle_time):
-            self._p = self._target.copy()
             self._finish(True, 'settled')
 
     def _tick_land(self, time_s: float, dt: float, snap: Snapshot | None) -> None:
@@ -457,17 +507,26 @@ class MotionExecutive:
         assert self._p is not None and self._yaw_goal is not None
         self._v = _zeros()
         self._a = _zeros()
-        self._step_yaw_toward(dt, self._yaw_goal)
+        yaw, rate, _accel, remaining = step_yaw_remaining(
+            self._yaw,
+            self._yaw_rate,
+            self._yaw_remaining,
+            self.limits.yaw_rate,
+            self.limits.yaw_accel,
+            dt,
+        )
+        self._yaw = yaw
+        self._yaw_rate = rate
+        self._yaw_remaining = remaining
         if snap is None:
             return
         xy_err = float(np.linalg.norm(snap.position_ned[:2] - self._p[:2]))
         z_err = abs(float(snap.position_ned[2] - self._p[2]))
         yaw_err = abs(wrap_pi(self._yaw_goal - snap.yaw_ned))
         slow = abs(snap.yaw_rate) < self.limits.speed_eps and float(np.linalg.norm(snap.velocity_ned)) < self.limits.speed_eps
-        ok = xy_err <= self.limits.settle_pos and z_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow
+        turned = abs(self._yaw_remaining) <= self.limits.settle_yaw and abs(self._yaw_rate) < self.limits.speed_eps
+        ok = turned and xy_err <= self.limits.settle_pos and z_err <= self.limits.settle_pos and yaw_err <= self.limits.settle_yaw and slow
         if self._settle.update(time_s, ok, self.limits.settle_time):
-            self._yaw = self._yaw_goal
-            self._yaw_rate = 0.0
             self._finish(True, 'yaw settled')
 
     def _tick_cmd(self, dt: float) -> None:

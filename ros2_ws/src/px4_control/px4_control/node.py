@@ -33,6 +33,7 @@ from px4_control.frames import (
     body_horizontal_to_ned,
     body_offset_to_enu,
     enu_to_ned,
+    enu_yaw_to_ned,
     frd_to_flu,
     ned_frd_to_enu_flu_rotation,
     ned_to_enu,
@@ -231,9 +232,9 @@ class Px4ControlNode(Node):
             'a_brake': 1.0,
             'max_yaw_rate_deg_s': yaw_rate_from_env(),
             'max_yaw_accel_deg_s2': 60.0,
-            'settle_position_m': 0.20,
-            'settle_yaw_deg': 8.0,
-            'settle_time_s': 0.4,
+            'settle_position_m': 0.02,
+            'settle_yaw_deg': 3.0,
+            'settle_time_s': 1.0,
             'drone_radius_m': 0.35,
             'wall_margin_m': 0.40,
             'wall_segments_file': '',
@@ -358,11 +359,18 @@ class Px4ControlNode(Node):
         self._publish_visual(visual)
 
     def _on_odom_info(self, msg) -> None:
-        if bool(getattr(msg, 'lost', False)):
-            self._vision.mark_lost()
-            if not self._warned_vision_loss:
-                self.get_logger().warning('rtabmap odom_info reports tracking lost')
-                self._warned_vision_loss = True
+        from px4_control.vision_bridge import lost_covariance
+
+        lost = bool(getattr(msg, 'lost', False))
+        # A non-lost sample whose covariance is 9999 is RTAB-Map's reset: the
+        # pose resumes from the last good one with a huge covariance so the
+        # mapper starts a new map. A lost sample with that covariance is the
+        # null pose and is not a reset.
+        new_map = (not lost) and lost_covariance(np.asarray(getattr(msg, 'covariance', []), dtype=float))
+        self._vision.note_odom_info(lost=lost, new_map=new_map)
+        if lost and not self._warned_vision_loss:
+            self.get_logger().warning('rtabmap odom_info reports tracking lost')
+            self._warned_vision_loss = True
 
     def _publish_visual(self, visual) -> None:
         msg = VehicleOdometry()
@@ -389,7 +397,9 @@ class Px4ControlNode(Node):
     def _snapshot(self) -> Snapshot | None:
         if self._pos is None:
             return None
-        return Snapshot(self._pos.copy(), self._vel.copy(), self._yaw, self._yaw_rate, self._landed)
+        return Snapshot(
+            self._pos.copy(), self._vel.copy(), self._yaw, self._yaw_rate, self._landed, self._armed,
+        )
 
     def _speed_cap(self, position_ned: np.ndarray, direction_ne: np.ndarray) -> float:
         enu = ned_to_enu(position_ned)
@@ -427,7 +437,7 @@ class Px4ControlNode(Node):
                         float(self.get_parameter('wall_margin_m').value),
                         float(self.get_parameter('a_brake').value),
                     )
-                    self._motion.note_cmd_vel(now, v_n, v_e, yaw_rate)
+                    self._motion.note_cmd_vel(self._cmd_time, v_n, v_e, yaw_rate)
             if self._estimation_mode == 'vision':
                 if self._vision.current(now) is None:
                     self._motion.note_vision_lost(now)
@@ -726,7 +736,7 @@ class Px4ControlNode(Node):
         while rclpy.ok() and not self._expired(deadline):
             if goal_handle.is_cancel_requested:
                 with self._lock:
-                    self._motion.abort('canceled')
+                    self._motion.abort(self._now_s(), 'canceled')
                 goal_handle.canceled()
                 return False, 'canceled'
             with self._lock:
@@ -741,7 +751,7 @@ class Px4ControlNode(Node):
                 return status.success, status.message
             time.sleep(0.05)
         with self._lock:
-            self._motion.abort('timed out')
+            self._motion.abort(self._now_s(), 'timed out')
         goal_handle.abort()
         return False, 'timed out'
 
@@ -904,7 +914,7 @@ class Px4ControlNode(Node):
             yaw = None if not request.yaw_valid else wrap_pi(snap.yaw_ned - float(request.yaw))
         else:
             target_enu = np.array([float(request.x), float(request.y), float(request.z)], dtype=float)
-            yaw = None if not request.yaw_valid else float(request.yaw)
+            yaw = None if not request.yaw_valid else enu_yaw_to_ned(float(request.yaw))
         radius = float(self.get_parameter('drone_radius_m').value)
         margin = float(self.get_parameter('wall_margin_m').value)
         reason = path_rejection(

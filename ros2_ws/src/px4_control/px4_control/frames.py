@@ -173,6 +173,15 @@ def yaw_ned_from_enu_quat(quat_xyzw: np.ndarray) -> float:
     return yaw_ned_from_rotation(enu_flu_to_ned_frd_rotation(quat_xyzw))
 
 
+def enu_yaw_to_ned(yaw_enu: float) -> float:
+    """Absolute ENU heading to NED yaw.
+
+    ENU yaw 0 faces East, which is NED yaw +90 degrees. Facing north in ENU
+    is yaw +90 degrees and identity heading in NED.
+    """
+    return wrap_pi(math.pi / 2.0 - float(yaw_enu))
+
+
 def wrap_pi(angle: float) -> float:
     """Wrap an angle in radians to ``(-pi, pi]``."""
     wrapped = (angle + math.pi) % (2.0 * math.pi) - math.pi

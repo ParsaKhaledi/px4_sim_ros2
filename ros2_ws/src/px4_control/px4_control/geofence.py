@@ -150,8 +150,11 @@ def max_speed_along(
         closing = dir_x * into_x + dir_y * into_y
         if closing <= 1e-6:
             continue
-        allowed = max_speed_toward_wall(distance, radius, margin, a_brake)
-        cap = min(cap, allowed / closing)
+        # Clearance along the motion, not the perpendicular gap divided into
+        # the speed. On a diagonal those two are not the same.
+        clearance = max(0.0, distance - radius - margin)
+        along_clearance = clearance / closing
+        cap = min(cap, math.sqrt(2.0 * a_brake * along_clearance))
     return cap
 
 

@@ -14,6 +14,7 @@ from px4_control.frames import (
     command_age,
     diagonal_variances,
     enu_to_ned,
+    enu_yaw_to_ned,
     flu_to_frd,
     ned_to_enu,
     quat_xyzw_to_rot,
@@ -21,6 +22,13 @@ from px4_control.frames import (
     rot_to_quat_wxyz,
     yaw_ned_from_enu_quat,
 )
+
+
+def test_enu_yaw_converts_to_ned():
+    # ENU yaw 0 faces East, which is NED yaw +90 degrees.
+    assert enu_yaw_to_ned(0.0) == pytest.approx(math.pi / 2.0)
+    # Facing north in ENU is +90 degrees, the identity heading in NED.
+    assert enu_yaw_to_ned(math.pi / 2.0) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_enu_ned_roundtrip():

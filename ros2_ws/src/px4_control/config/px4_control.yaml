@@ -17,9 +17,9 @@ px4_control:
     a_brake: 1.0
     max_yaw_rate_deg_s: 30.0
     max_yaw_accel_deg_s2: 60.0
-    settle_position_m: 0.20
-    settle_yaw_deg: 8.0
-    settle_time_s: 0.4
+    settle_position_m: 0.02
+    settle_yaw_deg: 3.0
+    settle_time_s: 1.0
     drone_radius_m: 0.35
     wall_margin_m: 0.40
     # Empty until Simulation adds includes/gz/worlds/walls/<World>.txt

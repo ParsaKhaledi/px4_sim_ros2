@@ -36,6 +36,19 @@ def test_velocity_into_a_wall_is_capped():
     assert limited_x == pytest.approx(0.2)
 
 
+def test_diagonal_speed_uses_clearance_along_the_motion():
+    wall = WallSegment(0.0, 2.0, 4.0, 2.0)
+    # Head-on: clearance 1.5 m, a=1, cap = sqrt(3).
+    assert max_speed_along(1.0, 0.0, 0.0, 1.0, (wall,), 0.3, 0.2, 1.0) == pytest.approx(math.sqrt(3.0))
+    # 45 degrees: along-track clearance is 1.5 / cos(45), not the head-on speed
+    # divided by the closing component.
+    closing = 1.0 / math.sqrt(2.0)
+    expected = math.sqrt(2.0 * 1.5 / closing)
+    diagonal = max_speed_along(1.0, 0.0, 1.0, 1.0, (wall,), 0.3, 0.2, 1.0)
+    assert diagonal == pytest.approx(expected)
+    assert diagonal < math.sqrt(3.0) / closing
+
+
 def test_goal_and_path_rejection():
     wall = WallSegment(0.0, 0.0, 0.0, 5.0)
     assert goal_rejection(0.2, 1.0, (wall,), 0.3, 0.4) is not None

@@ -191,7 +191,7 @@ def _sample(stamp, position, lost=False, covariance=0.01):
     )
 
 
-def test_vision_covariance_is_positive_and_reset_bumps_on_a_jump():
+def test_vision_covariance_is_positive_and_a_jump_does_not_reset():
     bridge = VisionOdometryBridge(timeout_s=0.3, reset_jump_m=0.5, max_variance=25.0)
     first = bridge.push(_sample(1.0, (1.0, 2.0, 3.0)))
     assert first is not None
@@ -201,13 +201,76 @@ def test_vision_covariance_is_positive_and_reset_bumps_on_a_jump():
     assert first.stamp_sec == pytest.approx(1.0)
     jumped = bridge.push(_sample(1.1, (8.0, 2.0, 3.0)))
     assert jumped is not None
-    assert jumped.reset_counter == 1
-    assert bridge.push(_sample(1.2, (8.0, 2.0, 3.0), lost=True)) is None
-    assert bridge.current(1.25) is None
+    assert jumped.reset_counter == 0
+    bridge.note_odom_info(lost=False, new_map=True)
     recovered = bridge.push(_sample(1.5, (8.0, 2.0, 3.0)))
     assert recovered is not None
-    assert recovered.reset_counter == 2
+    assert recovered.reset_counter == 1
     assert recovered.stamp_sec == pytest.approx(1.5)
+
+
+def _null_sample(stamp):
+    sample = _sample(stamp, (0.0, 0.0, 0.0))
+    return OdomSample(
+        stamp_sec=sample.stamp_sec,
+        position_enu=np.zeros(3),
+        quat_xyzw=np.zeros(4),
+        linear_flu=np.zeros(3),
+        angular_flu=np.zeros(3),
+        pose_covariance=sample.pose_covariance,
+        twist_covariance=sample.twist_covariance,
+        tracking_lost=False,
+    )
+
+
+def test_null_pose_is_dropped_and_not_forwarded():
+    bridge = VisionOdometryBridge(max_variance=1.0e6)
+    assert bridge.push(_sample(1.0, (1.0, 2.0, 3.0))) is not None
+    assert bridge.push(_null_sample(1.1)) is None
+    assert bridge.current(1.1) is None
+    assert bridge.reset_counter == 0
+    # A real pose at the origin is not the null transform.
+    origin = bridge.push(_sample(1.2, (0.0, 0.0, 0.0)))
+    assert origin is not None
+    assert origin.reset_counter == 0
+    huge = bridge.push(_sample(1.3, (1.0, 2.0, 3.0), covariance=9999.0))
+    assert huge is None
+    assert bridge.current(1.3) is None
+    assert bridge.reset_counter == 0
+
+
+def test_lost_flag_is_tracking_loss_without_a_reset():
+    bridge = VisionOdometryBridge()
+    assert bridge.push(_sample(1.0, (1.0, 2.0, 3.0))) is not None
+    assert bridge.push(_sample(1.1, (1.0, 2.0, 3.0), lost=True)) is None
+    assert bridge.tracking is False
+    assert bridge.current(1.1) is None
+    assert bridge.reset_counter == 0
+    bridge.note_odom_info(lost=True, new_map=False)
+    assert bridge.reset_counter == 0
+
+
+def test_slow_but_valid_frame_is_not_lost_and_does_not_bump_reset():
+    bridge = VisionOdometryBridge(timeout_s=0.3)
+    first = bridge.push(_sample(1.0, (1.0, 2.0, 3.0)))
+    assert first is not None
+    assert bridge.current(1.4) is None
+    assert bridge.reset_counter == 0
+    slow = bridge.push(_sample(1.5, (1.2, 2.0, 3.0)))
+    assert slow is not None
+    assert bridge.tracking is True
+    assert slow.reset_counter == 0
+    assert bridge.current(1.6) is slow
+
+
+def test_stalled_stream_past_the_limit_is_stale():
+    bridge = VisionOdometryBridge(timeout_s=0.3)
+    assert bridge.push(_sample(10.0, (0.0, 0.0, 1.0))) is not None
+    assert bridge.current(10.2) is not None
+    stale = bridge.current(10.4)
+    assert stale is None
+    assert bridge.tracking is True
+    assert bridge.reset_counter == 0
 
 
 def test_vision_staleness_follows_the_caller_clock():

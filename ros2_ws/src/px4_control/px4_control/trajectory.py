@@ -28,6 +28,18 @@ class ScalarStep:
     acceleration: float
 
 
+def _stopping_speed(distance: float, a_max: float, dt: float) -> float:
+    """Speed that can stop in ``distance`` without exceeding ``a_max``.
+
+    The extra ``(a dt / 2)`` term is the discrete step. ``sqrt(2 a d)`` alone
+    arrives still moving, and the next tick then snaps velocity to zero.
+    """
+    if distance <= 0.0:
+        return 0.0
+    half_step = a_max * dt * 0.5
+    return max(0.0, math.sqrt(2.0 * a_max * distance + half_step * half_step) - half_step)
+
+
 def step_scalar(
     position: float,
     velocity: float,
@@ -38,8 +50,8 @@ def step_scalar(
 ) -> ScalarStep:
     """Advance one axis toward ``goal`` with a trapezoidal speed limit.
 
-    Desired speed is ``min(v_max, sqrt(2 * a_max * distance))``, so the axis
-    can stop on the goal without a position step.
+    Desired speed is the stopping speed at the remaining distance, capped by
+    ``v_max``. Acceleration feedforward stays inside ``a_max``.
     """
     if v_max < 0.0 or a_max <= 0.0:
         raise ValueError('v_max must be >= 0 and a_max must be > 0')
@@ -47,16 +59,23 @@ def step_scalar(
         return ScalarStep(position, velocity, 0.0)
     error = goal - position
     if abs(error) < 1e-4 and abs(velocity) < 1e-3:
-        return ScalarStep(goal, 0.0, (0.0 - velocity) / dt)
-    v_des_mag = min(v_max, math.sqrt(max(0.0, 2.0 * a_max * abs(error))))
+        return ScalarStep(goal, 0.0, 0.0)
+    v_des_mag = min(v_max, _stopping_speed(abs(error), a_max, dt))
     v_des = math.copysign(v_des_mag, error) if abs(error) > 1e-9 else 0.0
-    velocity_new = velocity + _clamp(v_des - velocity, a_max * dt)
+    accel = _clamp((v_des - velocity) / dt, a_max)
+    velocity_new = velocity + accel * dt
     position_new = position + velocity_new * dt
-    crossed = error * (goal - position_new) < 0.0
-    if crossed and v_des_mag < v_max * 0.999:
-        position_new = goal
-        velocity_new = 0.0
-    return ScalarStep(position_new, velocity_new, (velocity_new - velocity) / dt)
+    if error * (goal - position_new) < 0.0:
+        velocity_land = error / dt
+        accel_land = (velocity_land - velocity) / dt
+        if abs(accel_land) <= a_max:
+            return ScalarStep(goal, velocity_land, accel_land)
+        accel = _clamp(accel_land, a_max)
+        velocity_new = velocity + accel * dt
+        position_new = position + velocity_new * dt
+        if error * (goal - position_new) < 0.0:
+            position_new = goal
+    return ScalarStep(position_new, velocity_new, accel)
 
 
 def step_vector2(
@@ -76,23 +95,58 @@ def step_vector2(
     error = target - pos
     distance = float(np.linalg.norm(error))
     if distance < 1e-4 and float(np.linalg.norm(vel)) < 1e-3:
-        return target.copy(), np.zeros(2), (np.zeros(2) - vel) / dt
+        return target.copy(), np.zeros(2), np.zeros(2)
     direction = error / distance if distance > 1e-9 else np.zeros(2)
     speed_along = float(np.dot(vel, direction))
     lateral = vel - direction * speed_along
-    v_des = min(v_max, math.sqrt(max(0.0, 2.0 * a_max * distance)))
-    speed_new = speed_along + _clamp(v_des - speed_along, a_max * dt)
+    v_des = min(v_max, _stopping_speed(distance, a_max, dt))
+    along_accel = _clamp((v_des - speed_along) / dt, a_max)
     lateral_norm = float(np.linalg.norm(lateral))
     if lateral_norm > 1e-9:
-        lateral = lateral * (max(0.0, lateral_norm - a_max * dt) / lateral_norm)
+        lateral_accel = -lateral * (min(a_max, lateral_norm / dt) / lateral_norm)
     else:
-        lateral = np.zeros(2)
-    velocity_new = direction * speed_new + lateral
+        lateral_accel = np.zeros(2)
+    acceleration = direction * along_accel + lateral_accel
+    accel_norm = float(np.linalg.norm(acceleration))
+    if accel_norm > a_max:
+        acceleration = acceleration * (a_max / accel_norm)
+    velocity_new = vel + acceleration * dt
     position_new = pos + velocity_new * dt
-    if distance > 1e-6 and float(np.dot(target - position_new, direction)) < 0.0 and v_des < v_max * 0.999:
-        position_new = target.copy()
-        velocity_new = np.zeros(2)
-    return position_new, velocity_new, (velocity_new - vel) / dt
+    if distance > 1e-6 and float(np.dot(target - position_new, direction)) < 0.0:
+        # Land on the goal along track when one step can do it inside a_max.
+        # Otherwise keep braking; do not snap the velocity to zero.
+        along_error = distance
+        speed_land = along_error / dt
+        accel_land = _clamp((speed_land - speed_along) / dt, a_max)
+        acceleration = direction * accel_land + lateral_accel
+        accel_norm = float(np.linalg.norm(acceleration))
+        if accel_norm > a_max:
+            acceleration = acceleration * (a_max / accel_norm)
+        velocity_new = vel + acceleration * dt
+        position_new = pos + velocity_new * dt
+        if float(np.dot(target - position_new, direction)) < 0.0:
+            position_new = target.copy()
+    return position_new, velocity_new, acceleration
+
+
+def step_yaw_remaining(
+    yaw: float,
+    yaw_rate: float,
+    remaining: float,
+    rate_max: float,
+    accel_max: float,
+    dt: float,
+) -> tuple[float, float, float, float]:
+    """Advance yaw by a signed remaining angle.
+
+    ``remaining`` is not wrapped. A turn of +pi and a turn of -pi stay on
+    opposite paths. The returned remaining is what is left after this step.
+    """
+    stepped = step_scalar(0.0, yaw_rate, remaining, rate_max, accel_max, dt)
+    if dt <= 0.0:
+        return yaw, yaw_rate, 0.0, remaining
+    consumed = stepped.position
+    return wrap_pi(yaw + consumed), stepped.velocity, stepped.acceleration, remaining - consumed
 
 
 def step_yaw(
