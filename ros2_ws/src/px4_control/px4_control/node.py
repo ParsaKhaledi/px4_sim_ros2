@@ -144,10 +144,10 @@ class Px4ControlNode(Node):
         self._warned_vision_loss = False
 
         qos = _px4_qos()
-        self._offboard_pubs = self._publishers(OffboardControlMode, '/fmu/in/offboard_control_mode', qos)
-        self._traj_pubs = self._publishers(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos)
-        self._cmd_pubs = self._publishers(VehicleCommand, '/fmu/in/vehicle_command', qos)
-        self._ev_pubs = self._publishers(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', qos)
+        self._offboard_pubs = self._make_publishers(OffboardControlMode, '/fmu/in/offboard_control_mode', qos)
+        self._traj_pubs = self._make_publishers(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos)
+        self._cmd_pubs = self._make_publishers(VehicleCommand, '/fmu/in/vehicle_command', qos)
+        self._ev_pubs = self._make_publishers(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', qos)
         self._subscribe_px4(VehicleStatus, '/fmu/out/vehicle_status', self._on_status, qos)
         self._subscribe_px4(VehicleOdometry, '/fmu/out/vehicle_odometry', self._on_odometry, qos)
         self._subscribe_px4(FailsafeFlags, '/fmu/out/failsafe_flags', self._on_flags, qos)
@@ -234,7 +234,7 @@ class Px4ControlNode(Node):
             if not self.has_parameter(name):
                 self.declare_parameter(name, value)
 
-    def _publishers(self, msg_type, base: str, qos: QoSProfile):
+    def _make_publishers(self, msg_type, base: str, qos: QoSProfile):
         pubs = []
         for name in topic_candidates(base, msg_type):
             pubs.append(self.create_publisher(msg_type, name, qos))
