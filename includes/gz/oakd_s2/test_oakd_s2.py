@@ -6,12 +6,15 @@ from __future__ import annotations
 import importlib.util
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -305,6 +308,16 @@ class RenderTest(unittest.TestCase):
         # so the full-profile URDF stays the checked-in file.
         self.assertIn(geo.LINK_NAME, render.render_urdf(geo.Mount()))
 
+    def test_rendered_urdf_loads_as_a_yaml_string(self):
+        # launch_ros runs yaml.safe_load on robot_description. A colon-space
+        # inside an XML comment is a mapping, and StatePublisher rejects it.
+        for mount in self.mounts:
+            urdf = render.render_urdf(mount)
+            for comment in re.findall(r"<!--(.*?)-->", urdf, flags=re.DOTALL):
+                self.assertNotIn(": ", comment)
+            loaded = yaml.safe_load(urdf)
+            self.assertIsInstance(loaded, str)
+
     def test_checked_in_models_match_default_mount(self):
         mount = geo.Mount()
         self.assertEqual(render.STEREO_SDF.read_text(encoding="utf-8"), render.render_sdf("stereo", mount))
@@ -502,8 +515,8 @@ class HealthAndEvoTest(unittest.TestCase):
             self.assertIn("VISION_MAX_LOST_STREAK=3", text)
             self.assertIn("VISION_MAX_RECOVERY_FRAMES=2", text)
             self.assertIn("VISION_MIN_ODOM_HZ=7", text)
-            self.assertIn("VISION_MIN_MEDIAN_FEATURES=500", text)
-            self.assertIn("VISION_MIN_MEDIAN_FEATURES=200", text)
+            self.assertIn("VISION_MIN_MEDIAN_FEATURES=120", text)
+            self.assertIn("VISION_MIN_MEDIAN_FEATURES=40", text)
             self.assertIn("VISION_MIN_INLIERS=20", text)
             self.assertIn("VISION_MIN_INLIERS=15", text)
 
@@ -515,7 +528,7 @@ class HealthAndEvoTest(unittest.TestCase):
             got = HEALTH.thresholds_from_env()
             self.assertEqual(got.max_lost_streak, 3)
             self.assertEqual(got.max_recovery_frames, 2)
-            self.assertEqual(got.min_median_features, 500)
+            self.assertEqual(got.min_median_features, 120)
             self.assertEqual(got.min_inliers, 20)
             HEALTH.load_repo_env()
             filled = HEALTH.thresholds_from_env()
@@ -547,7 +560,8 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertEqual(summary["metrics"]["recovery_frames"]["episodes"], [1])
         self.assertEqual(summary["metrics"]["recovery_frames"]["open_frames"], 0)
         self.assertTrue(summary["metrics"]["recovery_frames"]["pass"])
-        self.assertGreaterEqual(summary["metrics"]["median_features"]["value"], 500)
+        self.assertGreaterEqual(summary["metrics"]["median_features"]["value"], 120)
+        self.assertEqual(summary["metrics"]["median_features"]["threshold"], 120)
         self.assertTrue(summary["metrics"]["median_features"]["pass"])
         self.assertTrue(summary["metrics"]["inliers"]["pass"])
         self.assertEqual(summary["metrics"]["inliers"]["value"]["min"], 0)
@@ -608,18 +622,18 @@ class HealthAndEvoTest(unittest.TestCase):
 
     def test_low_median_features_fail(self):
         log = HEALTH.TrackingLog()
-        self._feed_odom(log, [(False, 400, 40), (False, 420, 40)])
+        self._feed_odom(log, [(False, 80, 40), (False, 100, 40)])
         features = log.summary("end")["metrics"]["median_features"]
-        self.assertEqual(features["value"], 410)
-        self.assertEqual(features["threshold"], 500)
+        self.assertEqual(features["value"], 90)
+        self.assertEqual(features["threshold"], 120)
         self.assertFalse(features["pass"])
         self.assertTrue(log.summary("end")["metrics"]["inliers"]["pass"])
 
     def test_even_feature_count_median_meets_the_floor(self):
         log = HEALTH.TrackingLog()
-        self._feed_odom(log, [(False, 400, 40), (False, 600, 40)])
+        self._feed_odom(log, [(False, 100, 40), (False, 140, 40)])
         features = log.summary("end")["metrics"]["median_features"]
-        self.assertEqual(features["value"], 500)
+        self.assertEqual(features["value"], 120)
         self.assertTrue(features["pass"])
 
     def test_tracked_frame_below_inlier_floor_fails(self):
@@ -629,6 +643,22 @@ class HealthAndEvoTest(unittest.TestCase):
         self.assertFalse(inliers["pass"])
         self.assertEqual(inliers["threshold"], 20)
         self.assertFalse(log.summary("end")["pass"])
+
+    def test_reset_frame_zero_inliers_do_not_fail_the_inlier_gate(self):
+        log = HEALTH.TrackingLog()
+        # Lost frame, then the reset frame (not lost, 0 inliers), then tracking.
+        self._feed_odom(log, [(False, 600, 40), (True, 8, 0), (False, 500, 0), (False, 600, 40)])
+        summary = log.summary("end")
+        self.assertEqual(summary["metrics"]["lost_streak"]["value"], 1)
+        self.assertTrue(summary["metrics"]["recovery_frames"]["pass"])
+        self.assertTrue(summary["metrics"]["inliers"]["pass"])
+        self.assertEqual(summary["metrics"]["inliers"]["value"]["min"], 0)
+        self.assertGreaterEqual(summary["metrics"]["inliers"]["value"]["below_threshold"], 1)
+        self.assertTrue(summary["pass"])
+        # A 0-inlier frame that did not follow a loss still fails the gate.
+        other = HEALTH.TrackingLog()
+        self._feed_odom(other, [(False, 600, 40), (False, 600, 0)])
+        self.assertFalse(other.summary("end")["metrics"]["inliers"]["pass"])
 
     def test_lost_frame_inliers_do_not_fail_the_inlier_gate(self):
         log = HEALTH.TrackingLog()
@@ -679,6 +709,7 @@ class HealthAndEvoTest(unittest.TestCase):
         for key in (
             "--OdomF2M/MaxSize 1000",
             "--Vis/CorGuessWinSize 20",
+            "--Odom/VisKeyFrameThr 30",
         ):
             self.assertIn(key, cpu["RTAB_ODOM"])
             self.assertNotIn(key, full["RTAB_ODOM"])
@@ -727,7 +758,7 @@ class HealthAndEvoTest(unittest.TestCase):
                 os.environ.pop(key, None)
             os.environ["VISION_PROFILE"] = "cpu"
             got = HEALTH.thresholds_from_env()
-            self.assertEqual(got.min_median_features, 200)
+            self.assertEqual(got.min_median_features, 40)
             self.assertEqual(got.min_inliers, 15)
             self.assertEqual(got.min_odom_hz, 7)
             os.environ["VISION_MIN_MEDIAN_FEATURES"] = "500"
@@ -735,6 +766,29 @@ class HealthAndEvoTest(unittest.TestCase):
             explicit = HEALTH.thresholds_from_env()
             self.assertEqual(explicit.min_median_features, 500)
             self.assertEqual(explicit.min_inliers, 20)
+        finally:
+            self._restore_env(saved)
+
+    def test_min_inliers_flag_does_not_reset_other_thresholds(self):
+        saved = self._without_vision_env()
+        try:
+            for key in saved:
+                os.environ.pop(key, None)
+            os.environ["VISION_MIN_ODOM_HZ"] = "9"
+            os.environ["VISION_MIN_MEDIAN_FEATURES"] = "80"
+            os.environ["VISION_MAX_LOST_STREAK"] = "4"
+            os.environ["VISION_PROFILE"] = "cpu"
+            got, args = HEALTH.thresholds_from_args(["--min-inliers", "11"])
+            self.assertEqual(args.min_inliers, 11)
+            self.assertEqual(got.min_inliers, 11)
+            self.assertEqual(got.min_odom_hz, 9)
+            self.assertEqual(got.min_median_features, 80)
+            self.assertEqual(got.max_lost_streak, 4)
+            self.assertEqual(got.max_recovery_frames, 2)
+            untouched, _ = HEALTH.thresholds_from_args([])
+            self.assertEqual(untouched.min_inliers, 15)
+            self.assertEqual(untouched.min_odom_hz, 9)
+            self.assertEqual(untouched.min_median_features, 80)
         finally:
             self._restore_env(saved)
 

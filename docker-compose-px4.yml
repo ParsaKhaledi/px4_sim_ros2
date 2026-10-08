@@ -38,6 +38,7 @@ services:
         CAM_Y: ${CAM_Y:-0.03}
         CAM_Z: ${CAM_Z:-0.242}
         VISION_PROFILE: ${VISION_PROFILE:-full}
+        # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
         CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
         CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
@@ -94,6 +95,7 @@ services:
         CAM_Y: ${CAM_Y:-0.03}
         CAM_Z: ${CAM_Z:-0.242}
         VISION_PROFILE: ${VISION_PROFILE:-full}
+        # Unset feature floor follows the profile: full 120, cpu 40.
         CAM_RATE_HZ: ${CAM_RATE_HZ:-}
         CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
         CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
@@ -251,6 +253,7 @@ services:
         - CameraType=${CameraType}
         - RTABMAPVIZ=${RTABMAPVIZ:-false}
         - VISION_PROFILE=${VISION_PROFILE:-full}
+        # Unset feature floor follows the profile: full 120, cpu 40.
         - CAM_RATE_HZ=${CAM_RATE_HZ:-}
         - CAM_STEREO_WIDTH=${CAM_STEREO_WIDTH:-}
         - CAM_STEREO_HEIGHT=${CAM_STEREO_HEIGHT:-}

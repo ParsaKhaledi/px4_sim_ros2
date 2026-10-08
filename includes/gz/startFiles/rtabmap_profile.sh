@@ -45,7 +45,9 @@ rtabmap_profile_args() {
       stereo_disp=" --Stereo/MaxDisparity 64"
     fi
     RTAB_ARGS="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Vis/MaxFeatures 400 --Vis/MinInliers 15 --Kp/MaxFeatures 300 --Grid/MapFrameProjection true --Grid/NormalsSegmentation false --Grid/MaxGroundHeight ${ground} --Grid/MaxObstacleHeight ${obstacle} --Grid/CellSize 0.1 --Grid/RangeMax 5 --Rtabmap/DetectionRate 1 --RGBD/StartAtOrigin true${extra_grid}${stereo_disp}"
-    RTAB_ODOM="--Odom/Strategy 0 --Odom/ResetCountdown 1 --OdomF2M/MaxSize 1000 --Vis/CorGuessWinSize 20 --Vis/EstimationType 1${extra_odom}"
+    # VisKeyFrameThr default 150 is above typical inliers, so every frame is a
+    # keyframe and frame time grows. 30 is not yet measured live.
+    RTAB_ODOM="--Odom/Strategy 0 --Odom/ResetCountdown 1 --Odom/VisKeyFrameThr 30 --OdomF2M/MaxSize 1000 --Vis/CorGuessWinSize 20 --Vis/EstimationType 1${extra_odom}"
   else
     RTAB_ARGS="-d --Optimizer/GravitySigma 0.1 --Vis/FeatureType 10 --Kp/DetectorStrategy 10 --Vis/MaxFeatures 1000 --Vis/MinInliers 20 --Grid/MapFrameProjection true --Grid/NormalsSegmentation false --Grid/MaxGroundHeight ${ground} --Grid/MaxObstacleHeight ${obstacle} --RGBD/StartAtOrigin true${extra_grid}"
     RTAB_ODOM="--Odom/Strategy 0 --Odom/ResetCountdown 1 --OdomF2M/MaxSize 2000 --Vis/CorGuessWinSize 40 --Vis/EstimationType 1${extra_odom}"

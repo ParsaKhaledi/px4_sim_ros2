@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Generated from includes/gz/oakd_s2. camera_joint matches PX4 x500_depth: 0.120000 0.030000 0.242000 0.000000 0.296706 0.000000. -->
+<!-- Generated from includes/gz/oakd_s2. camera_joint matches PX4 x500_depth pose 0.120000 0.030000 0.242000 0.000000 0.296706 0.000000. -->
 <robot name="x500_depth">
   <link name="base_link"/>
   <link name="camera_link">

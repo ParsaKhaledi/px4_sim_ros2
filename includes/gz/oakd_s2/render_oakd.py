@@ -380,7 +380,7 @@ def render_urdf(mount: geo.Mount | None = None) -> str:
     parts = [
         '<?xml version="1.0"?>',
         "<!-- Generated from includes/gz/oakd_s2. "
-        f"camera_joint matches PX4 x500_depth: {mount.pose_text()}. -->",
+        f"camera_joint matches PX4 x500_depth pose {mount.pose_text()}. -->",
         '<robot name="x500_depth">',
         '  <link name="base_link"/>',
         f"""  <link name="{geo.LINK_NAME}">

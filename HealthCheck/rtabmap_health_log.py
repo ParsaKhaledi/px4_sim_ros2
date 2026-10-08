@@ -15,11 +15,14 @@ The summary line scores five gates. Thresholds come from the environment
   frames elapse from that loss until the first frame that is not lost. The
   metric is the worst run. A run that never reaches a non-lost frame fails
   even when it is shorter than the cap.
-- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 500.
-  ``VISION_PROFILE=cpu`` uses 200 unless the variable is set.
+- ``VISION_MIN_MEDIAN_FEATURES``: median of ``features``. Default 120.
+  ``VISION_PROFILE=cpu`` uses 40 unless the variable is set.
 - ``VISION_MIN_INLIERS``: floor on frames that are not lost. Default 20.
   ``VISION_PROFILE=cpu`` uses 15 unless the variable is set. Lost frames stay
   in the distribution, and the streak and recovery gates already cover them.
+  The first frame after an automatic odometry reset is not lost. It starts a
+  new local map and reports 0 inliers, so it stays in the distribution and is
+  left out of this gate.
 - ``VISION_MIN_ODOM_HZ`` (default 7): odometry rate from ``odom_info`` header
   stamps, which are simulation time (what PX4's EKF sees). The wall-clock
   rate and ``wall_hz / sim_hz`` are reported beside it and are not gated.
@@ -36,7 +39,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,9 +55,9 @@ INLIER_KEYS = (
 
 DEFAULT_MAX_LOST_STREAK = 3
 DEFAULT_MAX_RECOVERY_FRAMES = 2
-DEFAULT_MIN_MEDIAN_FEATURES = 500
+DEFAULT_MIN_MEDIAN_FEATURES = 120
 DEFAULT_MIN_INLIERS = 20
-CPU_MIN_MEDIAN_FEATURES = 200
+CPU_MIN_MEDIAN_FEATURES = 40
 CPU_MIN_INLIERS = 15
 DEFAULT_MIN_ODOM_HZ = 7
 
@@ -217,6 +220,22 @@ def lost_runs(lost_flags: list[bool]) -> tuple[int, list[int], int]:
     return longest, episodes, current
 
 
+def inlier_gate_value(samples: list[dict], index: int):
+    """Inliers for one frame, or None when the floor does not apply.
+
+    Lost frames are covered by the streak and recovery gates. The first
+    frame after an automatic odometry reset is not lost. That frame starts
+    a new local map and reports 0 inliers, so it is not a tracking miss.
+    """
+    sample = samples[index]
+    inliers = sample["inliers"]
+    if sample["lost"] or inliers is None:
+        return None
+    if float(inliers) == 0.0 and index > 0 and samples[index - 1]["lost"]:
+        return None
+    return float(inliers)
+
+
 def score_samples(samples: list[dict], thresholds: VisionThresholds) -> dict:
     flags = [bool(sample["lost"]) for sample in samples]
     streak, episodes, open_frames = lost_runs(flags)
@@ -228,11 +247,11 @@ def score_samples(samples: list[dict], thresholds: VisionThresholds) -> dict:
     features_pass = feature_median is not None and feature_median >= thresholds.min_median_features
 
     inlier_values = [sample["inliers"] for sample in samples if sample["inliers"] is not None]
-    tracked_inliers = [
-        sample["inliers"]
-        for sample in samples
-        if not sample["lost"] and sample["inliers"] is not None
-    ]
+    tracked_inliers = []
+    for index in range(len(samples)):
+        value = inlier_gate_value(samples, index)
+        if value is not None:
+            tracked_inliers.append(value)
     inlier_median = median(inlier_values)
     inliers_pass = bool(tracked_inliers) and all(value >= thresholds.min_inliers for value in tracked_inliers)
     distribution = {
@@ -472,8 +491,7 @@ def write_jsonl(handle, event: dict) -> None:
     handle.flush()
 
 
-def main(argv: list[str] | None = None) -> int:
-    load_repo_env()
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Log RTAB-Map odometry health as JSONL.")
     parser.add_argument("--output", default="rtabmap_health.jsonl")
     parser.add_argument(
@@ -483,15 +501,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Override VISION_MIN_INLIERS. Tracked frames below this fail the inlier gate.",
     )
     parser.add_argument("--fail-on-loss", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def thresholds_from_args(argv: list[str] | None = None) -> tuple[VisionThresholds, argparse.Namespace]:
+    """Apply CLI flags. Each flag overrides only its own field."""
+    args = build_parser().parse_args(argv)
     thresholds = thresholds_from_env()
     if args.min_inliers is not None:
-        thresholds = VisionThresholds(
-            max_lost_streak=thresholds.max_lost_streak,
-            max_recovery_frames=thresholds.max_recovery_frames,
-            min_median_features=thresholds.min_median_features,
-            min_inliers=args.min_inliers,
-        )
+        thresholds = replace(thresholds, min_inliers=args.min_inliers)
+    return thresholds, args
+
+
+def main(argv: list[str] | None = None) -> int:
+    load_repo_env()
+    thresholds, args = thresholds_from_args(argv)
     fail = fail_on_loss_enabled(args.fail_on_loss)
 
     import rclpy

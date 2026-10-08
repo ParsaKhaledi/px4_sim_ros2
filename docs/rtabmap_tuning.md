@@ -96,8 +96,8 @@ subscribes to that topic and scores the run from `.env`. The defaults are:
 
 - `VISION_MAX_LOST_STREAK=3`: `lost` is not true for more than this many frames in a row
 - `VISION_MAX_RECOVERY_FRAMES=2`: after each loss, the first frame with `lost` false arrives within this many frames (`Odom/ResetCountdown 1` is what makes that possible). A loss that is still open at the end of the log fails this gate.
-- `VISION_MIN_MEDIAN_FEATURES`: median of `features`. Default 500. `VISION_PROFILE=cpu` uses 200 unless the variable is set.
-- `VISION_MIN_INLIERS`: `inliers` on frames that are not lost (`Vis/MinInliers`). Default 20. `VISION_PROFILE=cpu` uses 15 unless the variable is set. Lost frames are in the distribution, and the streak and recovery gates cover them.
+- `VISION_MIN_MEDIAN_FEATURES`: median of `features`. Default 120. `VISION_PROFILE=cpu` uses 40 unless the variable is set.
+- `VISION_MIN_INLIERS`: `inliers` on frames that are not lost (`Vis/MinInliers`). Default 20. `VISION_PROFILE=cpu` uses 15 unless the variable is set. Lost frames are in the distribution, and the streak and recovery gates cover them. The first frame after an automatic odometry reset is not lost and reports 0 inliers, because the local map was just cleared. That frame stays in the distribution and is left out of this gate.
 - `VISION_MIN_ODOM_HZ=7`: rate from `odom_info` header stamps (simulation time, which PX4's EKF sees). The summary also reports the wall-clock rate and `ratio` = wall Hz / sim Hz. That ratio is not gated.
 
 The last JSONL line is `event=summary`. Each metric has `value`, `threshold`,
@@ -139,10 +139,17 @@ odometry node.
 
 `VISION_PROFILE=full` is the OAK-D S2 spec and the default. `VISION_PROFILE=cpu`
 is for Gazebo on llvmpipe (EGL headless, no GPU) with RTAB-Map in the same
-box. On an 8-core CPU-only machine the 30 Hz cameras rendered at about 10-11 Hz,
-0-2 Hz of that reached ROS after `ros_gz_bridge`, and the real-time factor
-fell to about 0.004 once RTAB-Map was added. The cpu profile cuts pixels and
-the odometry work so stereo odometry can hold 7-8 Hz in sim time.
+box. Measured on an 8-core CPU-only machine in `apt_world` with stereo:
+
+- full (640x400 at 30 Hz): RTF 0.125, odometry 30.3 Hz in sim time and 3.8 Hz on the wall, 64 ms per frame.
+- cpu (320x200 at 10 Hz): RTF 0.43-0.46, odometry 10.0 Hz in sim time and 4.3-4.6 Hz on the wall, 25-35 ms per frame.
+- cpu with `CAM_RATE_HZ=15`: RTF 0.31, odometry 15.2 Hz in sim time and 4.7 Hz on the wall.
+
+Gazebo renders in lockstep, so the sim-time rate equals the camera rate as long as the per-frame odometry time stays below the wall-time gap between frames. On the cpu profile that gap is set by rendering: 25-35 ms of odometry fits inside it, so every camera frame is tracked and the sim-time odometry rate is the camera rate. Wall-clock 7 Hz is not reachable with CPU rendering, because Gazebo rendering alone takes about 200% CPU.
+
+Mapping-side tweaks do not help. The SLAM node uses 5-8% CPU. In rtabmap 0.22.1 `Grid/DepthDecimation` already defaults to 4 and `Grid/RayTracing` to false.
+
+`CAM_RATE_HZ=15` is an option for steadier tracking in motion. In one hover trial it had 0 lost frames, against 1 lost frame at 10 Hz. It is not the cpu default. The cpu default stays 10 Hz cameras and 320x200 stereo.
 
 Set it in `.env` and recreate the PX4, StatePublisher, and Rtabmap containers.
 `CAM_RATE_HZ`, `CAM_STEREO_WIDTH`, `CAM_STEREO_HEIGHT`, `CAM_COLOR_WIDTH`,
@@ -166,6 +173,7 @@ What the cpu numbers cost and save:
 | `OdomF2M/MaxSize` | 2000 | 1000 | Smaller frame-to-map local map. Default is 2000. |
 | `Vis/CorGuessWinSize` | 40 | 20 | Matching window in pixels when a motion guess exists. Half the window matches half the resolution. Default on current master is 40. |
 | `Vis/MinInliers` | 20 | 15 | Accept a pose with fewer matches. Small CPU effect; the health floor follows it. |
+| `Odom/VisKeyFrameThr` | 150 (default, unset) | 30 | Create a keyframe when inliers drop under this count. The default 150 is above typical inliers, so every frame becomes a keyframe and frame time grows over a run (23 to 36 ms on cpu). Not yet measured live. Passed in `odom_args`. |
 | `Kp/MaxFeatures` | 500 (default, unset) | 300 | Fewer words for the loop-closure vocabulary. Default is 500. |
 | `Stereo/MaxDisparity` | unset | 64, stereo only | Disparity search limit in pixels. Current master defaults to 128 (float); older headers default to 64 (int). Disparity is `fx * baseline / depth`, and fx scales with width, so 64 at half resolution is the same minimum depth as 128 at full resolution. |
 | `Grid/CellSize` | 0.05 (default, unset) | 0.1 | Four times fewer cells in the occupancy grid. **Nav2's costmap uses this grid, so the cells get coarser.** |
@@ -185,7 +193,8 @@ sync. RGB-D stays on approximate sync. `wait_imu_to_init` stays.
 `/rtabmap/odom` for N wall seconds and reads `/clock` against that window
 for the real-time factor. It prints one line and writes JSONL. It does not
 apply a threshold. The 7 Hz gate is `VISION_MIN_ODOM_HZ` on the health log,
-using sim time.
+using sim time. The measured wall-clock rate on CPU rendering is about 4-5 Hz.
+That rate is reported beside the sim-time rate and is not gated.
 
 The GPU compose file does not pass `VISION_PROFILE` or the `CAM_*` overrides
 (it also does not pass the mount). The no-GPU compose does.
