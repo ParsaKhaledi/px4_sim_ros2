@@ -1,4 +1,7 @@
 #!/bin/bash
+# Start stereo RTAB-Map in the rtabmap container.
+# RTABMAPVIZ turns the viewer on. rtabmap_profile.sh reads VISION_PROFILE
+# and the CAM_* / IMU_RATE_HZ overrides (OAKD_S2_DIR when it is set).
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -14,7 +17,7 @@ case "${RTABMAPVIZ}" in
 esac
 
 # Right camera_info from Gazebo has Tx = 0 unless <projection><tx> is honored.
-# The relay publishes P[3] = -fx * 0.075 either way, and it keeps header.stamp.
+# The relay publishes P[3] = -fx * BASELINE_M (7.5 cm) either way, and it keeps header.stamp.
 # Both cameras are stamped from the same Gazebo step, so exact sync matches
 # the pair plus both camera_info topics. The IMU is not in that synchronizer:
 # rtabmap_launch subscribes to it on its own, and wait_imu_to_init holds
@@ -24,7 +27,7 @@ RELAY_PID=$!
 trap 'kill ${RELAY_PID} 2>/dev/null || true' EXIT
 
 # rtabmap.launch.py (ROS 2) names the viewer rtabmap_viz. rtabmapviz is not
-# a declared argument. Odom/ResetCountdown 0 never restarts a lost odometry.
+# a declared argument. ResetCountdown is 1 in the ini; 0 would never restart.
 # VISION_PROFILE selects rtabmap_profiles/<profile>.ini via cfg:=.
 # shellcheck disable=SC1091
 source "${HOME}/volume/startFiles/rtabmap_profile.sh"

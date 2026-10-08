@@ -2,7 +2,7 @@
 """Republish the right stereo camera_info as a rectified partner of the left.
 
 Both renders use the left calibration. This node writes that same K and P
-onto the right message, with P[3] = -fx * 0.075, and leaves header.stamp
+onto the right message, with P[3] = -fx * BASELINE_M (7.5 cm), and leaves header.stamp
 alone so exact sync still matches the image. The left camera_info stays the
 Gazebo topic; it is already that K with Tx = 0.
 """
@@ -18,6 +18,7 @@ import geometry as geo  # noqa: E402
 
 
 def main() -> int:
+    """Republish the right ``camera_info`` with the rectified K and P."""
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
@@ -39,6 +40,7 @@ def main() -> int:
     publisher = node.create_publisher(CameraInfo, geo.RIGHT_INFO_OUT, qos_profile_sensor_data)
 
     def on_info(msg: CameraInfo) -> None:
+        """Write the shared K and right-camera P. The stamp is left alone."""
         # Incoming K is ignored. The pair is rectified to the left calibration
         # at the active profile's resolution, so Tx uses the scaled fx.
         msg.k = geo.rectified_k(profile)

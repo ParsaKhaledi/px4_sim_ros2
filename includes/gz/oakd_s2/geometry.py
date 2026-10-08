@@ -26,6 +26,9 @@ HOUSING_DEPTH_M = 0.0229
 HOUSING_WIDTH_M = 0.097
 HOUSING_HEIGHT_M = 0.0295
 MASS_KG = 0.091
+# Dark box tint so the housing is not Gazebo's default white. Not a measured color.
+HOUSING_AMBIENT_RGBA = (0.12, 0.12, 0.13, 1.0)
+HOUSING_DIFFUSE_RGBA = (0.2, 0.2, 0.22, 1.0)
 
 # Fixed stereo baseline. Luxonis' current product page says "75cm"; that is a
 # typo. The shop page, the older manual, and depthai-ros all say 7.5 cm.
@@ -121,6 +124,16 @@ HD_MIN_HEIGHT = 720
 # counts on an 8-bit image, enough to not be a perfect render.
 IMAGE_NOISE_STDDEV = 0.007
 
+# Stereo clip (m): near stays off the housing; far covers a typical indoor scene.
+STEREO_CLIP_NEAR_M = 0.2
+STEREO_CLIP_FAR_M = 30.0
+# Color clip (m): nearer than stereo so the bracket and close props stay in frame.
+COLOR_CLIP_NEAR_M = 0.08
+COLOR_CLIP_FAR_M = 50.0
+# Depth clip (m): MinZ about 0.2 m at 400p with extended disparity; far is the ideal range (docs/frames.md).
+DEPTH_CLIP_NEAR_M = 0.2
+DEPTH_CLIP_FAR_M = 12.0
+
 # BNO086 is a fused part and does not publish a raw Gaussian. The densities
 # below are the BMI270-class figures from earlier OAK boards (gyro
 # 0.008 deg/s/sqrt(Hz), accel 160 ug/sqrt(Hz)), sampled at IMU_HZ with a
@@ -128,6 +141,9 @@ IMAGE_NOISE_STDDEV = 0.007
 GYRO_DENSITY_DPS_SQRT_HZ = 0.008
 ACCEL_DENSITY_G_SQRT_HZ = 160e-6
 GRAVITY_M_S2 = 9.80665
+# Bias stddev stand-in. The BNO086 publishes no raw bias figure; these keep the sim from being bias-free.
+GYRO_BIAS_STDDEV_RAD_S = 1.0e-4
+ACCEL_BIAS_STDDEV_M_S2 = 1.0e-3
 
 # RTAB-Map's default Vis/MinInliers. Below this the odometry is treated as lost.
 TRACKING_MIN_INLIERS = 20
@@ -148,11 +164,13 @@ IMU_TOPIC = "/imu"
 
 
 def gyro_stddev_rad_s(imu_hz: float | None = None) -> float:
+    """Gyro noise stddev in rad/s. ``None`` uses ``IMU_HZ``."""
     bandwidth_hz = (IMU_HZ if imu_hz is None else float(imu_hz)) / 2.0
     return math.radians(GYRO_DENSITY_DPS_SQRT_HZ * math.sqrt(bandwidth_hz))
 
 
 def accel_stddev_m_s2(imu_hz: float | None = None) -> float:
+    """Accel noise stddev in m/s^2. ``None`` uses ``IMU_HZ``."""
     bandwidth_hz = (IMU_HZ if imu_hz is None else float(imu_hz)) / 2.0
     return ACCEL_DENSITY_G_SQRT_HZ * GRAVITY_M_S2 * math.sqrt(bandwidth_hz)
 
@@ -218,6 +236,7 @@ PROFILES = {
 
 
 def _env_int(env: dict, name: str, default: int) -> int:
+    """Positive int from ``env``. Empty uses ``default``. ``"320.7"`` becomes 320."""
     raw = env.get(name)
     if raw is None or str(raw).strip() == "":
         return int(default)
@@ -227,11 +246,38 @@ def _env_int(env: dict, name: str, default: int) -> int:
     return value
 
 
+def _env_float(env: dict, name: str, default: float) -> float:
+    """Float from ``env``. Empty or missing uses ``default``."""
+    raw = env.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return float(raw)
+
+
+def _resolution_text(width: int, height: int) -> str:
+    """``WIDTHxHEIGHT`` text for one size."""
+    return f"{int(width)}x{int(height)}"
+
+
+def _hd_floor_text() -> str:
+    """HD warning floor, from ``HD_MIN_WIDTH`` and ``HD_MIN_HEIGHT``."""
+    return _resolution_text(HD_MIN_WIDTH, HD_MIN_HEIGHT)
+
+
+def _real_use_stereo_text() -> str:
+    """Allowed stereo size that meets the HD floor."""
+    for width, height in ALLOWED_STEREO_RESOLUTIONS:
+        if width >= HD_MIN_WIDTH and height >= HD_MIN_HEIGHT:
+            return _resolution_text(width, height)
+    raise RuntimeError("ALLOWED_STEREO_RESOLUTIONS has no size at or above the HD floor")
+
+
 def _parse_stereo_res(text: str) -> tuple[int, int]:
+    """Parse ``1280x800``-style text into a width and height."""
     cleaned = str(text).strip().lower().replace(" ", "")
     if "x" not in cleaned:
         raise ValueError(
-            f"CAM_STEREO_RES must look like 1280x800, got {text}. "
+            f"CAM_STEREO_RES must look like {_real_use_stereo_text()}, got {text}. "
             f"{_allowed_stereo_text()}"
         )
     width_text, height_text = cleaned.split("x", 1)
@@ -240,21 +286,26 @@ def _parse_stereo_res(text: str) -> tuple[int, int]:
         height = int(float(height_text))
     except ValueError as exc:
         raise ValueError(
-            f"CAM_STEREO_RES must look like 1280x800, got {text}. {_allowed_stereo_text()}"
+            f"CAM_STEREO_RES must look like {_real_use_stereo_text()}, got {text}. {_allowed_stereo_text()}"
         ) from exc
     return width, height
 
 
 def _allowed_stereo_text() -> str:
-    sizes = ", ".join(f"{width}x{height}" for width, height in ALLOWED_STEREO_RESOLUTIONS)
+    """Allowed sizes, and why a crop such as 1280x720 is rejected."""
+    sizes = ", ".join(
+        _resolution_text(width, height) for width, height in ALLOWED_STEREO_RESOLUTIONS
+    )
+    calibration = _resolution_text(LEFT_INTRINSICS["width"], LEFT_INTRINSICS["height"])
     return (
         f"Allowed stereo sizes are {sizes}, the uniform 16:10 scales of the "
-        f"640x400 calibration. 1280x720 is rejected because it would crop "
-        f"1280x800 and move the principal point."
+        f"{calibration} calibration. {_hd_floor_text()} is rejected because it would crop "
+        f"{_real_use_stereo_text()} and move the principal point."
     )
 
 
 def _require_allowed_stereo(width: int, height: int) -> None:
+    """Raise unless this pair is in ``ALLOWED_STEREO_RESOLUTIONS``."""
     if (int(width), int(height)) in ALLOWED_STEREO_RESOLUTIONS:
         return
     raise ValueError(f"stereo resolution {width}x{height} is not valid. {_allowed_stereo_text()}")
@@ -369,8 +420,8 @@ def sub_hd_warning(profile: VisionProfile) -> str | None:
         return None
     return (
         f"warning: VISION_PROFILE={profile.name} stereo "
-        f"{profile.stereo_width}x{profile.stereo_height} is below 1280x720. "
-        f"1280x800 is the stereo size for real use. The cpu profile is the "
+        f"{profile.stereo_width}x{profile.stereo_height} is below {_hd_floor_text()}. "
+        f"{_real_use_stereo_text()} is the stereo size for real use. The cpu profile is the "
         f"low-resolution option for CPU-only simulation and CI."
     )
 
@@ -408,7 +459,7 @@ def rectified_p(
     baseline_m: float = BASELINE_M,
     profile: VisionProfile | None = None,
 ) -> list[float]:
-    """3x4 projection. Same K on both cameras. Only the right camera has Tx."""
+    """3x4 ROS ``camera_info`` P, row-major. Right ``P[3]`` is Tx."""
     src = stereo_intrinsics(profile)
     tx = stereo_tx(src["fx"], baseline_m) if right else 0.0
     return [
@@ -464,6 +515,7 @@ def hfov_from_intrinsics(intrinsics: dict) -> float:
 
 
 def vfov_from_intrinsics(intrinsics: dict) -> float:
+    """Vertical field of view in radians that matches fy."""
     half_height = intrinsics["height"] / 2.0
     return 2.0 * math.atan(half_height / intrinsics["fy"])
 
@@ -525,20 +577,16 @@ class Mount:
 
     @property
     def pitch_rad(self) -> float:
+        """Downward pitch in radians."""
         return math.radians(self.pitch_deg)
 
     def pose_text(self) -> str:
+        """SDF pose of this mount, pitch about y."""
         return pose_text(self.x, self.y, self.z, 0.0, self.pitch_rad, 0.0)
 
 
-def _env_float(env: dict, name: str, default: float) -> float:
-    raw = env.get(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    return float(raw)
-
-
 def mount_from_env(env: dict | None = None) -> Mount:
+    """Mount from ``CAM_X``, ``CAM_Y``, ``CAM_Z``, and ``CAM_PITCH_DEG``."""
     source = os.environ if env is None else env
     return Mount(
         x=_env_float(source, "CAM_X", DEFAULT_CAM_X),
@@ -549,6 +597,7 @@ def mount_from_env(env: dict | None = None) -> Mount:
 
 
 def pose_text(x: float, y: float, z: float, roll: float, pitch: float, yaw: float) -> str:
+    """Six-number SDF pose, metres and radians, six digits."""
     return f"{x:.6f} {y:.6f} {z:.6f} {roll:.6f} {pitch:.6f} {yaw:.6f}"
 
 
@@ -560,6 +609,7 @@ def rot_y(pitch_rad: float):
 
 
 def matvec(matrix, vector):
+    """Multiply a 3x3 matrix by a 3-vector."""
     return tuple(
         matrix[row][0] * vector[0] + matrix[row][1] * vector[1] + matrix[row][2] * vector[2]
         for row in range(3)
@@ -567,6 +617,7 @@ def matvec(matrix, vector):
 
 
 def matmul(a, b):
+    """Multiply two 3x3 matrices."""
     return tuple(
         tuple(sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3))
         for i in range(3)
@@ -585,10 +636,16 @@ def rpy_matrix(roll: float, pitch: float, yaw: float):
 
 
 def optical_rotation():
+    """Camera-link to optical frame: z forward, x right, y down.
+
+    That is ``rpy = (-pi/2, 0, -pi/2)``. Gazebo looks along +x; image
+    headers use this optical child.
+    """
     return rpy_matrix(*OPTICAL_RPY)
 
 
 def _add(a, b):
+    """Add two 3-vectors."""
     return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
 
 
@@ -670,4 +727,5 @@ def rotation_to_quaternion(matrix):
 
 
 def optical_quaternion_in_base(mount: Mount | None = None):
+    """Optical-frame orientation in ``base_link``, as ``(x, y, z, w)``."""
     return rotation_to_quaternion(optical_rotation_in_base(mount))

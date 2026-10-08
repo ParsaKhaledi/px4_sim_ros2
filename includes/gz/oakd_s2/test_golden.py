@@ -47,6 +47,7 @@ import rtabmap_params as rtab  # noqa: E402
 
 
 def load_module(path: Path, name: str):
+    """Import the health log by path. It is not a package."""
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     # dataclasses resolve the class module through sys.modules during exec.
@@ -94,6 +95,7 @@ CHECKED_IN = (render.STEREO_SDF, render.RGBD_SDF, render.URDF_PATH)
 
 
 def _sha256(path: Path) -> str:
+    """Hash a checked-in model so a test can see if rendering rewrote it."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -101,6 +103,7 @@ _CHECKED_IN_BEFORE = {path: _sha256(path) for path in CHECKED_IN}
 
 
 def _child_env(updates: dict[str, str]) -> dict[str, str]:
+    """Process env with the profile overrides cleared, then ``updates`` applied."""
     env = dict(os.environ)
     for key in _PROFILE_ENV:
         env.pop(key, None)
@@ -114,6 +117,7 @@ def _portable(text: str) -> str:
 
 
 def _rtabmap_cli(profile_name: str, camera: str) -> tuple[str, str]:
+    """Stdout and stderr of ``rtabmap_params.py --shell`` for one profile."""
     completed = subprocess.run(
         [sys.executable, str(HERE / "rtabmap_params.py"), "--shell", "--camera", camera],
         check=True,
@@ -126,6 +130,7 @@ def _rtabmap_cli(profile_name: str, camera: str) -> tuple[str, str]:
 
 @contextmanager
 def _health_env(profile_name: str) -> Iterator[None]:
+    """Set ``VISION_PROFILE`` and clear the gate overrides for one snapshot."""
     saved = {key: os.environ.get(key) for key in _HEALTH_ENV}
     try:
         for key in _HEALTH_ENV:
@@ -141,10 +146,12 @@ def _health_env(profile_name: str) -> Iterator[None]:
 
 
 def _json(payload: dict[str, object]) -> str:
+    """Stable JSON text, with a trailing newline."""
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def _health_json(profile_name: str) -> str:
+    """``thresholds_from_env()`` for one profile, as JSON."""
     with _health_env(profile_name):
         got = HEALTH.thresholds_from_env()
     return _json(
@@ -160,7 +167,7 @@ def _health_json(profile_name: str) -> str:
 
 
 def _relay_json(profile_name: str) -> str:
-    # Same two calls stereo_info_relay.on_info uses. The node is not started.
+    """K and right-camera P the relay would publish. The node is not started."""
     profile = geo.profile_from_env({"VISION_PROFILE": profile_name})
     return _json(
         {
@@ -172,16 +179,19 @@ def _relay_json(profile_name: str) -> str:
 
 
 def _sdf_text(profile_name: str, overrides: dict[str, str], variant: str) -> str:
+    """One rendered SDF. ``overrides`` are mount env values."""
     profile = geo.profile_from_env({"VISION_PROFILE": profile_name})
     mount = geo.mount_from_env(dict(overrides))
     return render.render_sdf(variant, mount, profile)
 
 
 def _urdf_text(overrides: dict[str, str]) -> str:
+    """One rendered URDF. ``overrides`` are mount env values."""
     return render.render_urdf(geo.mount_from_env(dict(overrides)))
 
 
 def _producers() -> dict[str, Callable[[], str]]:
+    """Fixture path to the function that rebuilds that snapshot."""
     producers: dict[str, Callable[[], str]] = {}
     for profile_name in PROFILES:
         for mount_name, overrides in MOUNTS.items():
@@ -201,7 +211,10 @@ def _producers() -> dict[str, Callable[[], str]]:
 
 
 def _bind(func: Callable, *args: object) -> Callable[[], str]:
+    """Zero-argument callable that runs ``func`` with these arguments."""
+
     def produce() -> str:
+        """Call the bound producer."""
         return func(*args)
 
     return produce
@@ -211,6 +224,7 @@ _RTAB_CACHE: dict[tuple[str, str], tuple[str, str]] = {}
 
 
 def _rtabmap_stream(profile_name: str, camera: str, index: int) -> str:
+    """Cached stdout (0) or stderr (1) for one profile and camera."""
     key = (profile_name, camera)
     if key not in _RTAB_CACHE:
         _RTAB_CACHE[key] = _rtabmap_cli(profile_name, camera)
@@ -222,6 +236,7 @@ _TEXT: dict[str, str] = {}
 
 
 def snapshot_text(relative: str) -> str:
+    """Current output for one fixture path. Computed once per process."""
     if relative not in _TEXT:
         text = PRODUCERS[relative]()
         if not text.endswith("\n") or "\r" in text:
@@ -231,6 +246,7 @@ def snapshot_text(relative: str) -> str:
 
 
 def setUpModule() -> None:
+    """Rewrite the fixtures when ``UPDATE_GOLDEN=1``. Otherwise do nothing."""
     if os.environ.get("UPDATE_GOLDEN") != "1":
         return
     root = FIXTURES.resolve()
@@ -243,7 +259,10 @@ def setUpModule() -> None:
 
 
 class GoldenSnapshotTest(unittest.TestCase):
+    """Compare current render, rtabmap, health, and relay text to the fixtures."""
+
     def assert_fixture(self, relative: str, actual: str) -> None:
+        """Fail with a unified diff when ``actual`` is not the fixture."""
         path = FIXTURES / relative
         if not path.is_file():
             self.fail(
@@ -264,6 +283,7 @@ class GoldenSnapshotTest(unittest.TestCase):
         self.fail(f"snapshot {relative} changed:\n{diff}")
 
     def test_fixture_files_match_the_snapshot_set(self) -> None:
+        """The fixture tree has one file per producer and nothing extra."""
         expected = sorted(PRODUCERS)
         if not FIXTURES.is_dir():
             self.fail(
@@ -276,6 +296,7 @@ class GoldenSnapshotTest(unittest.TestCase):
         self.assertEqual(found, expected)
 
     def test_rtabmap_fixtures_use_a_portable_ini_path(self) -> None:
+        """RTAB-Map snapshots name the ini directory, not this checkout."""
         for relative in PRODUCERS:
             if not relative.startswith("rtabmap/"):
                 continue
@@ -285,12 +306,16 @@ class GoldenSnapshotTest(unittest.TestCase):
                 self.assertIn("rtabmap_profiles/", text)
 
     def test_zzz_checked_in_models_were_not_rewritten(self) -> None:
+        """Reading the snapshots does not rewrite the checked-in SDF or URDF."""
         after = {path: _sha256(path) for path in CHECKED_IN}
         self.assertEqual(after, _CHECKED_IN_BEFORE)
 
 
 def _make_test(relative: str):
+    """Build the test method that checks one fixture path."""
+
     def test(self: GoldenSnapshotTest) -> None:
+        """Compare this fixture path to the current output."""
         self.assert_fixture(relative, snapshot_text(relative))
 
     test.__name__ = "test_" + relative.replace("/", "_").replace(".", "_").replace("-", "_")
