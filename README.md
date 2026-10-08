@@ -151,6 +151,17 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. RTAB-Map checks `/rtabmap/odom`. Scripts live in [HealthCheck/](HealthCheck/).
 
+## Flight analysis
+
+After a SITL flight, grade the PX4 ULog offline. This does not need ROS or Docker:
+
+```bash
+python3 -m pip install -r flight_analysis/requirements.txt
+python3 -m flight_analysis path/to/flight.ulg --ground-truth path/to/ground_truth.tum
+```
+
+`metrics.json` and the plots are written to `logs/<run_id>/control/`. Pass/fail limits are the shared `E2E_*` settings (`e2e_limits.py`). See [flight_analysis/README.md](flight_analysis/README.md) for the checks, the TUM ground-truth file, and the tests.
+
 ## CI
 
 [.github/workflows/docker-image.yml](.github/workflows/docker-image.yml) builds NO-GPU and GPU images on Dockerfile changes, pushes versioned tags, and runs a headless SITL smoke test on the NO-GPU image.
