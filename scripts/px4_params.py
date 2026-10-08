@@ -90,6 +90,23 @@ def env_overrides(environ: dict[str, str] | None = None) -> list[tuple[str, str]
     return found
 
 
+def commands_from_printenv(text: str) -> list[str]:
+    """Turn a container `printenv` dump into `px4-param set` commands.
+
+    rcS applies PX4_PARAM_* before the airframe. A value equal to the firmware
+    default is not stored, so the airframe `param set-default` puts it back.
+    These commands run after the shell is up and override that.
+    """
+    environ: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.startswith("PX4_PARAM_"):
+            continue
+        key, separator, value = line.partition("=")
+        if separator:
+            environ[key] = value
+    return [f"px4-param set {name} {value}" for name, value in env_overrides(environ)]
+
+
 def merge_expected(
     directory: Path | None = None,
     environ: dict[str, str] | None = None,
@@ -213,10 +230,16 @@ def main(argv: list[str] | None = None) -> int:
     meta.add_argument("--metadata", type=Path, required=True)
     meta.add_argument("--params-dir", type=Path, default=default_params_dir())
 
+    sub.add_parser("commands", help="Print px4-param set lines for PX4_PARAM_* on stdin")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "apply":
             apply(args.params_dir, args.airframes, args.rcs, args.rootfs)
+            return 0
+        if args.command == "commands":
+            for command in commands_from_printenv(sys.stdin.read()):
+                print(command)
             return 0
         problems = unknown_names(args.metadata.read_text(encoding="utf-8"), args.params_dir)
     except (ParamConflict, ValueError, FileNotFoundError) as exc:

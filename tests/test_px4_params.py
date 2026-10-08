@@ -99,6 +99,38 @@ def test_unknown_metadata_name(tmp_path):
     assert any("EKF2_EV_DLAY" in problem for problem in problems)
 
 
+def test_env_to_param_set_commands_keeps_firmware_defaults():
+    text = "\n".join([
+        "PATH=/usr/bin",
+        "PX4_PARAM_FILES=sim.params",
+        "PX4_PARAM_NAV_DLL_ACT=0",
+        "PX4_PARAM_EKF2_EV_DELAY=0",
+        "PX4_PARAM_NAV_RCL_ACT=1",
+        "OTHER=1",
+    ])
+    assert px4_params.commands_from_printenv(text) == [
+        "px4-param set EKF2_EV_DELAY 0",
+        "px4-param set NAV_DLL_ACT 0",
+        "px4-param set NAV_RCL_ACT 1",
+    ]
+
+
+def test_env_to_param_set_commands_rejects_a_bad_value():
+    try:
+        px4_params.commands_from_printenv("PX4_PARAM_NAV_DLL_ACT=on\n")
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("bad value was accepted")
+    assert "PX4_PARAM_NAV_DLL_ACT" in message
+
+
+def test_bringup_sets_params_before_the_readback_gate():
+    for name in ("scripts/smoke_test.sh", "scripts/run_e2e.sh"):
+        text = Path(name).read_text(encoding="utf-8")
+        assert text.index("apply_px4_params.sh") < text.index("assert_px4_params.sh")
+
+
 def test_render_logs_an_override():
     script = px4_params.render_post([("NAV_DLL_ACT", "0", "sim.params")], [("NAV_RCL_ACT", "1")])
     assert 'echo "PX4 params: sim.params NAV_DLL_ACT 0"' in script

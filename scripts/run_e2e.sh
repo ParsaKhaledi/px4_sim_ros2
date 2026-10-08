@@ -286,6 +286,7 @@ fly_until_done() {
       local restart_start
       restart_start="$(date +%s)"
       "${ROOT}/scripts/compose_stack.sh" recreate
+      "${ROOT}/scripts/apply_px4_params.sh"
       BRINGUP_S=$((BRINGUP_S + $(date +%s) - restart_start))
       attempt=$((attempt + 1))
       continue
@@ -304,6 +305,7 @@ chmod 777 "${ROOT}/logs" "${ROOT}/logs/flights" "${FLIGHTS}" || true
 bringup_start="$(date +%s)"
 "${ROOT}/scripts/compose_stack.sh" up
 BRINGUP_S=$(( $(date +%s) - bringup_start ))
+"${ROOT}/scripts/apply_px4_params.sh"
 "${ROOT}/scripts/assert_px4_params.sh"
 check_distance_sensor
 
@@ -322,6 +324,7 @@ if [ "${E2E_CHECK_CAMERAS}" = "1" ] && [ "${GZ_USE_XVFB}" != "1" ]; then
     attempt=$((attempt + 1))
     restart_start="$(date +%s)"
     "${ROOT}/scripts/compose_stack.sh" recreate
+    "${ROOT}/scripts/apply_px4_params.sh"
     BRINGUP_S=$((BRINGUP_S + $(date +%s) - restart_start))
     fly_until_done
   fi
