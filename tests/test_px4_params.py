@@ -131,6 +131,16 @@ def test_bringup_sets_params_before_the_readback_gate():
         assert text.index("apply_px4_params.sh") < text.index("assert_px4_params.sh")
 
 
+def test_timeout_runs_docker_not_the_compose_function():
+    cli = Path("scripts/compose_cli.sh").read_text(encoding="utf-8")
+    assert "timeout" in cli
+    assert '"${COMPOSE[@]}" exec -T' in cli
+    for name in ("scripts/apply_px4_params.sh", "scripts/assert_px4_params.sh"):
+        text = Path(name).read_text(encoding="utf-8")
+        assert "timeout 30 compose_exec" not in text
+        assert "compose_exec_timeout" in text
+
+
 def test_render_logs_an_override():
     script = px4_params.render_post([("NAV_DLL_ACT", "0", "sim.params")], [("NAV_RCL_ACT", "1")])
     assert 'echo "PX4 params: sim.params NAV_DLL_ACT 0"' in script

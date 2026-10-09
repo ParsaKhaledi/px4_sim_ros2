@@ -13,7 +13,7 @@ mkdir -p "${ROOT}/logs"
 output=""
 attempt=1
 while [ "${attempt}" -le 8 ]; do
-  if output="$(timeout 30 compose_exec PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
+  if output="$(compose_exec_timeout 30 PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
     if printf '%s\n' "${output}" | grep -q 'NAV_DLL_ACT'; then
       break
     fi

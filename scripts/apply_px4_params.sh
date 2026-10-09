@@ -16,7 +16,7 @@ BUILD_DIR="/home/px4/PX4-Autopilot/build/px4_sitl_default"
 ready=""
 attempt=1
 while [ "${attempt}" -le 8 ]; do
-  if ready="$(timeout 30 compose_exec PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
+  if ready="$(compose_exec_timeout 30 PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
     if printf '%s\n' "${ready}" | grep -q 'NAV_DLL_ACT'; then
       break
     fi
@@ -42,7 +42,7 @@ while IFS= read -r command; do
   fi
   echo "PX4 params: ${command}"
   args="${command#px4-param }"
-  timeout 30 compose_exec PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param ${args}"
+  compose_exec_timeout 30 PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param ${args}"
   applied=$((applied + 1))
 done < <(printf '%s\n' "${env_text}" | python3 "${ROOT}/scripts/px4_params.py" commands)
 

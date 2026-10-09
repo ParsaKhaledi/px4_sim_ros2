@@ -51,3 +51,12 @@ compose_exec() {
   shift
   "${COMPOSE[@]}" exec -T "${service}" "$@"
 }
+
+# GNU timeout execs a program. compose_exec is a function, so timeout
+# cannot call it. This expands the docker compose command, then times that out.
+compose_exec_timeout() {
+  local seconds="$1"
+  local service="$2"
+  shift 2
+  timeout "${seconds}" "${COMPOSE[@]}" exec -T "${service}" "$@"
+}
