@@ -1,125 +1,83 @@
 # scripts/
 
-Helper scripts for launching the simulation stack locally and validating Docker images in CI.
+Helpers for launching the stack, checking health, and running the headless tests.
 
 | Script | Purpose |
 |--------|---------|
-| [up.sh](up.sh) | Start the Compose stack with profiles, camera, and world selection |
-| [smoke_test.sh](smoke_test.sh) | Headless SITL health check for a given image (used in GitHub Actions) |
+| [up.sh](up.sh) | Start Compose with profiles, camera, world, and spawn pose |
+| [smoke_test.sh](smoke_test.sh) | Headless compose smoke test. Camera rates run first |
+| [run_e2e.sh](run_e2e.sh) | Out-and-back flight, with a sim restart after a crash |
+| [record_flight.sh](record_flight.sh) | Rosbag of the grading topics plus the newest PX4 ULog |
+| [health_report.sh](health_report.sh) | Latest JSONL status per service |
+| [compose_stack.sh](compose_stack.sh) | `up` / `down` / `recreate` / `logs` for the headless override |
+| [image_assert.sh](image_assert.sh) | Check binaries inside an image without starting Gazebo |
+| [check_versions.sh](check_versions.sh) | Dockerfile pins match `versions.env` |
+| [check_fuel_refs.sh](check_fuel_refs.sh) | Warn when worlds reference fuel.gazebosim.org |
 
----
+`versions.env` is the component pin (PX4, px4_msgs, XRCE agent, ROS distro). `.env` is the image tag and runtime knobs, including `PX4_GZ_MODEL_POSE`.
 
 ## up.sh
 
-Starts [docker-compose-px4.yml](../docker-compose-px4.yml) from the repo root with sensible defaults.
-
-### Prerequisites
-
-- Docker and Docker Compose installed
-- `.env` file (copy from [.env.example](../.env.example)) with `registry` and `px4TAG`
-- For GUI services (`gcs`, `nav`): X11 and `xhost +local:` (the script runs `xhost` automatically when `DISPLAY` is set)
-
-### Usage
-
 ```bash
-# Full stack (default profiles: gcs, slam, nav)
 CameraType=rgbd World=default ./scripts/up.sh
-
-# Core simulation only (PX4 + StatePublisher)
 COMPOSE_PROFILES= ./scripts/up.sh
-
-# Sim + QGroundControl in a custom world
-COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
-
-# Stereo camera, full robotics stack
-COMPOSE_PROFILES=gcs,slam,nav CameraType=stereo World=husarion_office ./scripts/up.sh
 ```
 
-### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CameraType` | `rgbd` | `rgbd` or `stereo` — passed to PX4 and Rtabmap |
-| `World` | `default` | SDF filename stem under `includes/gz/worlds/` |
-| `COMPOSE_PROFILES` | `gcs,slam,nav` | Comma-separated Compose profiles (empty = core only) |
-| `COMPOSE_FILE` | `docker-compose-px4.yml` | Alternate compose file path |
-
-Values from `.env` (`registry`, `px4TAG`) are sourced automatically. `CameraType` and `World` can also be set in `.env` or on the command line (command line wins).
-
-### Compose profiles
-
-| Profile | Services started |
-|---------|------------------|
-| *(none)* | `PX4`, `StatePublisher` (always) |
-| `gcs` | QGroundControl |
-| `slam` | RTAB-Map |
-| `nav` | Nav2 + RViz — **requires `slam`** |
-
-### Changing world or camera
-
-Settings apply when the **PX4 container starts**. To switch after a run:
-
-```bash
-docker compose -f docker-compose-px4.yml down
-CameraType=stereo World=apt_world ./scripts/up.sh
-```
-
-### Verify
-
-```bash
-docker logs px4_sim 2>&1 | grep "Selected Camera Type"
-docker compose -f docker-compose-px4.yml ps
-```
-
----
+`up.sh` starts [docker-compose-px4.yml](../docker-compose-px4.yml).
 
 ## smoke_test.sh
 
-Runs a **single privileged container** headlessly to confirm a built image can start PX4 SITL, the ros_gz bridge, and XRCE-DDS, and publish expected ROS topics.
-
-Used by [.github/workflows/docker-image.yml](../.github/workflows/docker-image.yml) after each NO-GPU image push.
-
-### Usage
+Brings the stack up with [docker-compose-px4.yml](../docker-compose-px4.yml) and the headless [compose.ci.yml](../compose.ci.yml) override: `HEADLESS=1`, `RTABMAPVIZ=false`, no X11 socket, no `/dev` bind, no host ports. Waits until healthchecks pass, checks camera rates, then the rest of the PX4 graph. CI runs this once. It does not start an offboard controller.
 
 ```bash
-chmod +x scripts/smoke_test.sh
-
-# Test a local or pulled image
-./scripts/smoke_test.sh alienkh/px4_sim:local
-
-# CI example
-./scripts/smoke_test.sh docker.io/alienkh/px4_sim:1.17.0_42
-
-# Longer timeout (seconds, default 300)
-SMOKE_TEST_TIMEOUT=600 ./scripts/smoke_test.sh alienkh/px4_sim:1.17.0-latest
+./scripts/smoke_test.sh docker.io/alienkh/px4_sim:1.17.0_121
+SMOKE_KEEP_UP=1 SMOKE_TEST_TIMEOUT=900 ./scripts/smoke_test.sh px4_sim:ci
 ```
 
-### What it does
+Run it on a machine that can launch the sim. This is the one CI flight.
 
-1. Removes any existing `px4_smoke_test` container
-2. Starts the image with bind mounts from this repo:
-   - `HealthCheck/` — topic health scripts
-   - `includes/gz/` — worlds, models, `gz_modifications.bash`
-   - `includes/gz/startFiles/` — SITL and bridge launch scripts
-3. Inside the container (headless, `QT_QPA_PLATFORM=offscreen`):
-   - `gz_modifications.bash rgbd`
-   - `MicroXRCEAgent udp4 -p 8888`
-   - `gz_start_px4_gz_sim.sh default`
-   - `gz_start_ros2_gz_bridge.sh`
-4. Every 10s, runs the same healthcheck as Compose PX4 service:
-   - Topics: `/clock`, `/fmu/out/vehicle_odometry`
-5. Exits `0` on success, `1` on timeout (prints last 80 log lines)
-6. Removes the test container on exit (`trap cleanup EXIT`)
+## run_e2e.sh and record_flight.sh
 
-### When to run locally
+```bash
+# Fast flight: plain quad, no cameras.
+CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
 
-- After `./DockerBuild.sh` before pushing an image
-- When debugging CI failures on the smoke test job
-- After changing `includes/gz/` startup paths or `HealthCheck/` scripts
+# Camera flight on the CPU. Gazebo EGL headless mode, Mesa llvmpipe.
+# Blank or missing frames retry once on Xvfb (compose.xvfb.yml).
+CameraType=rgbd PX4_GZ_MODEL=x500_depth GZ_HEADLESS_RENDERING=1 \
+  E2E_CHECK_CAMERAS=1 E2E_WALL_SCALE=3 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
 
-### Limitations
+# Start on the virtual framebuffer instead of EGL.
+GZ_USE_XVFB=1 CameraType=rgbd PX4_GZ_MODEL=x500_depth \
+  E2E_CHECK_CAMERAS=1 E2E_WALL_SCALE=3 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
 
-- Tests **rgbd** + **default** world only (fixed in the script; not parameterized)
-- Does not start QGC, Rtabmap, or Nav2
-- Requires sufficient CPU/RAM; first SITL start can take several minutes
-- GPU images are not smoke-tested in CI (NO-GPU image only)
+# Nightly shape: depth camera and a 1 m leg, on a self-hosted runner.
+CameraType=rgbd PX4_GZ_MODEL=x500_depth E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
+```
+
+`GZ_HEADLESS_RENDERING=1` puts a `gz` wrapper on `PATH` that turns PX4's `gz sim -s` into `gz sim --headless-rendering`, with `LIBGL_ALWAYS_SOFTWARE=1` and `GALLIUM_DRIVER=llvmpipe`. `GZ_USE_XVFB=1` starts `Xvfb` on `DISPLAY` (default `:99`) and does not add the EGL flag. The CPU image installs `libgl1-mesa-dri`, `libegl-mesa0`, and `xvfb` for this. Software rendering runs at a real-time factor around 0.3–0.6. Lockstep keeps the flight valid; `E2E_WALL_SCALE` multiplies the wall-clock timeouts (use 3 for the camera flight).
+
+The mission is preflight and arm, takeoff to 2 m, hover 10 s, forward `E2E_LEG_LENGTH_M`, yaw 180°, forward the same distance, land, disarm. The hover clock starts after height has held `E2E_HOVER_HEIGHT_BAND_M` (5 cm) for `E2E_HOVER_HEIGHT_HOLD_S` (2 s). Legs and yaw then wait until they settle, instead of sleeping for a fixed time. `px4_control.Drone` is used when it imports. Otherwise the script talks to PX4 with `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand`.
+
+Grading uses `/ground_truth/odom` when that topic is publishing. Otherwise it uses the Gazebo model pose on `/world/<world>/pose/info`. Each sample also stores how far PX4 `vehicle_local_position` is from that pose. Pass limits are the `E2E_*` keys in `.env`: hover drift 5 cm, height ± 10 cm, legs 30 cm ± 3 cm, overshoot 3 cm, settle inside ± 2 cm for 1 s within 4 s of the step, yaw overshoot 5° and yaw settle ± 3° on that same hold, return to the start within 5 cm. The grade reads the track, so moving on without a real settle still fails the run.
+
+`E2E_CHECK_CAMERAS=1` subscribes to `/camera/rgb/image_raw` and `/camera/depth/image_raw`. A topic with no frames, or a frame whose pixel variance is under `E2E_CAMERA_MIN_VARIANCE` (default 1), fails the attempt. That is a rendering failure, not a crash restart. The summary then switches to Xvfb for one more set of attempts. `trajectory.json` records `gz_rtf` (mean, min, max) and each camera topic's rate, mean, and variance. `E2E_FLIGHT_DIR` must stay under `logs/` so the container bind mount can write the attempt files. The pull-request job uses `logs/flights/x500` and `logs/flights/camera`. The plain `x500` flight is required. The `x500_depth` step is non-blocking and logs that it waits on PR #20's `camera_link` models. For that step only, `VISION_PROFILE=cpu` and `GZ_CAMERA_UPDATE_RATE=10` lower the copied model's rate without changing its size, and `HEALTH_CAMERA_MIN_HZ=1` is the camera rate floor. The Oak-D SDF files in the repo are not edited. `E2E_ATTEMPT_TIMEOUT` (default 480s) fails the attempt and writes the reason to the step summary. `E2E_TOTAL_TIMEOUT` (default 720s) bounds the whole run.
+
+While the vehicle should be airborne, the attempt ends early on any of these:
+
+- tilt over `E2E_CRASH_TILT_DEG` (60°)
+- height under `E2E_CRASH_MIN_HEIGHT_M`, or a fast impact near the ground
+- an unexpected disarm, failsafe, or land detection
+- ground truth farther than `E2E_CRASH_DIVERGENCE_M` from the setpoint
+- no odometry for `E2E_ODOM_TIMEOUT_S` seconds
+
+The reason, container log, health JSONL, rosbag, and ULog are saved under `logs/flights/attempt-<n>/`. The script then recreates the PX4 container (`./scripts/compose_stack.sh recreate`) and waits until the health check passes. `E2E_MAX_RETRIES` defaults to 2, so the first try plus two restarts is the budget. `logs/flights/trajectory.json` lists every attempt. The run fails if the last attempt does not pass.
+
+`record_flight.sh start|stop` stores a rosbag and `flight.ulg`. `run_e2e.sh` calls it on every attempt.
+
+## health_report.sh
+
+```bash
+./scripts/health_report.sh
+./scripts/health_report.sh logs/health
+```

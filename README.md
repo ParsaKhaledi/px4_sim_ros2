@@ -6,14 +6,13 @@ Docker-orchestrated PX4 SITL + Gazebo Harmonic + ROS 2 Jazzy simulation stack. P
 
 | Component | Version |
 |-----------|---------|
-| Stack release | v3.0.0 |
-| PX4-Autopilot | v1.17.0 |
-| px4_msgs | [v1.17.0](https://github.com/PX4/px4_msgs/releases/tag/v1.17.0) (tag `v${PX4_VERSION}`) |
-| px4_ros_com | main (examples only) |
-| ROS 2 | Jazzy |
+| PX4-Autopilot | v1.17.0 (`versions.env`) |
+| px4_msgs | [v1.17.0](https://github.com/PX4/px4_msgs/releases/tag/v1.17.0) (`PX4_MSGS_REF`) |
+| px4_ros_com | main (examples only, unpinned) |
+| ROS 2 | Jazzy (`ROS_DISTRO` in `versions.env`) |
 | Gazebo | Harmonic (`gz-harmonic`) |
 | DDS | CycloneDDS (`rmw_cyclonedds_cpp`) |
-| Micro-XRCE-DDS-Agent | v2.4.3 |
+| Micro-XRCE-DDS-Agent | v2.4.3 (`XRCE_AGENT_VERSION`) |
 
 ## Quick Start
 
@@ -35,13 +34,21 @@ COMPOSE_PROFILES= ./scripts/up.sh
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `registry` | Image registry | `docker.io/alienkh` |
-| `px4TAG` | Image tag in `.env` | `v3.0.0` |
+| `registry` / `PX4_IMAGE` | Image to run | `docker.io/alienkh/px4_sim:1.17.0_121` |
+| `px4TAG` | Tag inside `PX4_IMAGE` | `1.17.0_121` |
+| `PX4_GZ_MODEL_POSE` | Spawn pose `x,y,z,roll,pitch,yaw` | `-3,-1.6,0,0,0,3.14` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
+| `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
+| `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
+| `VISION_PROFILE` | Camera profile. `cpu` on the base stack, `full` on the GPU files | `cpu` |
 | `World` | Gazebo world filename stem | `default` |
+| `HEADLESS` | `1` skips the Gazebo GUI | `0` |
+| `RTABMAPVIZ` | RTAB-Map visualization. Unset stays closed. | `false` |
 | `COMPOSE_PROFILES` | Comma-separated profiles | `gcs,slam,nav` |
 
-CI publishes tags like `v3.0.0` and `v3.0.0-latest` (GPU: `v3.0.0_GPU`, `v3.0.0-latest_GPU`). Update `px4TAG` in `.env` after pulling a new build.
+Component versions (PX4, px4_msgs, XRCE agent, ROS distro) live in [versions.env](versions.env). `.env` only pins the image you pull and the runtime knobs.
+
+Pushes to `main` and `v*` tags publish `px4-1.17.0` and `sha-<short>` (GPU: `px4-1.17.0-gpu`). Pull requests build the CPU image only when a Dockerfile, `versions.env`, `includes/gz/patch_dds_topics.py`, or a `ros2_ws` package manifest changed. Otherwise CI pulls `PX4_IMAGE` (`1.17.0_121`). The flight job loads that same image and does not build it again. The GPU image is built on `main`, `v*` tags, and a manual workflow run, and that job never flies. No `1.17` GPU tag is published. `px4GPUTAG` is the name a local GPU build uses. `COMPOSE_PROJECT_NAME` selects the Compose project so two stacks can run on one host and `down` removes only that project.
 
 ### Compose profiles
 
@@ -88,7 +95,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 # or: CameraType=stereo World=apt_world docker compose -f docker-compose-px4.yml up -d --force-recreate PX4
 ```
 
-**Verify:** `docker logs px4_sim 2>&1 | grep "Selected Camera Type"`
+**Verify:** `docker compose -f docker-compose-px4.yml logs PX4 2>&1 | grep "Selected Camera Type"`
 
 **Profile dependencies:** `nav` depends on `slam` (Nav2 waits for Rtabmap). Use `COMPOSE_PROFILES=slam,nav` or include both. Services without a profile (`PX4`, `StatePublisher`) always start.
 
@@ -96,23 +103,23 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 
 **Display / X11:** QGC and RViz need `DISPLAY` and `xhost +local:`. Set `XAUTH` if your setup uses `/tmp/.docker.xauth` (Compose may warn if unset).
 
-| Service | Container | Role |
-|---------|-----------|------|
+| Service | Alias | Role |
+|---------|-------|------|
 | PX4 | `px4_sim` | SITL, Gazebo, XRCE agent, ros_gz bridge |
 | StatePublisher | `statePublisher` | x500 TF / URDF |
 | Qground | `qground` | QGroundControl (`gcs`) |
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
-Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation.
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation. Folder READMEs follow [docs/templates/FOLDER_README.md](docs/templates/FOLDER_README.md).
 
-Operational scripts: [scripts/README.md](scripts/README.md) (`up.sh`, `smoke_test.sh`).
+Operational scripts: [scripts/README.md](scripts/README.md).
 
 ## Infrastructure
 
 ### Docker
 
-[Docker Compose](docker-compose-px4.yml) runs multiple containers on a custom bridge network (`10.20.10.0/24`). The PX4 container bundles SITL, Gazebo, Micro-XRCE-DDS agent, and the `ros_gz` bridge because ROS 2 discovery across containers requires extra DDS configuration.
+[Docker Compose](docker-compose-px4.yml) runs one project per `COMPOSE_PROJECT_NAME`. Docker assigns the bridge subnet, so a second project can start beside the first. The old container names stay as network aliases (`px4_sim`, `statePublisher`, `qground`, `rtabmap`, `nav2`, `nav2_rviz`). The PX4 service bundles SITL, Gazebo, Micro-XRCE-DDS agent, and the `ros_gz` bridge because ROS 2 discovery across containers requires extra DDS configuration.
 
 Build locally:
 
@@ -135,10 +142,10 @@ xhost +local:
 
 ### QGroundControl
 
-Add a UDP comm link in QGC pointing at the PX4 container hostname `px4_sim` on ports `14550`, `14540`, `14580`, `18570`. MAVLink ports are visible in:
+Add a UDP comm link in QGC pointing at the PX4 hostname `px4_sim` on ports `14550`, `14540`, `14580`, `18570`. MAVLink ports are visible in:
 
 ```bash
-docker logs px4_sim 2>&1 | grep mavlink
+docker compose -f docker-compose-px4.yml logs PX4 2>&1 | grep mavlink
 ```
 
 ### ROS 2 and ros_gz bridge
@@ -149,18 +156,39 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 ## Health checks
 
-The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. RTAB-Map checks `/rtabmap/odom`. Scripts live in [HealthCheck/](HealthCheck/).
+[HealthCheck/healthcheck.py](HealthCheck/healthcheck.py) subscribes to each service's topics and writes JSONL under `logs/health/`. Compose marks a service healthy only when the required rates are met, and later services wait on `service_healthy`.
 
-## CI
+```bash
+./scripts/health_report.sh
+```
 
-[.github/workflows/docker-image.yml](.github/workflows/docker-image.yml) builds NO-GPU and GPU images on Dockerfile changes, pushes versioned tags, and runs a headless SITL smoke test on the NO-GPU image.
+`/ground_truth/odom` is checked at >= 45 Hz only when something is already publishing it. Camera topics follow `CameraType`.
+
+## CI and local tests
+
+Pull requests run lint, unit tests (pytest and colcon), one image build, and one headless hover/smoke on that image. The flight job loads the image from the build job and runs `scripts/smoke_test.sh` with `docker-compose-px4.yml` and the headless `compose.ci.yml` override. It uses the plain `x500` (`CameraType=none`). It does not run an offboard controller. Nothing is pushed from a pull request.
+
+Copy `.env.example` to `.env` for a local run. `.env` is not committed.
+
+```bash
+# Static checks
+./scripts/check_versions.sh
+docker compose -f docker-compose-px4.yml config -q
+docker compose -f docker-compose-px4.yml -f compose.ci.yml config -q
+
+# The one headless hover/smoke.
+HEADLESS=1 RTABMAPVIZ=false CameraType=none PX4_GZ_MODEL=x500 \
+  COMPOSE_SERVICES=PX4 ./scripts/smoke_test.sh "${PX4_IMAGE}"
+```
+
+See [scripts/README.md](scripts/README.md).
 
 ## Deferred work
 
-The following are planned but not in scope for the current non-GPU release:
-
-- **GPU compose** — [docker-compose-px4-GPU.yml](docker-compose-px4-GPU.yml) needs YAML/env fixes and NVIDIA runtime configuration
-- **Image slimming** — multi-stage builds and optional minimal image without Nav2/RTAB-Map/QGC
+- **Image slimming** — multi-stage builds and a runtime image without the CUDA devel toolchain
+- **QGroundControl digest pin** — the AppImage URL is still a moving channel (`versions.env`)
+- **px4_ros_com** — still cloned from `main`
+- **Fuel meshes** — `husarion_office.sdf` still references fuel.gazebosim.org (CI warns, it does not fail)
 - **Vagrant host** — [vagrant/](vagrant/) still targets ROS Humble on Ubuntu 22.04
 
 ## Legacy

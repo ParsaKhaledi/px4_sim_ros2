@@ -24,47 +24,28 @@ Mount points in Compose (example): `./includes/gz/` → `/home/px4/volume/includ
 
 ## GitHub automation
 
-CI is defined in [.github/workflows/docker-image.yml](../.github/workflows/docker-image.yml).
+CI is defined in [.github/workflows/ci.yml](../.github/workflows/ci.yml). Component versions come from [versions.env](../versions.env).
 
 ### What triggers CI
 
-| Change | Triggers image build? |
-|--------|------------------------|
-| `dockerFile/**` | Yes |
-| `.github/workflows/docker-image.yml` | Yes |
-| `scripts/smoke_test.sh` | Yes |
-| `includes/**` | **No** (runtime bind-mount only) |
+Pull requests and pushes to `main` or `dev/px4-upgrade` that touch Dockerfiles, Compose, `scripts/`, `HealthCheck/`, `ros2_ws/`, `config/`, `tests/`, or the workflow files. `includes/gz/**` is bind-mounted at runtime, so editing a world does not rebuild the image. The image is rebuilt only when `scripts/image_rebuild_paths.py` matches a changed path: `dockerFile/**`, `DockerBuild.sh`, `versions.env`, `includes/gz/patch_dds_topics.py`, or a `ros2_ws` manifest (`package.xml`, `CMakeLists.txt`, `setup.py`, `setup.cfg`, `pyproject.toml`). Anything else pulls `PX4_IMAGE`. The flight job loads that image and does not run `docker build`. The spawn-pose and RTAB-Map viz hooks under `includes/gz/startFiles/` are on the path filter.
 
-Pushes to `main` or `docker` run the workflow (or use **Actions → Run workflow** manually).
+Pull requests do not push images. A push to `main` (or a `v*` tag) publishes `px4-<PX4_VERSION>` and `sha-<short>`.
 
 ### What CI does
 
-1. **Build matrix** — builds and pushes two images to Docker Hub (`alienkh/px4_sim`):
-   - NO-GPU: `dockerFile/Dockerfile_px4_sim_NO_GPU`
-   - GPU: `dockerFile/Dockerfile_px4_sim_with_GPU` (tag suffix `_GPU`)
-
-2. **Tags pushed** — `v3.0.0`, `v3.0.0-latest` (and `_GPU` variants). Build cache is stored in GitHub Actions cache (not Docker Hub).
-
-3. **Smoke test** — after NO-GPU push, runs [scripts/smoke_test.sh](../scripts/smoke_test.sh) (see [scripts/README.md](../scripts/README.md)) which:
-   - Pulls the new image
-   - Mounts `includes/gz/` and `HealthCheck/` from this repo
-   - Runs `gz_modifications.bash`, SITL, bridge, and XRCE headlessly
-   - Asserts ROS topics `/clock` and `/fmu/out/vehicle_odometry` are publishing
+1. **Lint** — hadolint, shellcheck, yamllint, actionlint, `docker compose config`, version pins, and a warn-only Fuel URI check.
+2. **colcon** — builds `ros2_ws`. An empty `src/` is a successful no-op until the control packages arrive.
+3. **Image** — builds the no-GPU Dockerfile once when an image input changed, otherwise pulls the published tag. The flight job loads that image. The GPU Dockerfile builds on `main` and on manual dispatch. Gazebo smoke stays on the nightly/manual workflow because hosted runners have no GPU.
 
 ### Secrets required
 
 - `DOCKER_USERNAME`
-- `DOCKER_PASSWORD`
+- `DOCKER_PASSWORD` (used only when the workflow pushes)
 
 ### After CI
 
-Update `px4TAG` in your local `.env` to the new tag (e.g. `v3.0.0`) and `docker compose pull`.
-
-### Planned / future automation
-
-- CI on changes under `includes/gz/` (config-only smoke test, no full image rebuild)
-- Validate Compose and startup scripts on pull requests
-- Optional workflow to bump `px4TAG` in `.env.example` when a build succeeds
+Update `PX4_IMAGE` in `.env` if you want Compose to pull the new tag, then `docker compose pull`.
 
 ## Local workflow vs CI
 

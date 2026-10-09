@@ -1,0 +1,25 @@
+service: NAV2
+log_name: nav2
+window_s: 1.0
+discovery_s: 2.0
+lifecycle:
+  - name: controller_server
+    state: active
+  - name: planner_server
+    state: active
+  - name: bt_navigator
+    state: active
+  - name: behavior_server
+    state: active
+    optional: true
+  - name: smoother_server
+    state: active
+    optional: true
+  - name: waypoint_follower
+    state: active
+    optional: true
+topics:
+  - topic: /cmd_vel
+    min_rate_hz: 0
+    qos: reliable
+    optional: true

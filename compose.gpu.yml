@@ -1,0 +1,55 @@
+# NVIDIA override. Image and device reservation only.
+
+x-gpu-image: &gpu-image ${PX4_GPU_IMAGE:-docker.io/alienkh/px4_sim:${px4GPUTAG:-1.17.0_01_GPU_GPUEnabled}}
+
+x-gpu-env: &gpu-env
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+  # Same camera knobs as compose.yml, so the NVIDIA override does not drop them.
+  RTABMAPVIZ: ${RTABMAPVIZ:-false}
+  CameraType: ${CameraType:-rgbd}
+  CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+  CAM_X: ${CAM_X:-0.12}
+  CAM_Y: ${CAM_Y:-0.03}
+  CAM_Z: ${CAM_Z:-0.242}
+  VISION_PROFILE: ${VISION_PROFILE:-full}
+  CAM_RATE_HZ: ${CAM_RATE_HZ:-}
+  CAM_STEREO_WIDTH: ${CAM_STEREO_WIDTH:-}
+  CAM_STEREO_HEIGHT: ${CAM_STEREO_HEIGHT:-}
+  CAM_COLOR_WIDTH: ${CAM_COLOR_WIDTH:-}
+  CAM_COLOR_HEIGHT: ${CAM_COLOR_HEIGHT:-}
+  IMU_RATE_HZ: ${IMU_RATE_HZ:-}
+  VISION_MIN_ODOM_HZ: ${VISION_MIN_ODOM_HZ:-}
+
+services:
+  PX4:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  StatePublisher:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Qground:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Rtabmap:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  NAV2:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env
+  Nav2_Rviz:
+    image: *gpu-image
+    environment:
+      <<: *gpu-env

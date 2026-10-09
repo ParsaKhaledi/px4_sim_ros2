@@ -1,0 +1,460 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "dockerFile/**"
+      - "DockerBuild.sh"
+      - "compose.yml"
+      - "compose*.yml"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - "HealthCheck/**"
+      - "ros2_ws/**"
+      - "tests/**"
+      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
+      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/gz_modifications.bash"
+      - "includes/gz/tune_gz_cameras.py"
+      - "includes/gz/patch_dds_topics.py"
+      - "config/**"
+      - ".github/workflows/**"
+      - "versions.env"
+      - ".env.example"
+      - ".hadolint.yaml"
+      - ".yamllint.yml"
+  push:
+    branches: [main, dev/px4-upgrade, "feature/**"]
+    tags: ["v*"]
+    paths:
+      - "dockerFile/**"
+      - "DockerBuild.sh"
+      - "compose.yml"
+      - "compose*.yml"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - "HealthCheck/**"
+      - "ros2_ws/**"
+      - "tests/**"
+      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
+      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/gz_modifications.bash"
+      - "includes/gz/tune_gz_cameras.py"
+      - "includes/gz/patch_dds_topics.py"
+      - "config/**"
+      - ".github/workflows/**"
+      - "versions.env"
+      - ".env.example"
+      - ".hadolint.yaml"
+      - ".yamllint.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck yamllint python3-pytest python3-yaml
+          sudo curl -fsSL -o /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+          curl -fsSL -o /tmp/actionlint.tgz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin -xzf /tmp/actionlint.tgz actionlint
+
+      - name: Static checks
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+          hadolint dockerFile/Dockerfile_px4_sim_NO_GPU
+          shellcheck scripts/*.sh DockerBuild.sh
+          yamllint compose.yml compose.gui.yml compose.ci.yml compose.xvfb.yml \
+            docker-compose-px4.yml \
+            HealthCheck/checks .github/workflows
+          actionlint
+          ./scripts/check_versions.sh
+          ./scripts/check_fuel_refs.sh | tee /tmp/fuel.txt
+          if grep -q "Warn-only" /tmp/fuel.txt; then
+            {
+              echo "### Fuel references"
+              echo "Warn-only. Existing worlds still reference fuel.gazebosim.org."
+              echo
+              echo '```'
+              head -n 20 /tmp/fuel.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          set -a
+          # shellcheck disable=SC1091
+          source versions.env
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          docker compose -f docker-compose-px4.yml --profile gcs --profile slam --profile nav config -q
+          docker compose -f docker-compose-px4.yml -f compose.ci.yml config -q
+          python3 -m pytest tests -q
+
+  colcon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: colcon build and test
+        run: |
+          set -euo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work ros:jazzy-ros-base bash -lc '
+            set -eo pipefail
+            apt-get update
+            apt-get install -y python3-colcon-common-extensions
+            mkdir -p ros2_ws/src
+            count=$(find ros2_ws/src -name package.xml | wc -l)
+            echo "package.xml files: ${count}"
+            if [ "${count}" -eq 0 ]; then
+              echo "No ROS packages yet. An empty colcon workspace is success."
+            fi
+            # setup.bash reads unset AMENT_* variables. nounset must stay off.
+            set +u
+            source /opt/ros/jazzy/setup.bash
+            set -u
+            cd ros2_ws
+            colcon build
+            colcon test
+            if ! colcon test-result --verbose; then
+              if [ "${count}" -eq 0 ]; then
+                echo "Empty workspace has no test results."
+              else
+                exit 1
+              fi
+            fi
+          '
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    outputs:
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      image_mode: ${{ steps.build.outputs.image_mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use .env.example when .env is absent
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      # A raw `docker buildx build` does not see the Actions cache URL or token.
+      # BuildKit then skips the gha backend. v1 of that API is shut down.
+      - name: Expose GitHub Actions cache credentials
+        uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: v0.38.0
+          driver: docker-container
+
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          sudo apt-get clean
+          docker buildx prune -f || true
+
+      - name: Image tag
+        id: meta
+        run: echo "image_ref=px4_sim:ci-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build or pull
+        id: build
+        timeout-minutes: 45
+        env:
+          GH_CACHE_TOKEN: ${{ github.token }}
+          PUSH_IMAGE: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source versions.env
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          start="$(date +%s)"
+          image_ref="${{ steps.meta.outputs.image_ref }}"
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF}"
+            range="origin/${GITHUB_BASE_REF}...HEAD"
+            if ! changed="$(git diff --name-only "${range}")"; then
+              mode="build"
+            else
+              mode="$(printf '%s\n' "${changed}" | python3 scripts/image_rebuild_paths.py)"
+            fi
+          elif ! changed="$(git diff --name-only HEAD~1..HEAD)"; then
+            mode="build"
+          else
+            mode="$(printf '%s\n' "${changed}" | python3 scripts/image_rebuild_paths.py)"
+          fi
+          echo "Image plan: ${mode}"
+          echo "Changed paths:"
+          printf '%s\n' "${changed:-<none>}"
+          if [ "${mode}" = "pull" ]; then
+            docker pull "${PX4_IMAGE}"
+            docker tag "${PX4_IMAGE}" "${image_ref}"
+            echo "image_mode=pulled" >> "${GITHUB_OUTPUT}"
+            echo "image_digest=" >> "${GITHUB_OUTPUT}"
+            echo "pull $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+            {
+              echo "### Image"
+              echo "- plan: pull \`${PX4_IMAGE}\`"
+              echo "- ref: \`${image_ref}\`"
+              echo "- the hover/smoke loads this tag and does not build."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          short="${GITHUB_SHA::7}"
+          dockerfile="dockerFile/Dockerfile_px4_sim_NO_GPU"
+          cache_scope="px4-sim-no-gpu"
+          local_tag="${image_ref}"
+          tags=(-t "${local_tag}")
+          if [ "${PUSH_IMAGE}" = "true" ]; then
+            publish_ref="${REGISTRY}/${IMAGE_NAME}:px4-${PX4_VERSION}"
+            tags+=(-t "${publish_ref}" -t "${REGISTRY}/${IMAGE_NAME}:sha-${short}")
+            output_flags=(--push)
+          else
+            output_flags=(--load)
+          fi
+          if [ -z "${ACTIONS_RESULTS_URL:-}" ] || [ -z "${ACTIONS_RUNTIME_TOKEN:-}" ]; then
+            echo "BuildKit cache credentials are missing." >&2
+            echo "ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN must be set." >&2
+            exit 1
+          fi
+          # version=2 is the cache service that replaced the v1 API.
+          # Credentials come from the runtime step; Buildx reads them itself.
+          cache_from="type=gha,scope=${cache_scope},version=2"
+          cache_to="type=gha,scope=${cache_scope},mode=max,version=2,timeout=30m"
+          cache_to="${cache_to},ghtoken=${GH_CACHE_TOKEN},repository=${GITHUB_REPOSITORY}"
+          cache_to="${cache_to},ignore-error=true"
+          echo "Build cache: ${cache_from}"
+          docker buildx build \
+            --file "${dockerfile}" \
+            --build-arg "PX4_VERSION=${PX4_VERSION}" \
+            --build-arg "XRCE_AGENT_VERSION=${XRCE_AGENT_VERSION}" \
+            --build-arg "ROS_DISTRO=${ROS_DISTRO}" \
+            --build-arg "USER_UID=${USER_UID}" \
+            --build-arg "USER_GID=${USER_GID}" \
+            --build-arg "QGC_URL=${QGC_URL_NO_GPU}" \
+            "${tags[@]}" \
+            "${output_flags[@]}" \
+            --cache-from "${cache_from}" \
+            --cache-to "${cache_to}" \
+            --metadata-file /tmp/build-metadata.json \
+            --provenance=false \
+            --sbom=false \
+            . 2>&1 | tee "${RUNNER_TEMP}/buildx.log"
+          cached="$(grep -c 'CACHED' "${RUNNER_TEMP}/buildx.log" || true)"
+          imported="$(grep -c 'importing cache manifest' "${RUNNER_TEMP}/buildx.log" || true)"
+          digest="$(python3 -c 'import json; print(json.load(open("/tmp/build-metadata.json")).get("containerimage.digest",""))')"
+          if [ "${PUSH_IMAGE}" = "true" ] && [ -n "${digest}" ]; then
+            image_ref="${REGISTRY}/${IMAGE_NAME}@${digest}"
+            docker pull "${image_ref}"
+            docker tag "${image_ref}" "${local_tag}"
+          fi
+          echo "image_mode=built" >> "${GITHUB_OUTPUT}"
+          echo "image_digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "build $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "cache_scope=${cache_scope} cached_steps=${cached} imports=${imported}" \
+            >> "${RUNNER_TEMP}/image_timing.txt"
+          {
+            echo "### Image"
+            echo "- plan: build"
+            echo "- ref: \`${local_tag}\`"
+            echo "- digest: \`${digest}\`"
+            echo "- cache: \`type=gha\` scope \`${cache_scope}\` version 2"
+            echo "- cached steps: ${cached}, cache imports: ${imported}"
+            echo "- the hover/smoke loads this artifact and does not build."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Save image
+        if: steps.build.outputs.image_mode == 'built'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          start="$(date +%s)"
+          docker save "${{ steps.meta.outputs.image_ref }}" \
+            | zstd -T0 -1 -o "${RUNNER_TEMP}/px4-image.tar.zst"
+          echo "save $(( $(date +%s) - start ))" >> "${RUNNER_TEMP}/image_timing.txt"
+          ls -lh "${RUNNER_TEMP}/px4-image.tar.zst"
+
+      - name: Upload image
+        if: steps.build.outputs.image_mode == 'built'
+        uses: actions/upload-artifact@v4
+        with:
+          name: px4-image-${{ github.sha }}
+          path: ${{ runner.temp }}/px4-image.tar.zst
+          compression-level: 0
+          retention-days: 1
+
+      - name: Image contents
+        if: steps.build.outcome == 'success'
+        run: ./scripts/image_assert.sh "${{ steps.meta.outputs.image_ref }}"
+
+      - name: Parameter names
+        if: steps.build.outputs.image_mode == 'built'
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint bash "${{ steps.meta.outputs.image_ref }}" -lc '
+            found=$(find /home/px4/PX4-Autopilot/build/px4_sitl_default -maxdepth 3 \
+              \( -name parameters.xml -o -name parameters.json \) | head -1)
+            if [ -z "${found}" ]; then
+              echo "No parameters.xml or parameters.json in the image." >&2
+              exit 1
+            fi
+            echo "metadata: ${found}" >&2
+            cat "${found}"
+          ' > /tmp/parameters.metadata
+          python3 scripts/px4_params.py check-metadata --metadata /tmp/parameters.metadata
+
+      - name: Timing summary
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
+            {
+              echo "### Timing"
+              echo
+              echo '```'
+              cat "${RUNNER_TEMP}/image_timing.txt"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  # Loads the image the build job saved, or pulls the same published tag.
+  # One headless hover/smoke. No second flight and no offboard controller.
+  flight:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use .env.example when .env is absent
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      - name: Download image
+        if: needs.build.outputs.image_mode == 'built'
+        uses: actions/download-artifact@v4
+        with:
+          name: px4-image-${{ github.sha }}
+          path: ${{ runner.temp }}/px4-image
+
+      - name: Load image
+        if: needs.build.outputs.image_mode == 'built'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          start="$(date +%s)"
+          zstd -d "${RUNNER_TEMP}/px4-image/px4-image.tar.zst" -c | docker load
+          echo "load $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          docker image inspect "${{ needs.build.outputs.image_ref }}" >/dev/null
+          echo "Loaded ${{ needs.build.outputs.image_ref }} without building."
+
+      - name: Pull published image
+        if: needs.build.outputs.image_mode == 'pulled'
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          start="$(date +%s)"
+          docker pull "${PX4_IMAGE}"
+          docker tag "${PX4_IMAGE}" "${{ needs.build.outputs.image_ref }}"
+          echo "pull $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "Pulled ${PX4_IMAGE} without building."
+
+      - name: Image contents
+        run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
+
+      - name: Headless hover/smoke
+        timeout-minutes: 15
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: none
+          World: default
+          PX4_GZ_MODEL: x500
+          COMPOSE_PROFILES: ""
+          COMPOSE_SERVICES: PX4
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_PROJECT_NAME: px4-smoke-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "0"
+          SMOKE_TEST_TIMEOUT: "240"
+        run: ./scripts/smoke_test.sh "${PX4_IMAGE}"
+
+      - name: Flight artifacts
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flight-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            logs/health/**
+            logs/flights/**
+            logs/smoke-containers.log
+
+      - name: Health summary
+        if: always() && !cancelled()
+        run: |
+          {
+            echo "### Health report"
+            ./scripts/health_report.sh || true
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Timing summary
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
+            {
+              echo "### Timing"
+              echo
+              echo '```'
+              cat "${RUNNER_TEMP}/image_timing.txt"
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi

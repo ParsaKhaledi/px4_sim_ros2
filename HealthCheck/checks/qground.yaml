@@ -1,0 +1,5 @@
+service: Qground
+log_name: qground
+processes:
+  - name: qgroundcontrol
+    pattern: QGroundControl

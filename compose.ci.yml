@@ -1,0 +1,60 @@
+# Headless CI override: no GUI, no host port publishing, no /dev bind.
+services:
+  PX4:
+    environment:
+      HEADLESS: "1"
+      DISPLAY: ""
+      XAUTHORITY: ""
+      QT_QPA_PLATFORM: offscreen
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+      RTABMAPVIZ: "false"
+    ports: !override []
+    volumes: !override
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./config/px4/params:/home/px4/volume/config/px4/params:ro
+      - ./scripts:/home/px4/volume/scripts:ro
+      - ./includes/gz:/home/px4/volume/includes/gz
+      - ./includes/gz/startFiles:/home/px4/volume/startFiles
+      - ./includes/gz/Params:/home/px4/volume/Params
+      - ./logs:/home/px4/volume/logs
+      - ./tests:/home/px4/volume/tests:ro
+      - ./ros2_ws:/home/px4/volume/ros2_ws:ro
+  StatePublisher:
+    environment:
+      HEADLESS: "1"
+      DISPLAY: ""
+      RTABMAPVIZ: "false"
+    volumes: !override
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./includes/gz:/home/px4/volume/includes/gz
+      - ./includes/gz/startFiles:/home/px4/volume/startFiles
+      - ./includes/gz/Params:/home/px4/volume/Params
+      - ./logs:/home/px4/volume/logs
+  Rtabmap:
+    environment:
+      HEADLESS: "1"
+      DISPLAY: ""
+      RTABMAPVIZ: "false"
+      QT_QPA_PLATFORM: offscreen
+    volumes: !override
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./includes/gz:/home/px4/volume/includes/gz
+      - ./includes/gz/startFiles:/home/px4/volume/startFiles
+      - ./includes/gz/Params:/home/px4/volume/Params
+      - ./logs:/home/px4/volume/logs
+  NAV2:
+    environment:
+      HEADLESS: "1"
+      DISPLAY: ""
+      RTABMAPVIZ: "false"
+    volumes: !override
+      - ./HealthCheck:/home/px4/volume/HealthCheck:ro
+      - ./includes/gz:/home/px4/volume/includes/gz
+      - ./includes/gz/startFiles:/home/px4/volume/startFiles
+      - ./includes/gz/Params:/home/px4/volume/Params
+      - ./logs:/home/px4/volume/logs
+  Qground:
+    profiles: !override ["ci-disabled"]
+  Nav2_Rviz:
+    profiles: !override ["ci-disabled"]

@@ -1,0 +1,10 @@
+# Virtual framebuffer when Gazebo EGL headless rendering publishes blank frames.
+# Stack this after compose.ci.yml so DISPLAY replaces the empty CI value.
+services:
+  PX4:
+    environment:
+      DISPLAY: ":99"
+      GZ_USE_XVFB: "1"
+      GZ_HEADLESS_RENDERING: "0"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
