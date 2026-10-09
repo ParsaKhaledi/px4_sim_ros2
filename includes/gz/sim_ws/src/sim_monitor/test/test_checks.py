@@ -322,16 +322,15 @@ def test_full_profile_fails_a_100_hz_sim_imu(monkeypatch):
 
 
 def test_preflight_thresholds_follow_profile_and_overrides():
-    assert expected_sensor_hz("camera", {}) == 30.0
+    assert expected_sensor_hz("camera", {}) == 10.0
     assert expected_sensor_hz("camera", {"VISION_PROFILE": "cpu"}) == 10.0
     assert expected_sensor_hz("camera", {"CAM_RATE_HZ": "15"}) == 15.0
-    assert minimum_rate_hz("camera", {"VISION_PROFILE": "full"}) == 15.0
+    assert minimum_rate_hz("camera", {"VISION_PROFILE": "cpu"}) == 5.0
     assert minimum_rate_hz("imu", {"VISION_PROFILE": "cpu", "PREFLIGHT_MIN_IMU_HZ": "80"}) == 80.0
-    assert expected_imu_hz({"IMU_SOURCE": "oak"}) == 50.0
-    assert expected_imu_hz({"IMU_SOURCE": "oak", "CameraType": "stereo"}) == 50.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 37.5
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 60.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
+    assert expected_imu_hz({"IMU_SOURCE": "oak"}) == 100.0
+    assert expected_imu_hz({"IMU_SOURCE": "oak", "CameraType": "stereo"}) == 100.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 75.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
     assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "IMU_RATE_HZ": "80"}) == 60.0
     assert default_min_rtf({"HEADLESS_SOFTWARE": "1"}) == 0.15
     assert default_min_rtf({}) == 0.8

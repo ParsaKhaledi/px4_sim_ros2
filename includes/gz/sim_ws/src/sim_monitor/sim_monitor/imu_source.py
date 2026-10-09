@@ -1,10 +1,8 @@
-"""Which node publishes ROS ``/imu``.
+"""The camera IMU is the only ROS ``/imu`` publisher.
 
-``IMU_SOURCE=oak`` (the default) bridges the Oak-D Gazebo IMU.
-``IMU_SOURCE=px4`` relays PX4 ``sensor_combined`` and ``vehicle_attitude``.
-Only one of those publishers is configured. ``IMU_STAMP_MODE`` is ``receive``
-or ``px4_offset``. ``CameraType`` and ``PREFLIGHT_TF_PAIRS`` pick the
-preflight TF pairs. ``PREFLIGHT_OPTICAL_FRAME`` overrides the camera optical frame.
+``IMU_SOURCE=oak`` bridges the Oak-D Gazebo IMU. ``CameraType`` and
+``PREFLIGHT_TF_PAIRS`` pick the preflight TF pairs. ``PREFLIGHT_OPTICAL_FRAME``
+overrides the camera optical frame.
 """
 
 from __future__ import annotations
@@ -14,17 +12,15 @@ import os
 from sim_monitor.checks import expected_imu_hz  # noqa: F401  re-exported for callers
 
 OAK = "oak"
-PX4 = "px4"
 IMU_TOPIC = "/imu"
 OAK_FRAME = "imu_link"
-PX4_FRAME = "base_link"
 
 
 def normalize_imu_source(value: str | None) -> str:
-    """Return ``oak`` or ``px4``. Empty means oak."""
+    """Return ``oak``. Empty means oak."""
     raw = "oak" if value is None or str(value).strip() == "" else str(value).strip().lower()
-    if raw not in {OAK, PX4}:
-        raise ValueError(f"IMU_SOURCE must be oak or px4, got {value!r}")
+    if raw != OAK:
+        raise ValueError(f"IMU_SOURCE must be oak, got {value!r}")
     return raw
 
 
@@ -35,16 +31,15 @@ def imu_source(environ: dict[str, str] | None = None) -> str:
 
 
 def configured_imu_publishers(source: str | None = None) -> tuple[str, ...]:
-    """The single ``/imu`` publisher for this mode."""
-    selected = normalize_imu_source(source)
-    if selected == OAK:
-        return ("ros_gz_bridge",)
-    return ("px4_imu_relay",)
+    """The camera bridge is the only ``/imu`` publisher."""
+    normalize_imu_source(source)
+    return ("ros_gz_bridge",)
 
 
 def bridge_gazebo_imu(source: str | None = None) -> bool:
-    """True only in oak mode. The px4 relay owns ``/imu`` otherwise."""
-    return normalize_imu_source(source) == OAK
+    """The camera IMU is always bridged."""
+    normalize_imu_source(source)
+    return True
 
 
 def default_tf_pairs(environ: dict[str, str] | None = None) -> str:

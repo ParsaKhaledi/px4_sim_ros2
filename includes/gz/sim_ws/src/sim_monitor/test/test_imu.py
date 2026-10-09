@@ -35,8 +35,6 @@ from sim_monitor.imu_source import (
     px4_sample_us,
     rate_log,
 )
-from sim_monitor.px4_imu_relay import px4_topic
-
 G = 9.80665
 # Frames this stack must not publish. Ground-truth TF (base_link_gt) is separate.
 CAMERA_FRAMES = (
@@ -82,11 +80,16 @@ def test_gravity_quaternion_keeps_roll_pitch_and_drops_yaw():
 
 def test_only_one_imu_publisher_per_mode():
     assert configured_imu_publishers("oak") == ("ros_gz_bridge",)
-    assert configured_imu_publishers("px4") == ("px4_imu_relay",)
+    assert configured_imu_publishers("") == ("ros_gz_bridge",)
     assert bridge_gazebo_imu("oak") is True
-    assert bridge_gazebo_imu("px4") is False
     assert bridge_gazebo_imu("") is True
     assert normalize_imu_source(None) == "oak"
+    try:
+        normalize_imu_source("px4")
+    except ValueError as exc:
+        assert "oak" in str(exc)
+    else:
+        raise AssertionError("px4 must not be an IMU source")
     sim = (REPO_GZ / "config_gz_bridge_sim.yaml").read_text(encoding="utf-8")
     imu = (REPO_GZ / "config_gz_bridge_imu.yaml").read_text(encoding="utf-8")
     assert 'ros_topic_name: "/imu"' not in sim
@@ -95,9 +98,8 @@ def test_only_one_imu_publisher_per_mode():
 
 def test_px4_rate_minimum_and_optical_frame():
     assert expected_imu_hz({"IMU_SOURCE": "oak", "IMU_RATE_HZ": "200"}) == 200.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak"}) == 37.5
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4"}) == 60.0
-    assert minimum_rate_hz("imu", {"IMU_SOURCE": "px4", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "IMU_RATE_HZ": "100"}) == 75.0
+    assert minimum_rate_hz("imu", {"IMU_SOURCE": "oak", "PREFLIGHT_MIN_IMU_HZ": "60"}) == 60.0
     assert "camera_rgb_frame" in default_tf_pairs({"CameraType": "rgbd"})
     assert "stereo_left_camera_frame" in default_tf_pairs({"CameraType": "stereo"})
     assert default_tf_pairs({"PREFLIGHT_TF_PAIRS": "world:spawn"}) == "world:spawn"
@@ -137,17 +139,11 @@ def test_sensor_combined_rate_is_sim_time_and_warns_below_80():
     assert rate_log(None) is None
 
 
-def test_px4_topic_prefers_a_version_suffix():
-    names = ["/fmu/out/sensor_combined", "/fmu/out/sensor_combined_v1"]
-    assert px4_topic(names, "sensor_combined") == "/fmu/out/sensor_combined_v1"
-    assert px4_topic([], "vehicle_attitude") == "/fmu/out/vehicle_attitude"
-
-
 def test_no_camera_static_transforms_are_published():
     """Keep the base URDF camera tree. This package must not add another publisher."""
     urdf = (REPO_GZ / "x500_tf_publisher" / "x500_urdf.urdf").read_text(encoding="utf-8")
     for name in (
-        "OakD-Lite/base_link",
+        "camera_link",
         "imu_link",
         "camera_rgb_frame",
         "camera_rgb_optical_frame",

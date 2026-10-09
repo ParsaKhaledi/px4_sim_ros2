@@ -40,7 +40,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
 | `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
-| `VISION_PROFILE` | Camera profile. `cpu` is the one this line runs | `cpu` |
+| `VISION_PROFILE` | `cpu` only: 320x200 at 10 Hz, IMU 100 Hz | `cpu` |
 | `IMU_SOURCE` | Camera IMU on `/imu` | `oak` |
 | `World` | Gazebo world filename stem | `default` |
 | `HEADLESS` | `1` skips the Gazebo GUI | `0` |
@@ -108,7 +108,9 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
-Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout. Headless Gazebo, sim time, ground truth, and preflight checks are described in [docs/simulation.md](docs/simulation.md). `/imu` is the camera IMU (`IMU_SOURCE=oak`).
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout. Headless Gazebo, sim time, ground truth, and preflight checks are described in [docs/simulation.md](docs/simulation.md).
+
+`IMU_SOURCE=oak` bridges the OAK-D camera IMU to ROS `/imu` (`frame_id` `imu_link`). That is the only `/imu` publisher. RTAB-Map subscribes with `imu_topic:=/imu` and publishes `/rtabmap/odom` with `frame_id:=base_link`.
 
 Operational scripts: [scripts/README.md](scripts/README.md).
 

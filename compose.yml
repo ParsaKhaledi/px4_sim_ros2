@@ -29,7 +29,7 @@ x-ros-env: &ros-env
   CAM_X: ${CAM_X:-0.12}
   CAM_Y: ${CAM_Y:-0.03}
   CAM_Z: ${CAM_Z:-0.242}
-  # cpu is the lighter camera profile. The GPU files default to full.
+  # cpu is the only camera profile.
   VISION_PROFILE: ${VISION_PROFILE:-cpu}
   # Optional overrides. Empty unless set, so the profile keeps its own values.
   CAM_RATE_HZ: ${CAM_RATE_HZ:-}

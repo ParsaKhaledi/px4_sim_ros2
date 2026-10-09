@@ -1,7 +1,7 @@
 #!/bin/bash
 # Background helpers that run next to the ros_gz bridge:
-#   /sim/real_time_factor, the spawn frame, /sim/preflight_check,
-#   and px4_imu_relay when IMU_SOURCE=px4.
+#   /sim/real_time_factor, the spawn frame, and /sim/preflight_check.
+# /imu is the camera bridge. This script does not publish it.
 # Camera frames are not published here.
 
 USER_NAME=px4
@@ -30,11 +30,8 @@ python3 -m sim_monitor.real_time_factor &
 python3 -m sim_monitor.spawn_frame &
 case "${IMU_SOURCE:-oak}" in
   oak|OAK) ;;
-  px4|PX4)
-    python3 -m sim_monitor.px4_imu_relay &
-    ;;
   *)
-    echo "ERROR: IMU_SOURCE must be oak or px4, got ${IMU_SOURCE}" >&2
+    echo "ERROR: IMU_SOURCE must be oak, got ${IMU_SOURCE}" >&2
     exit 1
     ;;
 esac

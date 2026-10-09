@@ -152,7 +152,7 @@ def test_cpu_and_gpu_pass_the_same_camera_env():
     for files in cpu_stacks:
         assert _config(*files)["services"]["PX4"]["environment"]["VISION_PROFILE"] == "cpu"
     for files in gpu_stacks:
-        assert _config(*files)["services"]["PX4"]["environment"]["VISION_PROFILE"] == "full"
+        assert _config(*files)["services"]["PX4"]["environment"]["VISION_PROFILE"] == "cpu"
 
 
 def test_camera_env_follows_the_shell():
