@@ -304,9 +304,43 @@ mkdir -p "${ROOT}/logs"
 # The runner creates the directory, so it has to be world-writable.
 mkdir -p "${FLIGHTS}"
 chmod 777 "${ROOT}/logs" "${ROOT}/logs/flights" "${FLIGHTS}" || true
+record_boot_order() {
+  compose_setup
+  local raw="${ROOT}/logs/px4-boot-tail.log"
+  local out="${ROOT}/logs/px4_boot_order.txt"
+  "${COMPOSE[@]}" logs --no-color --tail 20000 PX4 > "${raw}" 2>/dev/null || true
+  python3 - "${raw}" "${out}" << 'PY'
+import re
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+text = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+rows = []
+for line in text.splitlines():
+    if any(token in line for token in ("PX4 params:", "[ekf2]", "Cleared SITL", "Sourced airframe .post")):
+        rows.append(line.strip())
+Path(sys.argv[2]).write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
+if rows:
+    print("\n".join(rows))
+else:
+    print("Boot order: no parameter or ekf2 lines in the captured log.")
+PY
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "### Boot order"
+      echo
+      echo '```'
+      cat "${out}"
+      echo '```'
+    } >> "${GITHUB_STEP_SUMMARY}"
+  fi
+}
+
 bringup_start="$(date +%s)"
 "${ROOT}/scripts/compose_stack.sh" up
 BRINGUP_S=$(( $(date +%s) - bringup_start ))
+record_boot_order
 "${ROOT}/scripts/assert_px4_params.sh"
 check_distance_sensor
 

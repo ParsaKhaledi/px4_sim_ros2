@@ -115,6 +115,8 @@ def test_start_script_clears_the_store_and_patches_rcs():
     assert "--rootfs" in start
     assert start.index("px4_params.py apply") < start.index("exec ../bin/px4")
     assert "apply_px4_params.sh" not in start
+    e2e = Path("scripts/run_e2e.sh").read_text(encoding="utf-8")
+    assert e2e.index("record_boot_order\n") < e2e.index('"${ROOT}/scripts/assert_px4_params.sh"')
 
 
 STOCK_RCS = """
