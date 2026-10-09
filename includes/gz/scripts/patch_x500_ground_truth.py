@@ -23,13 +23,16 @@ import sys
 from pathlib import Path
 
 COVARIANCE_TOPIC = "/ground_truth/odom_with_covariance"
+# Sim-time rate. The health check counts wall-clock messages, so the
+# floor in HealthCheck/checks/px4.yaml is half of this value.
+ODOM_PUBLISH_HZ = 50
 
-PLUGIN = """\
+PLUGIN = f"""\
     <plugin filename="gz-sim-odometry-publisher-system"
             name="gz::sim::systems::OdometryPublisher">
       <odom_frame>world</odom_frame>
       <robot_base_frame>base_link_gt</robot_base_frame>
-      <odom_publish_frequency>50</odom_publish_frequency>
+      <odom_publish_frequency>{ODOM_PUBLISH_HZ}</odom_publish_frequency>
       <odom_topic>/ground_truth/odom</odom_topic>
       <odom_covariance_topic>/ground_truth/odom_with_covariance</odom_covariance_topic>
       <tf_topic>/ground_truth/tf</tf_topic>
