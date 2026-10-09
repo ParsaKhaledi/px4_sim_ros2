@@ -1,4 +1,5 @@
 name: CI
+# feature/line-sim stacks sim assets and the cpu camera on line-base.
 
 on:
   pull_request:
