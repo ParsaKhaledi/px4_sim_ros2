@@ -14,6 +14,11 @@ x   NAV_DLL_ACT [0, 7] : 0
 x   NAV_RCL_ACT [0, 6] : 1
 x   COM_RC_IN_MODE [0, 4] : 1
 x   COM_RC_LOSS_T [0.000, 35.000] : 35.000
+x   EKF2_GPS_CTRL [0, 15] : 0
+x   EKF2_EV_CTRL [0, 15] : 9
+x   EKF2_HGT_REF [0, 3] : 0
+x   EKF2_MAG_TYPE [0, 6] : 5
+x   EKF2_RNG_CTRL [0, 3] : 1
 """
 
 

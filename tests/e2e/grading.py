@@ -1,9 +1,12 @@
-"""Grade an out-and-back flight against ground-truth samples.
+"""Grade a flight against ground-truth samples.
 
 Samples are dicts with keys x, y, z, yaw (degrees, ENU), t (sim seconds)
 and phase. Phases used here: start, takeoff, hover, leg1, yaw, leg2, land.
 The last start sample is the ground origin, so a pose taken while the
 model is still being spawned does not set the hover height.
+
+grade_hover scores the headless hover. grade_mission also scores the
+out-and-back legs. The flight level uses grade_hover.
 
 A step passes settle only when the track itself stays inside the band
 for the hold, and that hold finishes before the timeout. The driver
@@ -12,9 +15,11 @@ waiting is not enough.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -281,20 +286,72 @@ def _grade_yaw(checks, rows, start_pose, thresholds: Thresholds) -> None:
     )
 
 
-def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
-    thresholds = thresholds or load_thresholds()
+_OUT_AND_BACK = {"leg1", "yaw", "leg2"}
+
+
+def _result(checks, thresholds: Thresholds) -> dict:
+    return {
+        "passed": bool(checks) and all(item["passed"] for item in checks),
+        "checks": checks,
+        "thresholds": asdict(thresholds),
+    }
+
+
+def _samples_from_payload(payload) -> list:
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        raise ValueError("hover track must be a list of samples or a JSON object")
+    for key in ("track", "samples"):
+        rows = payload.get(key)
+        if isinstance(rows, list):
+            return rows
+    attempts = payload.get("attempts")
+    if isinstance(attempts, list):
+        for attempt in reversed(attempts):
+            if not isinstance(attempt, dict):
+                continue
+            for key in ("track", "samples"):
+                rows = attempt.get(key)
+                if isinstance(rows, list):
+                    return rows
+    raise ValueError("hover track JSON has no samples")
+
+
+def load_hover_track(env=None) -> list:
+    """Read the one headless hover. This does not start the simulator."""
+
+    source = os.environ if env is None else env
+    path = source.get("E2E_HOVER_JSON") or source.get("E2E_RESULT_PATH") or ""
+    if not path:
+        flight_dir = source.get("E2E_FLIGHT_DIR") or ""
+        if flight_dir:
+            candidate = Path(flight_dir) / "trajectory.json"
+            if candidate.is_file():
+                path = str(candidate)
+    if not path:
+        raise ValueError(
+            "No hover track. Set E2E_HOVER_JSON to the headless hover samples. "
+            "This level does not start the simulator."
+        )
+    file = Path(path)
+    if not file.is_file():
+        raise ValueError(f"Hover track not found: {file}")
+    try:
+        payload = json.loads(file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Hover track is not JSON: {file}") from exc
+    return _samples_from_payload(payload)
+
+
+def _grade_hover_checks(samples, thresholds: Thresholds) -> list:
     checks = []
     start = _phase(samples, "start")
     takeoff = _phase(samples, "takeoff")
     hover = _phase(samples, "hover")
-    leg1 = _phase(samples, "leg1")
-    yaw_rows = _phase(samples, "yaw")
-    leg2 = _phase(samples, "leg2")
-    land = _phase(samples, "land")
-
     if not start or not hover:
         checks.append(_check("samples", False, 0, 1, "need start and hover samples"))
-        return {"passed": False, "checks": checks, "thresholds": asdict(thresholds)}
+        return checks
 
     origin = (start[-1]["x"], start[-1]["y"], start[-1]["z"])
     hover_pose = hover[-1]
@@ -318,6 +375,41 @@ def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
             thresholds.hover_drift_m,
         )
     )
+    return checks
+
+
+def grade_hover(samples, thresholds: Thresholds | None = None) -> dict:
+    """Grade the headless hover. Legs, yaw, and the return are not this flight."""
+
+    thresholds = thresholds or load_thresholds()
+    if any(row.get("phase") in _OUT_AND_BACK for row in samples):
+        checks = [
+            _check(
+                "hover_only",
+                False,
+                1,
+                0,
+                "this flight is a hover, not an out-and-back",
+            )
+        ]
+        return _result(checks, thresholds)
+    return _result(_grade_hover_checks(samples, thresholds), thresholds)
+
+
+def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
+    thresholds = thresholds or load_thresholds()
+    checks = _grade_hover_checks(samples, thresholds)
+    if any(item["name"] == "samples" and not item["passed"] for item in checks):
+        return {"passed": False, "checks": checks, "thresholds": asdict(thresholds)}
+
+    start = _phase(samples, "start")
+    hover = _phase(samples, "hover")
+    leg1 = _phase(samples, "leg1")
+    yaw_rows = _phase(samples, "yaw")
+    leg2 = _phase(samples, "leg2")
+    land = _phase(samples, "land")
+    origin = (start[-1]["x"], start[-1]["y"], start[-1]["z"])
+    hover_pose = hover[-1]
 
     _grade_leg(checks, "leg1", leg1, hover_pose, thresholds)
     _grade_yaw(checks, yaw_rows, hover_pose, thresholds)

@@ -1,34 +1,32 @@
-# Software and DevOps Tester: plan and status
+# Tester
 
-Stopped on Oct 9, 2026 at 03:20 Tehran at Parsa's request (weekly usage at 98%). Work resumes only when Parsa says so.
+## Goal
+Keep testing simple. One pytest entry, two levels: `unit` and `flight`. CI on `feature/devops-compose-health-ci` grades the flight. The only flight grader is `tests/e2e` on that branch. The controller under test is `px4_control` on `feature/px4-control`. Later, Nav2 drives it with `/cmd_vel` (`TwistStamped`).
 
-## My role
-- Check each team member's PR from a fresh clone: the tests, a clean tree after the tests, authorship, CI results, and whether each claimed fix is really in the code.
-- Grade the flight-test numbers against the `E2E_*` limits in `.env`.
-- Check that crashes and slowdowns show up in `run_summary.json`.
-- Clean up the test suite: one entry point with `unit`, `sim` and `flight` levels, each with a hard time limit and stopping at the first failure.
+## What I check
+- `unit`: the fast tests, through that one pytest entry. No simulator.
+- `flight`: the same entry, run by CI on `feature/devops-compose-health-ci`. Until Nav2 closed loop exists, that flight is the one headless hover. It uses `px4_control` once that branch is the stack under test, and it does not grow a second controller.
+- When Nav2 is in the loop, the same flight level grades `/cmd_vel` as `TwistStamped` into `px4_control`. That replaces the hover. It is not a second CI job.
 
-## Where each piece of work was and where it stopped
-| Item | Where | State when stopped |
-|---|---|---|
-| #19 CI check (`feat/devops-compose-health-ci`) | GitHub Actions run 37851112017 on `d80f229` | Lint, colcon and build passed. The build took 36 min, then flight_test rebuilt the image (about 35 min) and the plain x500 flight failed at about 02:47. DevOps had started finding the cause. Not graded yet. |
-| #21 check (`feat/sim-headless-groundtruth`) | fresh clone on the shared computer | `bfd299d` passed: 63 tests, ground-truth leak fix confirmed in the code, Parsa as author. `d8d8d03` (66 tests, gitignore, preflight fixes) not checked yet. |
-| #23 check (`feat/vision-profiles`) | fresh clone | `d5734d3` passed code review: 48 tests, B1 fix confirmed, `cpu` is the default. Two commits have a Cursor co-author trailer, which waits on Parsa confirming the git rule in the group chat. No live `cpu` run yet. |
-| #26 check (`feat/flight-analysis`) | not started | Ready at `f1cd670` (42 tests). Agreed in review: limits come only from the environment and `.env`; spawn pose and clock offset come from `spawn.json`. |
-| #20, #22, #24, #25, #27 checks | not started | #20 has never run CI. #22 is now at `7e7887f`. Its fixes for Flight Mechanics' five bugs need regression tests that fail on `019a4a5` and pass on the fix. |
-| Overnight check | Grok Bot routine | Paused at 03:20 before its first run. |
-| Evaluation log | `/workspace/tester_evals/log.md` on the shared computer | Has the #19, #21 and #23 results. |
-| Live runs on UFO | Parsa's laptop | Not started. I was last in the queue (DevOps, Sim, Vision, PX4, Tester). |
-| Test-suite cleanup | not started | Waits for #19 to merge. |
+## What I stopped doing
+- A fresh clone and a hand review of every branch.
+- An overnight watch.
+- A separate UFO queue.
+- A `sim` level. The levels are `unit` and `flight`.
+- Tests of `microxrce_offboard.py`. That script is retired.
+- A second grader. `feature/flight-analysis` stays parked until a real `.ulg` exists.
 
-## Next steps when work resumes
-1. Grade #19's next CI run: the cause of the x500 failure, both flights' numbers against the `.env` limits, crash-reset behaviour and the parameter-file checks. Flag any job that goes past its time limit.
-2. Check from a fresh clone, in this order: #21 `d8d8d03`, #26 `f1cd670`, #22 `7e7887f` (regression tests for the five bugs, vision-mode parameters, `GF_ACTION=5`), then Vision's #24, #25 and #27 (snapshots unchanged).
-3. Check the documentation rules everyone agreed on:
-   - every code folder has a README;
-   - every env setting matches between `.env` and the docs;
-   - the ruff docstring rule fails only on changed lines until the comment pass is done;
-   - the demo GIF stays under 8 MB at `docs/media/demo.gif` and comes from a flight that passed.
-4. On UFO, when it's my turn: parameter-file negative tests, crash, slowdown and vision-off injections checked against `run_summary.json`, overhead with `TIMING_LOG=0`, and a comparison with the baseline at `~/docker_ws/px4_test/baseline_20261009T020250.txt`.
-5. Test-suite cleanup after #19 merges.
-6. Check every PR's authorship against the git rule Parsa confirms in the group chat.
+## Next steps
+1. Grade the one CI hover on `feature/devops-compose-health-ci` with `tests/e2e`.
+2. Make `unit` and `flight` the two levels of one pytest entry. Run `unit` first, then `flight`. Stop at the first failure.
+3. Confirm that flight drives `px4_control` from `feature/px4-control`.
+4. Leave `feature/flight-analysis` unused until a real `.ulg` exists.
+5. When Nav2 publishes `/cmd_vel` as `TwistStamped`, grade that path with the same flight level and the same grader.
+6. Report the grade. Merge only when Parsa asks.
+
+## Done when
+- One pytest command runs `unit` and `flight`.
+- The flight grade is the CI run on `feature/devops-compose-health-ci`, scored only by `tests/e2e`.
+- That flight uses `px4_control`.
+- `feature/flight-analysis` is still parked, with no second grader.
+- Nothing is merged unless Parsa asks.
