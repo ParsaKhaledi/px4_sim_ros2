@@ -161,7 +161,7 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 ./scripts/health_report.sh
 ```
 
-`/ground_truth/odom` is checked at >= 45 Hz only when something is already publishing it. Camera topics follow `CameraType`.
+`/ground_truth/odom` publishes at 50 Hz of sim time. The check scales that by this window's `/clock` (the 250 Hz physics step) and requires half of the expected wall rate, only when something is already publishing it. A silent topic, or one far below the other PX4 rates in that run, still fails. Camera topics follow `CameraType`.
 
 ## CI and local tests
 

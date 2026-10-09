@@ -59,8 +59,14 @@ topics:
     group: camera
     when_env:
       CameraType: stereo
+  # 50 Hz of sim time. /clock is the 250 Hz physics step, so the
+  # wall rate is about clock_hz * 50/250. The floor is half of that,
+  # taken from this window's /clock. 0 Hz, and a rate far below the
+  # other PX4 topics in the same run, still fails.
   - topic: /ground_truth/odom
-    min_rate_hz: 45
+    model_rate_hz: 50
+    step_rate_hz: 250
+    rate_margin: 0.5
     qos: sensor
     group: ground_truth
     skip_if_absent: true

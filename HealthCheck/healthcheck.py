@@ -87,13 +87,30 @@ def choose_topic(candidates, graph_topics, publisher_counts) -> str | None:
     return best
 
 
-def effective_min_rate(spec: dict, env: dict | None = None) -> float:
-    """Software rendering cannot hold the 5 Hz camera floor."""
+def effective_min_rate(spec: dict, env: dict | None = None, clock_hz: float | None = None) -> float:
+    """Software rendering cannot hold the 5 Hz camera floor.
+
+    A topic with ``model_rate_hz`` and ``step_rate_hz`` is published on
+    sim time. Its wall-clock rate tracks ``/clock``, which is one message
+    per physics step. The floor is
+
+        clock_hz * (model_rate_hz / step_rate_hz) * rate_margin
+
+    so a slower world is not held to a fixed wall-clock number. With no
+    clock sample the floor stays positive, so 0 Hz still fails.
+    """
     source = os.environ if env is None else env
     if spec.get("group") == "camera":
         override = source.get("HEALTH_CAMERA_MIN_HZ")
         if override not in (None, ""):
             return float(override)
+    model_rate = spec.get("model_rate_hz")
+    step_rate = spec.get("step_rate_hz")
+    if model_rate not in (None, "") and step_rate not in (None, ""):
+        margin = float(spec.get("rate_margin", 0.5))
+        if clock_hz and float(clock_hz) > 0 and float(step_rate) > 0:
+            return float(clock_hz) * (float(model_rate) / float(step_rate)) * margin
+        return 1.0
     return float(spec.get("min_rate_hz", 0))
 
 
@@ -411,7 +428,9 @@ class HealthRunner:
             target = item["target"]
             bucket = measurements.get(target)
             count = bucket["count"] if bucket else 0
-            min_rate = effective_min_rate(spec, self.env)
+            clock_bucket = measurements.get("/clock")
+            clock_hz = (float(clock_bucket["count"]) / window_s) if clock_bucket and window_s else 0.0
+            min_rate = effective_min_rate(spec, self.env, clock_hz)
             status, rate, reason = judge_rate(
                 publishers=item["publishers"],
                 count=count,
@@ -423,6 +442,12 @@ class HealthRunner:
             if item.get("import_error") and item["publishers"] > 0 and count == 0:
                 status = "fail"
                 reason = f"could not import {item['import_error']}"
+            elif status == "fail" and spec.get("step_rate_hz") and clock_hz > 0:
+                reason = (
+                    f"{reason} "
+                    f"(clock {clock_hz:.1f} Hz, "
+                    f"model {spec.get('model_rate_hz')} Hz / step {spec.get('step_rate_hz')} Hz)"
+                )
             age = None
             if bucket and bucket["last_mono"] is not None:
                 age = round(now - bucket["last_mono"], 4)

@@ -43,10 +43,47 @@ def test_software_camera_rate_override():
 
 
 def test_absent_optional_topic_skips():
-    status, rate, reason = healthcheck.judge_rate(0, 0, 2.0, 45, True, False)
+    status, rate, reason = healthcheck.judge_rate(0, 0, 2.0, 25, True, False)
     assert status == "skip"
     assert rate == 0
     assert "absent" in reason
+
+
+def test_ground_truth_floor_tracks_the_sim_clock():
+    px4 = healthcheck.load_yaml(
+        Path(__file__).resolve().parents[1] / "HealthCheck" / "checks" / "px4.yaml"
+    )
+    spec = next(item for item in px4["topics"] if item.get("topic") == "/ground_truth/odom")
+    assert spec["model_rate_hz"] == 50
+    assert spec["step_rate_hz"] == 250
+    assert spec["rate_margin"] == 0.5
+
+    def floor(clock_hz):
+        return healthcheck.effective_min_rate(spec, {}, clock_hz)
+
+    # apt_world on line-sim: /clock 163.5 Hz, ground truth 33.5 Hz.
+    slow = floor(163.5)
+    assert slow == 163.5 * (50 / 250) * 0.5
+    slow_ok, slow_rate, _reason = healthcheck.judge_rate(1, 67, 2.0, slow, False, False)
+    assert slow_ok == "ok"
+    assert slow_rate == 33.5
+    # default world on line-control: /clock 224 Hz, ground truth 44 Hz.
+    fast = floor(224.0)
+    fast_ok, fast_rate, _reason = healthcheck.judge_rate(1, 88, 2.0, fast, False, False)
+    assert fast_ok == "ok"
+    assert fast_rate == 44
+    # Dead, and far below the same run's clock, still fail.
+    silent, silent_rate, _reason = healthcheck.judge_rate(1, 0, 2.0, slow, True, False)
+    assert silent == "fail"
+    assert silent_rate == 0
+    stalled, stalled_rate, _reason = healthcheck.judge_rate(1, 10, 2.0, slow, False, False)
+    assert stalled == "fail"
+    assert stalled_rate == 5
+    # No clock sample: the floor stays positive so 0 Hz fails.
+    missing = floor(0)
+    assert missing > 0
+    missing_fail, _, _reason = healthcheck.judge_rate(1, 0, 2.0, missing, True, False)
+    assert missing_fail == "fail"
 
 
 def test_slow_topic_fails():
