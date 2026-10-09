@@ -44,6 +44,14 @@ def test_datalink_failsafe_left_at_return_fails():
     assert any("NAV_DLL_ACT is 2" in problem for problem in problems)
 
 
+def test_ekf2_mismatch_still_fails():
+    text = SAMPLE.replace("EKF2_EV_CTRL [0, 15] : 9", "EKF2_EV_CTRL [0, 15] : 0")
+    expected = px4_params.merge_expected(environ={})
+    problems = check_px4_params.mismatches(text, expected)
+    assert any("EKF2_EV_CTRL is 0" in problem for problem in problems)
+    assert not any("missing from param show" in problem for problem in problems)
+
+
 def test_parse_file_and_env_override(tmp_path):
     (tmp_path / "sim.params").write_text("# note\nNAV_DLL_ACT 0\nNAV_RCL_ACT 1\n", encoding="utf-8")
     merged = px4_params.merge_expected(
