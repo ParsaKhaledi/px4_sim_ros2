@@ -19,7 +19,9 @@ HOME=/home/${USER_NAME}
 source /opt/ros/$ROS_DISTRO/setup.bash
 
 WORLD="${1:-default}"
-MODEL="x500_depth"
+# x500 is the plain quad. x500_depth is the camera airframe.
+# Flight CI sets PX4_GZ_MODEL=x500 so Gazebo does not have to render.
+MODEL="${PX4_GZ_MODEL:-x500_depth}"
 DEFAULT_POSE="-3,-1.6,0.15,0,0,3.14"
 
 export PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:--3,-1.6,0.15,0,0,3.14}"
@@ -92,9 +94,23 @@ fi
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
-# Repo worlds such as apt_world are not ninja targets. PX4_GZ_WORLD selects
-# the sdf; the airframe target stays gz_<model>.
-if [ -n "${WORLD}" ] && [ "${WORLD}" != "default" ]; then
-  export PX4_GZ_WORLD="${WORLD}"
+# PX4 1.17 only generates gz_<model>_<world> for worlds that were present
+# at cmake time. Custom worlds are copied in later, so that target is
+# unknown. Build the firmware, apply sim.params before ekf2, then launch
+# with PX4_GZ_WORLD.
+python3 /home/px4/volume/includes/gz/patch_dds_topics.py \
+    "${HOME}/PX4-Autopilot/src/modules/uxrce_dds_client/dds_topics.yaml"
+make px4_sitl_default
+python3 /home/px4/volume/scripts/px4_params.py apply \
+    --params-dir /home/px4/volume/config/px4/params \
+    --airframes "${HOME}/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes" \
+    --rcs "${HOME}/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/rcS" \
+    --rootfs "${HOME}/PX4-Autopilot/build/px4_sitl_default/rootfs"
+if [ -z "${WORLD}" ]; then
+    WORLD=default
 fi
-make px4_sitl "gz_${MODEL}"
+export PX4_GZ_WORLD="${WORLD}"
+export PX4_SIM_MODEL="gz_${MODEL}"
+export GZ_IP="${GZ_IP:-127.0.0.1}"
+cd "${HOME}/PX4-Autopilot/build/px4_sitl_default/rootfs"
+exec ../bin/px4
