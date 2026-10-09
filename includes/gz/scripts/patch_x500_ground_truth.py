@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Insert a Gazebo OdometryPublisher into the PX4 x500_depth model.
+"""Insert a Gazebo OdometryPublisher into the PX4 model that SITL spawns.
+
+Headless flight CI sets ``PX4_GZ_MODEL=x500``. The camera airframe is
+``x500_depth``. The plugin is written into both, so ``/ground_truth/odom``
+is published by the model that actually loads. A bridge entry alone
+advertises the ROS topic and the health check then sees 0 Hz.
 
 The plugin publishes the model's true world pose (Gazebo ENU, Z up) on
 ``/ground_truth/odom`` at 50 Hz, and the same pose with covariance on
@@ -39,19 +44,7 @@ _COVARIANCE_ELEMENT = re.compile(
 )
 
 
-def candidate_models() -> list[Path]:
-    """Return x500_depth model.sdf paths that may exist on this machine."""
-    raw: list[Path] = []
-    env_models = os.environ.get("PX4_GZ_MODELS", "")
-    if env_models:
-        raw.append(Path(env_models) / "x500_depth" / "model.sdf")
-    home = Path.home()
-    raw.append(
-        home / "PX4-Autopilot" / "Tools" / "simulation" / "gz" / "models" / "x500_depth" / "model.sdf"
-    )
-    raw.append(
-        Path("/home/px4/PX4-Autopilot/Tools/simulation/gz/models/x500_depth/model.sdf")
-    )
+def _unique_paths(raw: list[Path]) -> list[Path]:
     found: list[Path] = []
     seen: set[Path] = set()
     for path in raw:
@@ -61,6 +54,61 @@ def candidate_models() -> list[Path]:
         seen.add(key)
         found.append(path)
     return found
+
+
+def model_sdf_candidates(model_name: str) -> list[Path]:
+    """Return ``model.sdf`` paths for one PX4 gz airframe."""
+    raw: list[Path] = []
+    env_models = os.environ.get("PX4_GZ_MODELS", "")
+    if env_models:
+        raw.append(Path(env_models) / model_name / "model.sdf")
+    home = Path.home()
+    raw.append(
+        home / "PX4-Autopilot" / "Tools" / "simulation" / "gz" / "models" / model_name / "model.sdf"
+    )
+    raw.append(
+        Path("/home/px4/PX4-Autopilot/Tools/simulation/gz/models") / model_name / "model.sdf"
+    )
+    return _unique_paths(raw)
+
+
+def airframe_name(environ: dict[str, str] | None = None) -> str:
+    """Model directory PX4 will spawn. ``gz_`` and a trailing instance are stripped."""
+    env = os.environ if environ is None else environ
+    raw = env.get("PX4_GZ_MODEL", "").strip()
+    if not raw:
+        raw = env.get("PX4_SIM_MODEL", "").strip()
+        if raw.startswith("gz_"):
+            raw = raw[3:]
+    if re.fullmatch(r".+_\d+", raw):
+        raw = raw.rsplit("_", 1)[0]
+    return raw
+
+
+def ground_truth_model_names(environ: dict[str, str] | None = None) -> list[str]:
+    """Camera airframe plus the airframe this process will spawn.
+
+    ``x500_depth`` stays in the list so a camera flight still gets the
+    plugin when ``PX4_GZ_MODEL`` is unset. Flight CI sets ``x500``.
+    """
+    names = ["x500_depth"]
+    selected = airframe_name(environ)
+    if selected and selected not in names:
+        names.append(selected)
+    return names
+
+
+def candidate_models() -> list[Path]:
+    """Return x500_depth model.sdf paths that may exist on this machine."""
+    return model_sdf_candidates("x500_depth")
+
+
+def ground_truth_models(environ: dict[str, str] | None = None) -> list[Path]:
+    """model.sdf paths that should carry the ground-truth plugin."""
+    raw: list[Path] = []
+    for name in ground_truth_model_names(environ):
+        raw.extend(model_sdf_candidates(name))
+    return _unique_paths(raw)
 
 
 def _plugin_blocks(model_xml: str) -> list[tuple[int, int]]:
@@ -196,15 +244,16 @@ def patch_file(path: Path) -> bool:
 
 
 def main() -> int:
-    """Patch every present x500 model SDF. Missing files are skipped."""
+    """Patch the spawned airframe and x500_depth. Missing files are skipped."""
+    names = ", ".join(ground_truth_model_names())
     patched = False
-    for path in candidate_models():
+    for path in ground_truth_models():
         if path.is_file():
             patch_file(path)
             patched = True
     if not patched:
         print(
-            "x500_depth model.sdf not found; ground-truth plugin was not applied. "
+            f"model.sdf not found for {names}; ground-truth plugin was not applied. "
             "This is expected outside the PX4 SITL container.",
             file=sys.stderr,
         )

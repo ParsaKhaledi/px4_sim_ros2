@@ -10,6 +10,9 @@ from patch_x500_ground_truth import (
     COVARIANCE_TOPIC,
     candidate_models,
     covariance_topic_problems,
+    ground_truth_model_names,
+    ground_truth_models,
+    main as patch_ground_truth_main,
     patch_text,
     watched_model_sdfs,
 )
@@ -107,3 +110,39 @@ def test_candidate_model_paths_are_unique(monkeypatch):
     monkeypatch.setenv("PX4_GZ_MODELS", "/home/px4/PX4-Autopilot/Tools/simulation/gz/models")
     resolved = [path.resolve() for path in candidate_models()]
     assert len(resolved) == 1
+
+
+def test_ground_truth_targets_include_spawned_x500(monkeypatch):
+    monkeypatch.delenv("PX4_SIM_MODEL", raising=False)
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500")
+    assert ground_truth_model_names() == ["x500_depth", "x500"]
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500_depth_0")
+    assert ground_truth_model_names() == ["x500_depth"]
+    monkeypatch.delenv("PX4_GZ_MODEL")
+    monkeypatch.setenv("PX4_SIM_MODEL", "gz_x500")
+    assert ground_truth_model_names() == ["x500_depth", "x500"]
+
+
+def test_main_patches_spawned_x500(tmp_path, monkeypatch):
+    models = tmp_path / "models"
+    sdf = "<sdf><model name='m'>\n</model></sdf>\n"
+    for name in ("x500", "x500_depth"):
+        folder = models / name
+        folder.mkdir(parents=True)
+        (folder / "model.sdf").write_text(sdf, encoding="utf-8")
+    monkeypatch.setenv("PX4_GZ_MODELS", str(models))
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500")
+    monkeypatch.delenv("PX4_SIM_MODEL", raising=False)
+    monkeypatch.setattr(
+        "patch_x500_ground_truth.Path.home",
+        staticmethod(lambda: tmp_path / "no-px4-home"),
+    )
+    assert patch_ground_truth_main() == 0
+    plain = (models / "x500" / "model.sdf").read_text(encoding="utf-8")
+    depth = (models / "x500_depth" / "model.sdf").read_text(encoding="utf-8")
+    assert "OdometryPublisher" in plain
+    assert "/ground_truth/odom" in plain
+    assert "OdometryPublisher" in depth
+    names = {path.parent.name for path in ground_truth_models()}
+    assert "x500" in names
+    assert "x500_depth" in names
