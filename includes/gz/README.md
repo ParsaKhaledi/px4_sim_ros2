@@ -32,4 +32,4 @@ Spawn pose `PX4_GZ_MODEL_POSE` defaults to `-3,-1.6,0.15,0,0,3.14` (ENU, radians
 
 ## Sensor systems
 
-IMU, air pressure, magnetometer, and NavSat systems are added to PX4's `x500_base` model at startup. Worlds stay world-only: physics, scene, user commands, the scene broadcaster, and the rendering Sensors system. The same startup step removes those four sensor systems from the launched world and from `server.config` so each is loaded once. A second x500 in that world would load them again; multi-vehicle is out of scope.
+IMU, air pressure, and NavSat systems are added to PX4's `x500_base` model at startup. The same startup step removes those three from the launched world and from `server.config` so each is loaded once. The magnetometer stays a world plugin: `apt_world` includes `gz::sim::systems::Magnetometer`, and startup removes the `server.config` copy when the world already has it. `default` keeps the magnetometer plugin PX4 ships in `server.config`. It is not a `sim.params` line. A second x500 in that world would load the model systems again; multi-vehicle is out of scope.

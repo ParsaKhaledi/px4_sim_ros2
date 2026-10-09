@@ -13,9 +13,10 @@ import numpy as np
 
 from trajectory_eval.frames import geodetic_to_enu, gps_fields_to_lla, ned_frd_to_enu_flu, quat_xyzw_to_wxyz
 from trajectory_eval.metrics import PoseSample
+from trajectory_eval.spawn import build_spawn_document
 
 
-def record_live(args) -> dict[str, list[PoseSample]]:
+def record_live(args) -> tuple[dict[str, list[PoseSample]], dict]:
     """Subscribe until ``--duration`` sim seconds, or until interrupted."""
     import rclpy
     from rclpy.clock import Clock, ClockType
@@ -37,7 +38,17 @@ def record_live(args) -> dict[str, list[PoseSample]]:
             self.ekf: list[PoseSample] = []
             self.gps_raw: list[tuple[float, float, float, float]] = []
             self._subscribed: set[str] = set()
+            self._gaps_s: list[float] = []
+            self._spawn_translation = None
+            self._spawn_rotation = None
+            self._tf_buffer = None
             self.start_time = None
+            try:
+                from tf2_ros import Buffer, TransformListener
+                self._tf_buffer = Buffer()
+                TransformListener(self._tf_buffer, self)
+            except ImportError:
+                self._tf_buffer = None
             # Wall clock. A sim-time timer slows with RTF and stops if /clock stalls.
             self.create_timer(
                 1.0, self._discover, clock=Clock(clock_type=ClockType.STEADY_TIME),
@@ -52,7 +63,24 @@ def record_live(args) -> dict[str, list[PoseSample]]:
                 self.start_time = sample_time
             return sample_time
 
+        def _capture_spawn(self) -> None:
+            if self._spawn_translation is not None or self._tf_buffer is None:
+                return
+            try:
+                from rclpy.duration import Duration
+                from rclpy.time import Time
+                transform = self._tf_buffer.lookup_transform(
+                    "world", "spawn", Time(), timeout=Duration(seconds=0.0),
+                )
+            except Exception:
+                return
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            self._spawn_translation = (translation.x, translation.y, translation.z)
+            self._spawn_rotation = (rotation.x, rotation.y, rotation.z, rotation.w)
+
         def _discover(self) -> None:
+            self._capture_spawn()
             topics = dict(self.get_topic_names_and_types())
             self._subscribe_exact(topics, args.gt_topic, self._on_odom_gt)
             self._subscribe_exact(topics, args.rtabmap_topic, self._on_odom_rtab)
@@ -78,10 +106,14 @@ def record_live(args) -> dict[str, list[PoseSample]]:
             self.rtabmap.append(_odom_sample(msg, self._stamp(self._now())))
 
         def _on_ekf(self, msg) -> None:
+            now = self._now()
+            timestamp_us = getattr(msg, "timestamp", None)
+            if timestamp_us is not None:
+                self._gaps_s.append(now - float(timestamp_us) * 1e-6)
             position = np.array(list(msg.position), dtype=float)
             quat = np.array(list(msg.q), dtype=float)
             position_enu, quat_enu = ned_frd_to_enu_flu(position, quat)
-            self.ekf.append(PoseSample(self._stamp(self._now()), position_enu, quat_enu))
+            self.ekf.append(PoseSample(self._stamp(now), position_enu, quat_enu))
 
         def _on_gps(self, msg) -> None:
             lla = gps_fields_to_lla(msg)
@@ -103,6 +135,14 @@ def record_live(args) -> dict[str, list[PoseSample]]:
                 "ekf2": self.ekf,
             }
 
+        def spawn_document(self) -> dict:
+            self._capture_spawn()
+            return build_spawn_document(
+                self._spawn_translation,
+                self._spawn_rotation,
+                self._gaps_s,
+            )
+
     rclpy.init()
     node = Recorder()
     try:
@@ -118,9 +158,10 @@ def record_live(args) -> dict[str, list[PoseSample]]:
     except KeyboardInterrupt:
         pass
     streams = node.finish()
+    spawn = node.spawn_document()
     node.destroy_node()
     rclpy.shutdown()
-    return streams
+    return streams, spawn
 
 
 def _odom_sample(msg, stamp: float) -> PoseSample:

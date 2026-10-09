@@ -32,7 +32,7 @@ COMPOSE_PROFILES= ./scripts/up.sh
 COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
 
 # Stereo camera, full robotics stack
-COMPOSE_PROFILES=gcs,slam,nav CameraType=stereo World=husarion_office ./scripts/up.sh
+COMPOSE_PROFILES=gcs,slam,nav CameraType=stereo World=apt_world ./scripts/up.sh
 ```
 
 ### Environment variables

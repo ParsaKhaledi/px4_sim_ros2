@@ -7,7 +7,8 @@ Score GPS, RTAB-Map, and PX4 EKF2 against Gazebo ground truth. Poses are convert
 | Module | Role |
 |--------|------|
 | `cli.py` | `record`, `bag`, and `offline` |
-| `record.py` | Live subscriptions |
+| `record.py` | Live subscriptions. Also writes `spawn.json` |
+| `spawn.py` | The six `spawn.json` fields |
 | `bag.py` | rosbag2 reader |
 | `frames.py` | NED/FRD to ENU/FLU, and WGS84 to ENU |
 | `metrics.py` | ATE, RPE, height, yaw |
@@ -59,7 +60,7 @@ GPS ENU is about that recording's first fix. It is not locked to `SIM_ORIGIN_*`.
 
 ## Outputs
 
-The output directory holds one TUM file per stream, `metrics.json`, and `metrics.csv`.
+The output directory holds one TUM file per stream, `metrics.json`, and `metrics.csv`. `record` also writes `spawn.json` with `spawn_xyz`, `spawn_yaw`, `px4_offset_s`, `px4_offset_spread_s`, `px4_offset_samples`, and `px4_offset_reason`. `spawn_xyz` and `spawn_yaw` come from the live `world` -> `spawn` transform. `px4_offset_s` is the lowest `t_ros - t_px4` gap between `/clock` and `/fmu/out/vehicle_odometry` over at least 50 messages.
 
 * absolute trajectory error, unaligned relative to each trajectory's first position, and after an SE(3) alignment with scale fixed at 1
 * relative pose error on ground-truth segments of 1 m and 5 m

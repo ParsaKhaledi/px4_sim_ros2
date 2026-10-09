@@ -7,10 +7,6 @@
 | File | World |
 |------|--------|
 | `apt_world.json` | apartment |
-| `husarion_office.json` | office |
-| `husarion_world.json` | empty husarion shell |
-| `sonoma_raceway.json` | raceway |
-| `empty_with_plugins.json` | empty world, no segments |
 
 ## Run
 

@@ -61,8 +61,8 @@ COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
 # Full robotics stack
 COMPOSE_PROFILES=gcs,slam,nav CameraType=rgbd World=default ./scripts/up.sh
 
-# Stereo camera in a custom world
-COMPOSE_PROFILES=gcs CameraType=stereo World=husarion_office ./scripts/up.sh
+# Stereo camera in the apartment
+COMPOSE_PROFILES=gcs CameraType=stereo World=apt_world ./scripts/up.sh
 ```
 
 You can also set `CameraType` and `World` in `.env` instead of the command line.
@@ -73,10 +73,6 @@ World names match SDF **filenames** under `includes/gz/worlds/` (without `.sdf`)
 
 - `default` — PX4 default world
 - `apt_world`
-- `husarion_office`
-- `husarion_world`
-- `sonoma_raceway`
-- `empty_with_plugins`
 
 ### Runtime configuration (brief)
 

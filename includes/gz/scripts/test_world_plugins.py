@@ -1,4 +1,8 @@
-"""Sensor systems belong on x500_base, not in world files."""
+"""IMU, air pressure, and NavSat belong on x500_base.
+
+The magnetometer stays a world plugin. apt_world carries it so PX4 sees a
+compass. default keeps the copy PX4 ships in server.config.
+"""
 
 import sys
 from pathlib import Path
@@ -65,16 +69,17 @@ def test_missing_launched_world_is_an_error(monkeypatch, capsys):
     assert "apt_world.sdf not found" in capsys.readouterr().err
 
 
-def test_repo_worlds_have_no_sensor_systems():
+def test_repo_worlds_keep_rendering_and_only_apt_world_has_a_compass():
     worlds = sorted(WORLDS.glob("*.sdf"))
-    assert worlds, f"no worlds in {WORLDS}"
-    for path in worlds:
-        text = path.read_text(encoding="utf-8")
-        for name in FORBIDDEN:
-            assert name not in text, path.name
-        assert "gz::sim::systems::Sensors" in text, path.name
-        assert "ogre2" in text, path.name
-        assert "gz::sim::systems::Physics" in text, path.name
+    assert [path.name for path in worlds] == ["apt_world.sdf"]
+    text = worlds[0].read_text(encoding="utf-8")
+    for name in FORBIDDEN:
+        assert name not in text, name
+    assert "gz::sim::systems::Magnetometer" in text
+    assert 'filename="gz-sim-magnetometer-system"' in text
+    assert "gz::sim::systems::Sensors" in text
+    assert "ogre2" in text
+    assert "gz::sim::systems::Physics" in text
 
 
 def test_x500_base_patch_is_idempotent_and_keeps_sensors():
@@ -92,16 +97,16 @@ def test_x500_base_patch_is_idempotent_and_keeps_sensors():
     assert twice.count("<sensor ") == BASE_MODEL.count("<sensor ")
 
 
-def test_world_strip_removes_only_the_four_sensor_systems():
+def test_world_strip_leaves_the_magnetometer_world_plugin():
     stripped, removed = strip_sensor_systems(DEFAULT_SDF_SAMPLE)
     assert removed == [
         "gz::sim::systems::Imu",
         "gz::sim::systems::AirPressure",
         "gz::sim::systems::NavSat",
-        "gz::sim::systems::Magnetometer",
     ]
     for name in FORBIDDEN:
         assert name not in stripped
+    assert "gz::sim::systems::Magnetometer" in stripped
     for kept in (
         "gz::sim::systems::Physics",
         "gz::sim::systems::UserCommands",
@@ -117,3 +122,62 @@ def test_world_strip_removes_only_the_four_sensor_systems():
     again, removed_again = strip_sensor_systems(stripped)
     assert removed_again == []
     assert again == stripped
+
+
+def test_apt_world_keeps_its_compass_and_drops_the_server_copy(tmp_path, monkeypatch):
+    world = tmp_path / "apt_world.sdf"
+    world.write_text(
+        "<sdf><world name='apt_world'>"
+        '<plugin filename="gz-sim-magnetometer-system" name="gz::sim::systems::Magnetometer"/>'
+        '<plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>'
+        "</world></sdf>",
+        encoding="utf-8",
+    )
+    server = tmp_path / "server.config"
+    server.write_text(
+        "<server_config>"
+        '<plugin filename="gz-sim-magnetometer-system" name="gz::sim::systems::Magnetometer"/>'
+        '<plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>'
+        "</server_config>",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_base_models", lambda: [])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_worlds", lambda _name: [world])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_server_configs", lambda: [server])
+    assert main(["apt_world"]) == 0
+    kept = world.read_text(encoding="utf-8")
+    assert "gz::sim::systems::Magnetometer" in kept
+    assert "gz::sim::systems::Imu" not in kept
+    dropped = server.read_text(encoding="utf-8")
+    assert "gz::sim::systems::Magnetometer" not in dropped
+    assert "gz::sim::systems::Imu" not in dropped
+
+
+def test_default_keeps_the_server_config_compass(tmp_path, monkeypatch):
+    world = tmp_path / "default.sdf"
+    world.write_text(
+        "<sdf><world name='default'>"
+        '<plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>'
+        '<plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>'
+        "</world></sdf>",
+        encoding="utf-8",
+    )
+    server = tmp_path / "server.config"
+    server.write_text(
+        "<server_config>"
+        '<plugin filename="gz-sim-magnetometer-system" name="gz::sim::systems::Magnetometer"/>'
+        '<plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>'
+        "</server_config>",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_base_models", lambda: [])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_worlds", lambda _name: [world])
+    monkeypatch.setattr("patch_x500_sensor_systems.candidate_server_configs", lambda: [server])
+    assert main(["default"]) == 0
+    launched = world.read_text(encoding="utf-8")
+    assert "gz::sim::systems::Physics" in launched
+    assert "gz::sim::systems::Imu" not in launched
+    assert "gz::sim::systems::Magnetometer" not in launched
+    kept = server.read_text(encoding="utf-8")
+    assert "gz::sim::systems::Magnetometer" in kept
+    assert "gz::sim::systems::NavSat" not in kept

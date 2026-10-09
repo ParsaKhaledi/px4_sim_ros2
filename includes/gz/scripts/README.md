@@ -9,7 +9,7 @@ Launch-time patches and offline helpers for the Gazebo tree. `gz_start_px4_gz_si
 | `sim_origin.py` | World origin from the spawn geographic coordinate |
 | `patch_x500_ground_truth.py` | Ground-truth odometry plugin on x500 models |
 | `patch_x500_lidar_down.py` | Single-ray downward lidar on x500_depth |
-| `patch_x500_sensor_systems.py` | IMU, air pressure, magnetometer, and NavSat once on x500_base |
+| `patch_x500_sensor_systems.py` | IMU, air pressure, and NavSat once on x500_base. Magnetometer stays a world plugin |
 | `wall_geometry.py` | Write [walls/](../walls/README.md) |
 | `fuel_assets.py` | Download Fuel models and rewrite world URIs |
 | `check_offline_worlds.py` | Fail if a world still names a Fuel host |

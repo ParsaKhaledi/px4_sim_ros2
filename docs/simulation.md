@@ -59,16 +59,13 @@ GPS comes from the NavSat sensor on `x500_base` `base_link`. That link is 0.24 m
 
 ## Offline models
 
-`husarion_office.sdf` referenced Fuel meshes, and `sonoma_raceway.sdf` included the Sonoma Raceway model from Fuel. `includes/gz/scripts/fuel_assets.py` downloads those files into `includes/gz/models/` and rewrites the URIs to `model://`. The committed worlds do not contact Fuel at runtime.
+`apt_world` uses the local apartment mesh (`model://apt`). The committed worlds do not contact Fuel at runtime.
 
 ```bash
 python3 includes/gz/scripts/check_offline_worlds.py
-python3 includes/gz/scripts/fuel_assets.py   # re-download if a world gains a Fuel URI
 ```
 
 The check fails if any world under `includes/gz/worlds/` still contains `fuel.gazebosim.org` or `fuel.ignitionrobotics.org`.
-
-Fuel furniture models keep their upstream licence (see each `model.config` when Fuel provided one). The Sonoma Raceway model is CC0.
 
 ## Wall maps
 
@@ -127,6 +124,8 @@ Each stream is written as a TUM file (`timestamp tx ty tz qx qy qz qw`) for evo.
 
 `trajectories_xy.png` and `ate_unaligned.png` are written when matplotlib is installed.
 
+`record` also writes `spawn.json` in the output directory. The fields are `spawn_xyz`, `spawn_yaw` (ENU, from the live `world` -> `spawn` transform), `px4_offset_s` (the lowest `t_ros - t_px4` gap between `/clock` and `/fmu/out/vehicle_odometry` over at least 50 messages), `px4_offset_spread_s`, `px4_offset_samples`, and `px4_offset_reason`.
+
 Unit tests cover the frame conversions, the geodetic conversion, alignment, and the metrics:
 
 ```bash
@@ -168,6 +167,6 @@ ros2 service call /sim/preflight_check std_srvs/srv/Trigger
 
 `IMU_SOURCE=oak` (the default) bridges gz `/imu` to ROS `/imu` from `config_gz_bridge_imu.yaml`. The Oak-D sensor frame is `imu_link`. `IMU_SOURCE=px4` does not bridge that topic. `px4_imu_relay` publishes `/imu` in `base_link` from `/fmu/out/sensor_combined` and `/fmu/out/vehicle_attitude`, which PX4 v1.17 exports in `dds_topics.yaml` with no version suffix. Stamps default to ROS time at receive (`IMU_STAMP_MODE=receive`). `px4_offset` uses the PX4 sample time plus one offset to `/clock`, measured once at startup. The camera and IMU frames stay the ones already in `x500_urdf.urdf` (`imu_link`, `camera_rgb_frame`, `stereo_left_camera_frame`, and the optical frames under `OakD-Lite/base_link`). This branch does not add another static publisher for them. Camera image topics stay in `config_gz_bridge.yaml`. Do not add a second `/imu` bridge there. The IMU modes are in the root README.
 
-Sensor systems live on the x500 model. `patch_x500_sensor_systems.py` adds `gz::sim::systems::Imu`, `AirPressure`, `Magnetometer`, and `NavSat` to PX4's `x500_base` model once, and does not change sensor elements. Worlds keep physics, scene, user commands, the scene broadcaster, and the rendering `Sensors` system (ogre2) for cameras. Startup strips those four sensor systems from the world file Gazebo loads and from PX4's `server.config`, which otherwise loads them again. Spawning a second x500 in the same world would load the systems twice; multi-vehicle would need them back in one shared place, which is out of scope.
+`patch_x500_sensor_systems.py` adds `gz::sim::systems::Imu`, `AirPressure`, and `NavSat` to PX4's `x500_base` model once, and does not change sensor elements. Startup strips those three from the world file Gazebo loads and from PX4's `server.config`. The magnetometer is a world plugin, not a `sim.params` line. `apt_world` includes `gz::sim::systems::Magnetometer` so PX4 sees a compass, and startup removes that plugin from `server.config` when the world already has it. `default` has no magnetometer plugin of its own, so it keeps the one in `server.config`. Spawning a second x500 in the same world would load the model systems twice; multi-vehicle would need them back in one shared place, which is out of scope.
 
 The start scripts resolve `includes/gz` with `SIM_GZ_DIR`, then `SCRIPT_DIR/..` when `scripts/sim_origin.py` is there, then `/home/px4/volume/includes/gz` (the compose mount; `startFiles` is mounted separately at `/home/px4/volume/startFiles`). A world name other than `default` is passed as `PX4_GZ_WORLD` to `make px4_sitl gz_<model>`. `gz_<model>_<world>` is not a ninja target for these worlds.

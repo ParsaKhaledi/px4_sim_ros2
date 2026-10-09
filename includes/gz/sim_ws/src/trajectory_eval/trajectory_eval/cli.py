@@ -75,8 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "record":
         from trajectory_eval.record import record_live
-        streams = record_live(args)
+        from trajectory_eval.spawn import write_spawn_json
+        streams, spawn = record_live(args)
         document = write_report(args.output, streams, distances)
+        write_spawn_json(Path(args.output) / "spawn.json", spawn)
         _print_summary(document)
         return 0
     if args.command == "bag":

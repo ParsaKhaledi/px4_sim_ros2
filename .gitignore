@@ -1,5 +1,6 @@
 vagrant/.vagrant
 volume/
+.env
 .qground/config/QGroundControl.org
 __pycache__/
 *.pyc

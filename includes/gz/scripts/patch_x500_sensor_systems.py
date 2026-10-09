@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-"""Put IMU, air-pressure, magnetometer, and NavSat systems on x500_base.
+"""Put IMU, air-pressure, and NavSat systems on x500_base.
 
-Those four systems publish every matching sensor in the simulation. Loading
+Those three systems publish every matching sensor in the simulation. Loading
 one twice gives every sensor two publishers and twice the rate, so each must
 appear once. This script adds them to PX4's ``x500_base`` model and removes
 them from the world file Gazebo is about to load, and from PX4's
-``server.config``, which otherwise injects the same four for every world.
+``server.config``, which otherwise injects them for every world.
+
+The magnetometer is a world plugin, not a model system and not a
+``sim.params`` line. ``apt_world`` carries
+``gz::sim::systems::Magnetometer`` so PX4 sees a compass. That plugin is left
+in the world. When the launched world already has it, the copy in
+``server.config`` is removed so it loads once. ``default`` has no magnetometer
+plugin of its own, so ``server.config`` keeps the one PX4 ships.
 
 Sensor elements on the model are not added or removed. A second x500 in the
-same world would load the systems again, once per model. Multi-vehicle would
-need the systems back in one shared place. That is out of scope.
+same world would load the model systems again, once per model. Multi-vehicle
+would need the systems back in one shared place. That is out of scope.
 
 The world name is the first argument (default ``default``). Lookup uses
 ``PX4_GZ_MODELS``, ``PX4_GZ_WORLDS``, ``GZ_SIM_SERVER_CONFIG_PATH``, and
@@ -27,9 +34,9 @@ from pathlib import Path
 SENSOR_SYSTEMS = (
     ("gz-sim-imu-system", "gz::sim::systems::Imu"),
     ("gz-sim-air-pressure-system", "gz::sim::systems::AirPressure"),
-    ("gz-sim-magnetometer-system", "gz::sim::systems::Magnetometer"),
     ("gz-sim-navsat-system", "gz::sim::systems::NavSat"),
 )
+MAGNETOMETER_NAME = "gz::sim::systems::Magnetometer"
 SENSOR_SYSTEM_NAMES = {name for _filename, name in SENSOR_SYSTEMS}
 
 _PLUGIN = re.compile(
@@ -57,20 +64,35 @@ def ensure_model_systems(model_xml: str) -> tuple[str, list[str]]:
     return updated, [name for _filename, name in missing]
 
 
-def strip_sensor_systems(text: str) -> tuple[str, list[str]]:
-    """Remove the four sensor-system plugins. Leave every other plugin."""
+def strip_named_plugins(text: str, names: set[str]) -> tuple[str, list[str]]:
+    """Remove plugin blocks whose ``name`` is in ``names``. Leave every other plugin."""
     removed: list[str] = []
 
     def replace(match: re.Match[str]) -> str:
         tag = match.group(0)
         name_match = _NAME.search(tag)
         name = name_match.group(1) if name_match else ""
-        if name not in SENSOR_SYSTEM_NAMES:
+        if name not in names:
             return tag
         removed.append(name)
         return ""
 
     return _PLUGIN.sub(replace, text), removed
+
+
+def strip_sensor_systems(text: str) -> tuple[str, list[str]]:
+    """Remove the model sensor-system plugins. Leave the magnetometer world plugin."""
+    return strip_named_plugins(text, SENSOR_SYSTEM_NAMES)
+
+
+def world_has_magnetometer(text: str) -> bool:
+    """True when the world already loads the magnetometer system."""
+    return MAGNETOMETER_NAME in text
+
+
+def strip_magnetometer(text: str) -> tuple[str, list[str]]:
+    """Remove the magnetometer world plugin. Leave every other plugin."""
+    return strip_named_plugins(text, {MAGNETOMETER_NAME})
 
 
 def short_name(system_name: str) -> str:
@@ -126,7 +148,7 @@ def candidate_worlds(world_name: str) -> list[Path]:
 
 
 def candidate_server_configs() -> list[Path]:
-    """PX4 server.config, which loads the four systems for every world."""
+    """PX4 server.config, which loads the sensor systems for every world."""
     raw: list[Path] = []
     for key in ("GZ_SIM_SERVER_CONFIG_PATH", "PX4_GZ_SERVER_CONFIG"):
         value = os.environ.get(key, "")
@@ -139,7 +161,7 @@ def candidate_server_configs() -> list[Path]:
 
 
 def patch_model(path: Path) -> None:
-    """Add the four sensor systems to an x500_base model that lacks them."""
+    """Add the model sensor systems to an x500_base model that lacks them."""
     original = path.read_text(encoding="utf-8")
     updated, added = ensure_model_systems(original)
     if updated == original:
@@ -150,7 +172,7 @@ def patch_model(path: Path) -> None:
 
 
 def strip_file(path: Path) -> list[str]:
-    """Remove the four sensor systems from a world or server.config."""
+    """Remove the model sensor systems from a world or server.config."""
     original = path.read_text(encoding="utf-8")
     updated, removed = strip_sensor_systems(original)
     if updated != original:
@@ -178,9 +200,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     stripped_world = False
+    launched_has_magnetometer = False
     for path in candidate_worlds(world_name):
         if path.is_file():
             strip_file(path)
+            if world_has_magnetometer(path.read_text(encoding="utf-8")):
+                launched_has_magnetometer = True
             stripped_world = True
     if not stripped_world:
         print(
@@ -190,8 +215,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     for path in candidate_server_configs():
-        if path.is_file():
-            strip_file(path)
+        if not path.is_file():
+            continue
+        strip_file(path)
+        if not launched_has_magnetometer:
+            continue
+        original = path.read_text(encoding="utf-8")
+        updated, removed = strip_magnetometer(original)
+        if updated != original:
+            path.write_text(updated, encoding="utf-8")
+        listed = ", ".join(short_name(name) for name in removed) if removed else "none"
+        print(f"removed magnetometer world plugin from {path.name}: {listed}")
     return 0
 
 
