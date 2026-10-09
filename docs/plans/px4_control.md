@@ -1,36 +1,48 @@
-# px4_control plan and status (PR #22)
+# px4_control
 
-Branch: `feat/px4-control` into `dev/px4-upgrade` (draft, not merged).
-Head when work stopped: `7e7887f` (Oct 9 2026, 03:18 Tehran). All commits are authored by Parsa Khaledi.
-Work stopped on Parsa's request (weekly usage limit). It resumes only when he says so.
+Branch: `feature/px4-control` at `8668a11`.
 
-## Where each piece of work was and where it stopped
+## Goal
 
-| Item | Where | State |
-|---|---|---|
-| ROS 2 services and actions (one file per action), vision and GPS modes, prearm checks, out-and-back mission | this branch | done, pushed |
-| Keep the compass present in vision mode (`EKF2_MAG_TYPE` 5, `SYS_HAS_MAG` stays 1) | `019a4a5` | done |
-| Vision mode off GPS (`EKF2_GPS_CTRL` 0, navsat sensor kept), `EKF2_EV_DELAY` 0 | `b65ee37` | done |
-| Five control fixes from Flight Mechanics, plus the next tier (hold re-seed, zero `cmd_vel`, GoTo yaw ENU to NED, wall clearance along the motion) | `20eed61` | done |
-| Lost-tracking detection from RTAB-Map (null pose, covariance 9999, `odom_info` lost; 0.3 s age check on sim time) | `20eed61` | done |
-| Prearm waits for vision yaw instead of reporting a missing compass | `5c3e60f` | done |
-| Baro height (`EKF2_EV_CTRL` 9, `EKF2_HGT_REF` 0), `EKF2_RNG_CTRL` 1, `GF_MAX_VER_DIST` 3 m, `GF_ACTION` 5 (Land in v1.17; 3 is Return), e2e height-error abort, "too good to be true" grading | `8a5cf5f` | done |
-| Lidar-vs-EKF2 height guard (0.3 m for 0.5 s, 0.19 m mount offset, tilt-compensated, armed above 0.5 m with valid samples), `CameraType` stereo/rgbd option | `44aa005`, `7e7887f` | done |
-| Crash report for the last vision flight (lost tracking on the forward leg, climbed to about 6.5 m, crashed; ground-truth leak through the gz bridge made the hover invalid) | cloud agent | stopped, final report not delivered |
-| Collision check on that crash | cloud agent queue | not started |
-| Wall positions from #21's `world` to `spawn` transform, accept `"frame": "world_enu"` / `"local"`, world-to-local transform worked out at runtime once yaw is aligned and frozen at arming, 90 deg spawn test in both modes | cloud agent queue | not started |
-| Brake-hold then land on vision loss during any action, takeoff included | cloud agent queue | not confirmed in code yet |
-| Cleanup and optimization: split `node.py`, per-action modules, loop benchmark, 50 Hz vs 20 Hz, one switch file, golden snapshot tests, sim-time `dt`, startup check against PX4 limits, Python 3.12 | cloud agent queue | not started |
-| Docstrings, `px4_control/README.md`, `includes/gz/params/README.md` | cloud agent queue | not started |
-| Vision out-and-back on UFO, `cpu` profile, CPU only, separate worktree | UFO (4th in queue) | not started |
+Nav2 closed-loop flight in apt_world (RGBD, cpu vision). Nav2 publishes `/cmd_vel`. `px4_control` is the only flight controller.
 
-## Order when work resumes
+## What stays
 
-1. Check this branch and fetch the crash report, then run the collision check.
-2. Wall transform from #21's TF, with the 90 deg spawn tests.
-3. Brake-hold then land on vision loss during any action.
-4. Cleanup and optimization of the mission code, then comments and READMEs.
-5. After #19 merges, rebase: EKF2 settings into `ekf2_vision.params` via `PX4_PARAM_FILES`, `docker compose exec` instead of `docker exec px4_sim`, drop the post-boot `param set`, check init-only params apply before ekf2 starts, braking and speed below `MPC_ACC_HOR` / `MPC_XY_VEL_MAX`, QGC `.params` converter, and document that a real Pixhawk needs the `distance_sensor` line in `dds_topics.yaml`. #21 merges before #22.
-6. UFO flight, then post numbers for the Tester and take the PR out of draft.
+- One controller: `px4_control`. `includes/gz/microxrce_offboard.py` and `includes/gazebo_classic/microxrce_offboard.py` are retired. `tests/e2e/px4_offboard.py` must not become a second controller.
+- `/cmd_vel` as `geometry_msgs/TwistStamped` only. Read `msg.twist`. Use the header stamp for the timeout. Nav2 sets `enable_stamped_cmd_vel` true in `controller_server`, `behavior_server`, and `velocity_smoother`. Tests already expect a twist timestamp. No parallel `Twist` subscription.
+- `/rtabmap/odom` for vision. One `/imu` source, owned by sim+vision. Do not add `px4_imu_bridge.py`.
+- If this node reads vehicle status, subscribe to `/fmu/out/vehicle_status_v1`. This PX4 does not publish the unversioned `vehicle_status` topic.
+- Safety, only these three: land on vision loss, lidar-vs-EKF2 height guard, geofence. Geofence is commit `cdbfcf3` on `cursor/geofence-json-walls-83ac` (one commit ahead of `7e7887f`, not in `8668a11`). Bring that commit onto `feature/px4-control`, then delete the cursor branch. No second geofence design.
+- EKF2 settings in the single base parameter file owned with DevOps (`feature/devops-compose-health-ci`), applied before EKF2 starts. No post-boot MAVLink param set. Agreed values, and no others: `EKF2_GPS_CTRL` 0, `EKF2_EV_CTRL` 9, `EKF2_HGT_REF` 0 (baro), `EKF2_MAG_TYPE` 5 (compass present, not fused), `EKF2_RNG_CTRL` 1.
+- Sim time, kept from the indoor work as a requirement, not a new subsystem: `use_sim_time` true and `UXRCE_DDS_SYNCT` 0. Gazebo `/clock` is the clock.
 
-Parked: outdoor mode (compass yaw plus vision position) on its own branch. Later: observability and failure handling.
+## What is cut
+
+- Outdoor mode.
+- 50 Hz vs 20 Hz benchmark, golden snapshot tests, per-action file split, mission benchmark, demo GIF.
+- `flight_analysis` until a real `.ulg` exists. The first flight does not depend on it.
+- A second controller, a second `/imu` bridge, a parallel `Twist` subscription, extra EKF2 parameters, and any geofence work other than bringing `cdbfcf3`.
+
+## Already done
+
+- `px4_control` flies: arm, mode, takeoff, land, goto, hold, and offboard setpoints. It consumes `/rtabmap/odom`, drops samples on tracking loss (null pose, covariance 9999, `odom_info`), and runs the lidar-vs-EKF2 height guard. Prearm waits for vision yaw.
+- `/cmd_vel` is already subscribed. The type is still `geometry_msgs/Twist`, and the timeout uses the node clock, not the message stamp.
+- The five EKF2 values above were set on this branch. They move into the DevOps base file and are not retuned here.
+
+## Ordered next steps
+
+1. Bring `cdbfcf3` onto `feature/px4-control`. Delete `cursor/geofence-json-walls-83ac`.
+2. Switch `/cmd_vel` to `TwistStamped`. Read `msg.twist`. Time out on the header stamp. Remove the `Twist` subscription.
+3. After the merge order below, one Nav2 flight in apt_world passes.
+
+## Dependencies
+
+Merge order: `feature/devops-compose-health-ci`, then `feature/sim-headless-groundtruth` (vision folded in), then `feature/px4-control`, then one Nav2 flight that passes.
+
+- DevOps owns the base parameter file. The five EKF2 values are applied there before EKF2 starts.
+- Sim+vision owns apt_world, RGBD cpu vision, `/rtabmap/odom`, the one `/imu`, and Gazebo `/clock`.
+- Nav2 publishes `/cmd_vel` as `TwistStamped`.
+
+## Done when
+
+`px4_control` is the only flight controller, `/cmd_vel` is `TwistStamped` with the stamp used for timeout, geofence is `cdbfcf3` on this branch and the cursor branch is gone, the three safety behaviors are the only ones, and one Nav2 closed-loop flight in apt_world passes after the merge order above.

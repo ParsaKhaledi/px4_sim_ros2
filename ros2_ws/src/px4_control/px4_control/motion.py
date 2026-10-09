@@ -357,7 +357,7 @@ class MotionExecutive:
     def note_cmd_vel(self, time_s: float, v_north: float, v_east: float, yaw_rate: float) -> None:
         if self._vision_lost or not self.accepts_cmd_vel() or self._p is None:
             return
-        # ``time_s`` is the stamp of the Twist, not the control tick. Refreshing
+        # ``time_s`` is the TwistStamped header stamp, not the control tick. Refreshing
         # it with the tick time would add a second timeout on top of the node.
         if (
             self.phase != Phase.CMD_VEL
