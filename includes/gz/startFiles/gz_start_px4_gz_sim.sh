@@ -42,7 +42,7 @@ fi
 eval "${origin_env}"
 
 python3 "${REPO_GZ}/scripts/patch_x500_ground_truth.py" || \
-  echo "WARN: could not patch x500_depth with the ground-truth plugin"
+  echo "WARN: could not patch ${MODEL} with the ground-truth plugin"
 python3 "${REPO_GZ}/scripts/patch_x500_lidar_down.py" || \
   echo "WARN: could not patch x500_depth with the downward lidar"
 if ! python3 "${REPO_GZ}/scripts/patch_x500_sensor_systems.py" "${WORLD}"; then
