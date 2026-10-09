@@ -101,7 +101,8 @@ def test_ci_override_is_headless():
 
 
 CAMERA_ENV = {
-    "RTABMAPVIZ": "true",
+    # Unset stays closed. CPU and GPU files both default this way.
+    "RTABMAPVIZ": "false",
     "CameraType": "rgbd",
     "CAM_PITCH_DEG": "17",
     "CAM_X": "0.12",
