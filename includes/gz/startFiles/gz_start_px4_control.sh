@@ -27,7 +27,7 @@ export ESTIMATION_MODE="${ESTIMATION_MODE:-vision}"
 export PX4_MAX_YAW_RATE_DEG_S="${PX4_MAX_YAW_RATE_DEG_S:-30}"
 
 WORLD_NAME="${World:-default}"
-WALLS="${HOME_DIR}/volume/includes/gz/worlds/walls/${WORLD_NAME}.txt"
+WALLS="${HOME_DIR}/volume/includes/gz/walls/${WORLD_NAME}.json"
 if [ -f "${WALLS}" ]; then
   export PX4_WALL_SEGMENTS_FILE="${WALLS}"
 fi

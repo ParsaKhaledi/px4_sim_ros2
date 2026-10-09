@@ -182,6 +182,50 @@ def enu_yaw_to_ned(yaw_enu: float) -> float:
     return wrap_pi(math.pi / 2.0 - float(yaw_enu))
 
 
+def world_local_rotation(local_heading_ned: float, world_yaw_enu: float) -> float:
+    """Yaw of the local ENU frame in world ENU.
+
+    ``local_heading_ned`` is ``vehicle_local_position.heading``.
+    ``world_yaw_enu`` is the ``world`` -> ``spawn`` yaw. The subtraction is
+    in NED, after :func:`enu_yaw_to_ned`, and that difference is also the
+    ENU yaw of the local frame relative to the world::
+
+        rotation = wrap(local_heading - enu_yaw_to_ned(world_yaw_enu))
+
+    GPS and mag keep local north on true north, so the vehicle's local
+    heading matches its world heading and the rotation is about 0. Vision
+    heading is 0 at the spawn, so the rotation is the negated world heading.
+    The two results come from the same subtraction. There is no mode switch.
+    """
+    world_heading_ned = enu_yaw_to_ned(world_yaw_enu)
+    return wrap_pi(float(local_heading_ned) - world_heading_ned)
+
+
+def world_enu_point_to_local(
+    x: float,
+    y: float,
+    spawn_x: float,
+    spawn_y: float,
+    rotation: float,
+    local_east: float,
+    local_north: float,
+) -> tuple[float, float]:
+    """World ENU point into local ENU.
+
+    ``rotation`` is :func:`world_local_rotation`. The offset from the spawn
+    is rotated by ``-rotation``, then shifted by the vehicle's local ENU
+    position. Local ENU east/north are the NED east/north fields
+    (``vehicle_local_position.y`` / ``.x``).
+    """
+    dx = float(x) - float(spawn_x)
+    dy = float(y) - float(spawn_y)
+    cos_r = math.cos(float(rotation))
+    sin_r = math.sin(float(rotation))
+    east = cos_r * dx + sin_r * dy + float(local_east)
+    north = -sin_r * dx + cos_r * dy + float(local_north)
+    return east, north
+
+
 def wrap_pi(angle: float) -> float:
     """Wrap an angle in radians to ``(-pi, pi]``."""
     wrapped = (angle + math.pi) % (2.0 * math.pi) - math.pi

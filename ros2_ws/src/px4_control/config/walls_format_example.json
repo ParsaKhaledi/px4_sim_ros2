@@ -1,0 +1,15 @@
+{
+  "world": "example",
+  "frame": "local",
+  "units": "m",
+  "slice_z_m": 0.5,
+  "min_height_m": 0.25,
+  "min_segment_m": 0.05,
+  "description": "Example only. Do not load this file in a real world. local ENU metres, x east, y north.",
+  "segment_count": 2,
+  "unresolved_uris": [],
+  "segments": [
+    {"start": [0.0, 0.0], "end": [4.0, 0.0], "source": "example/wall", "kind": "box"},
+    {"start": [4.0, 0.0], "end": [4.0, 3.0], "source": "example/wall", "kind": "box"}
+  ]
+}
