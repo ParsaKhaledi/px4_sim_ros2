@@ -190,7 +190,7 @@ These are read by the params installer and `gz_start_px4_control.sh`. They are n
 | `EKF2_EV_CTRL` | `9` | vision bitmask, 0..15. `15` also fuses velocity and vision height |
 | `E2E_HEIGHT_TOLERANCE_M` | unset | when set, abort and land if estimate or setpoint height leaves ground truth by more than this many metres |
 | `PX4_MAX_YAW_RATE_DEG_S` | `30` | ROS `max_yaw_rate_deg_s` |
-| `PX4_WALL_SEGMENTS_FILE` | empty | wall segments, if the file exists |
+| `PX4_WALL_SEGMENTS_FILE` | empty | wall JSON, if the file exists |
 | `USE_SIM_TIME` | `true` | launch `use_sim_time` |
 
 ## End-to-end height check
@@ -211,9 +211,21 @@ In vision mode `EKF2_MAG_TYPE` 5 means `cs_mag`, `cs_mag_hdg`, and `cs_mag_3d` s
 
 The parameter read-back has to match before arming. A mismatch is returned as the arm failure.
 
+## Clocks
+
+Control `dt` is the gap between node-clock stamps (`motion.py` `time_s - _last_t`). With `use_sim_time` that clock follows `/clock`, so the gap is sim time, not `1/setpoint_rate_hz` and not wall time. Takeoff, land, goto, hold, the arm command retry, and the offboard switch use that same clock.
+
+Discovery and startup use the steady clock, so a stuck `/clock` still expires them: the preflight service wait and its call, the wait for the first `vehicle_status` and `vehicle_odometry`, the parameter read-back, and the Drone client's wait for an action or service server (`time.monotonic`). The MAVLink socket wait is also `time.monotonic`.
+
 ## Walls
 
-If Simulation drops a segment file at `includes/gz/worlds/walls/<World>.txt`, the start script exports `PX4_WALL_SEGMENTS_FILE`. Each line is `x1 y1 x2 y2` in local ENU metres (x East, y North). Blank lines and `#` comments are ignored.
+Simulation writes `includes/gz/walls/<world>.json` (PR #21). The start script exports that path as `PX4_WALL_SEGMENTS_FILE` when the file exists. The text list is not a wall format.
+
+The document matches that writer. `frame` is `world_enu` (Gazebo world ENU, x east, y north) or `local` (already the vehicle frame; real hardware). Each segment is `{"start": [x, y], "end": [x, y], "source": "...", "kind": "box"|"cylinder"|"mesh"}`. `units` is `m`. `segment_count` must match the list when it is present.
+
+A `local` map is used as written. A `world_enu` map is not installed until two poses match. The spawn pose is only the static TF `world` -> `spawn` (x, y, and ENU yaw; z stays 0). The local pose is `vehicle_local_position` `x`, `y`, and `heading`, taken while the vehicle is landed and before arming, once `cs_yaw_align` is set and `xy_valid` is true. The rotation is the local heading minus the spawn heading, with the ENU yaw converted to NED in `frames.py`. The translation is the same pair of positions. GPS and mag keep local north on true north, so that rotation is about 0. Vision heading is 0 at the spawn, so the rotation is the negated world heading. The node does not switch on the estimation mode. If `world` -> `spawn` is not available, the geofence stays off and the node logs that once.
+
+Arming freezes the transform and logs it. A change in `heading_reset_counter` while landed derives it again. The same change in flight brakes to a hold, logs the reset, and turns the geofence off until the vehicle is landed and the frame can be matched again.
 
 Speed toward a wall is limited with the same `a_brake` used for holds. The cap along a commanded direction uses the clearance along that direction, so a diagonal approach is not given the head-on stopping speed:
 
@@ -221,7 +233,7 @@ Speed toward a wall is limited with the same `a_brake` used for holds. The cap a
 v_max = sqrt(2 * a_brake * max(0, d - r_drone - margin))
 ```
 
-`r_drone` defaults to 0.35 m and `margin` to 0.40 m. A goal or a path that would enter that margin is rejected. A missing file is an empty wall set: no extra limit, and a warning is logged. `config/walls_format_example.txt` shows the format and is not loaded by default.
+`r_drone` defaults to 0.35 m and `margin` to 0.40 m. A goal or a path that would enter that margin is rejected. A missing file is an empty wall set: no extra limit, and a warning is logged. `config/walls_format_example.json` shows a `local` map and is not loaded by default.
 
 ## Launch
 
@@ -242,7 +254,7 @@ This change does not edit Compose files, Dockerfiles, or CI.
 1. Colcon-build `ros2_ws/src/px4_control` and `px4_control_interfaces` in the image after `px4_msgs` v1.17.0. Image workspace `/home/px4/ws_px4`; optional overlay `/home/px4/ws_control`.
 2. Pass `ESTIMATION_MODE` into the PX4 service environment so `gz_modifications.bash` writes `px4_control_params.env` before `gz_start_px4_gz_sim.sh`. Optional, listed in the Environment section above: `EKF2_EV_DELAY`, `EKF2_EV_CTRL`, `PX4_MAX_YAW_RATE_DEG_S`, `PX4_WALL_SEGMENTS_FILE`, and `USE_SIM_TIME`. Set `PX4_IMAGE=alienkh/px4_sim:1.17.0_121` for a live run. `px4_sim:1.17.0_01` is not published.
 3. Start `includes/gz/startFiles/gz_start_px4_control.sh` on the same DDS domain as the XRCE agent, after the bridge so `/clock` exists. `use_sim_time` defaults to true.
-4. Simulation: `/sim/preflight_check` as `std_srvs/Trigger`, wall files at `includes/gz/worlds/walls/<World>.txt`, and `/ground_truth/odom` in ENU at about 50 Hz.
+4. Simulation: `/sim/preflight_check` as `std_srvs/Trigger`, wall files at `includes/gz/walls/<world>.json`, and `/ground_truth/odom` in ENU at about 50 Hz.
 5. Leave the GPS sensor and `/fmu/out/vehicle_gps_position` in place.
 
 GPU image builds are out of scope here.

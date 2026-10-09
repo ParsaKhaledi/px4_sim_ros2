@@ -18,6 +18,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.clock import Clock, ClockType
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, DurabilityPolicy
@@ -49,11 +50,15 @@ from px4_control.frames import (
     yaw_ned_from_rotation,
 )
 from px4_control.geofence import (
+    LocalFix,
+    SpawnFrame,
+    WallAlignment,
     goal_rejection,
     limit_planar_velocity,
     load_wall_file,
     max_speed_along,
     path_rejection,
+    yaw_from_quaternion,
 )
 from px4_control.mavlink_params import read_params
 from px4_control.mode_switch import NAV_NAMES, OffboardStreamGate, parse_mode
@@ -74,6 +79,7 @@ from px4_msgs.msg import (
     VehicleCommand,
     VehicleCommandAck,
     VehicleLandDetected,
+    VehicleLocalPosition,
     VehicleOdometry,
     VehicleStatus,
 )
@@ -102,6 +108,8 @@ class Px4ControlNode(Node):
         super().__init__('px4_control')
         self._cb = ReentrantCallbackGroup()
         self._lock = threading.Lock()
+        # Discovery and startup deadlines. Control dt uses the node clock below.
+        self._steady = Clock(clock_type=ClockType.STEADY_TIME)
         self._declare()
         self._estimation_mode = normalize_estimation_mode(self.get_parameter('estimation_mode').value)
         limits = Limits(
@@ -128,14 +136,12 @@ class Px4ControlNode(Node):
             max_variance=float(self.get_parameter('vision_max_variance').value),
         )
         wall_path = str(self.get_parameter('wall_segments_file').value or '')
-        loaded = load_wall_file(wall_path)
-        self._walls = loaded.walls
-        if loaded.missing:
-            self.get_logger().warning(f'wall file {loaded.path} is missing; using an empty wall set')
-        elif loaded.walls:
-            self.get_logger().info(f'loaded {len(loaded.walls)} wall segments from {loaded.path}')
-        else:
-            self.get_logger().info('no wall file configured; speed is not wall-limited')
+        self._tf_buffer = None
+        self._tf_listener = None
+        self._wall_alignment = WallAlignment(load_wall_file(wall_path))
+        self._walls = self._wall_alignment.walls
+        self._local_fix: LocalFix | None = None
+        self._log_walls(self._wall_alignment.loaded)
 
         self._pos = None
         self._vel = np.zeros(3)
@@ -191,6 +197,9 @@ class Px4ControlNode(Node):
         self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
         self._subscribe_px4(EstimatorStatusFlags, self._topics['estimator_status_flags'], self._on_estimator, qos)
         self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
+        self._subscribe_px4(
+            VehicleLocalPosition, self._topics['vehicle_local_position'], self._on_local_position, qos,
+        )
         self._subscribe_px4(DistanceSensor, self._topics['distance_sensor'], self._on_distance, qos)
         self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
@@ -241,6 +250,7 @@ class Px4ControlNode(Node):
             callback_group=self._cb, goal_callback=self._accept, cancel_callback=self._cancel,
         )
         rate = float(self.get_parameter('setpoint_rate_hz').value)
+        # Period is on the node clock: sim time when use_sim_time follows /clock.
         self.create_timer(1.0 / rate, self._on_timer, callback_group=self._cb)
         self.get_logger().info(
             f'px4_control up, estimation_mode={self._estimation_mode}, '
@@ -314,8 +324,80 @@ class Px4ControlNode(Node):
         topic = str(self.get_parameter('vision_odom_info_topic').value)
         self.create_subscription(OdomInfo, topic, self._on_odom_info, 10, callback_group=self._cb)
 
+    def _log_walls(self, loaded) -> None:
+        if loaded.missing:
+            self.get_logger().warning(f'wall file {loaded.path} is missing; using an empty wall set')
+        elif loaded.frame == 'world_enu':
+            self.get_logger().info(
+                f'{loaded.path}: {len(loaded.raw)} world_enu segments; '
+                'geofence stays off until TF world -> spawn matches EKF2 yaw'
+            )
+        elif loaded.walls:
+            self.get_logger().info(f'loaded {len(loaded.walls)} wall segments from {loaded.path}')
+        else:
+            self.get_logger().info('no wall file configured; speed is not wall-limited')
+
+    def _spawn_from_tf(self) -> SpawnFrame | None:
+        """Static TF ``world`` -> ``spawn``: x, y, and ENU yaw. z is ignored."""
+        if self._wall_alignment.loaded.frame != 'world_enu':
+            return None
+        try:
+            from tf2_ros import Buffer, TransformListener
+        except ImportError:
+            return None
+        if self._tf_buffer is None:
+            self._tf_buffer = Buffer()
+            self._tf_listener = TransformListener(self._tf_buffer, self, spin_thread=False)
+        try:
+            transform = self._tf_buffer.lookup_transform('world', 'spawn', rclpy.time.Time())
+        except Exception:
+            return None
+        translation = transform.transform.translation
+        rotation = transform.transform.rotation
+        return SpawnFrame(
+            float(translation.x),
+            float(translation.y),
+            yaw_from_quaternion(
+                float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w),
+            ),
+        )
+
+    def _update_wall_frame(self, now: float) -> None:
+        if self._wall_alignment.loaded.frame != 'world_enu':
+            return
+        spawn = self._spawn_from_tf()
+        with self._lock:
+            local = self._local_fix
+            landed = self._landed
+            armed = self._armed
+            estimator = self._estimator
+        yaw_aligned = estimator is not None and bool(estimator.cs_yaw_align)
+        step = self._wall_alignment.update(
+            spawn=spawn,
+            local=local,
+            yaw_aligned=yaw_aligned,
+            landed=landed,
+            armed=armed,
+        )
+        for line in step.logs:
+            if step.brake:
+                self.get_logger().error(line)
+            elif line.startswith('geofence off'):
+                self.get_logger().warning(line)
+            else:
+                self.get_logger().info(line)
+        with self._lock:
+            self._walls = self._wall_alignment.walls
+            if step.brake:
+                self._motion.abort(now, step.logs[-1])
+
     def _now_s(self) -> float:
+        """Node clock. Sim time when ``use_sim_time`` follows ``/clock``. Control dt uses this."""
         return self.get_clock().now().nanoseconds * 1e-9
+
+    def _steady_s(self) -> float:
+        """Steady clock for discovery and startup timeouts. Not ``/clock``."""
+        return self._steady.now().nanoseconds * 1e-9
 
     def _now_us(self) -> int:
         now = self._now_s()
@@ -350,6 +432,17 @@ class Px4ControlNode(Node):
     def _on_land(self, msg: VehicleLandDetected) -> None:
         with self._lock:
             self._landed = bool(msg.landed)
+
+    def _on_local_position(self, msg: VehicleLocalPosition) -> None:
+        fix = LocalFix(
+            x=float(msg.x),
+            y=float(msg.y),
+            heading=float(msg.heading),
+            xy_valid=bool(msg.xy_valid),
+            heading_reset_counter=int(msg.heading_reset_counter),
+        )
+        with self._lock:
+            self._local_fix = fix
 
     def _on_distance(self, msg: DistanceSensor) -> None:
         if int(msg.orientation) != int(DistanceSensor.ROTATION_DOWNWARD_FACING):
@@ -473,6 +566,7 @@ class Px4ControlNode(Node):
 
     def _on_timer(self) -> None:
         now = self._now_s()
+        self._update_wall_frame(now)
         with self._lock:
             snap = self._snapshot()
             if self._cmd is not None and self._cmd_time is not None and snap is not None and self._motion.accepts_cmd_vel():
@@ -706,12 +800,12 @@ class Px4ControlNode(Node):
             return sim_preflight_decision(True, False, None, '')
         if self._preflight_client is None:
             self._preflight_client = self.create_client(Trigger, name, callback_group=self._cb)
-        if not self._preflight_client.wait_for_service(timeout_sec=1.0):
+        if not self._wait_steady(self._preflight_client.service_is_ready, 1.0):
             self.get_logger().warning(f'{name} did not respond; continuing with PX4 pre-arm checks only')
             return None
         future = self._preflight_client.call_async(Trigger.Request())
-        deadline = self._deadline(3.0)
-        while not future.done() and not self._expired(deadline):
+        deadline = self._steady_deadline(3.0)
+        while not future.done() and not self._steady_expired(deadline):
             time.sleep(0.02)
         if not future.done() or future.result() is None:
             self.get_logger().warning(f'{name} timed out; continuing with PX4 pre-arm checks only')
@@ -720,13 +814,29 @@ class Px4ControlNode(Node):
         return sim_preflight_decision(True, True, bool(response.success), str(response.message))
 
     def _deadline(self, timeout: float) -> float:
-        """Node-clock deadline. Sim time when use_sim_time is set."""
+        """Node-clock deadline. Sim time when use_sim_time is set. Mission timeouts use this."""
         return self._now_s() + float(timeout)
 
     def _expired(self, deadline: float) -> bool:
         return self._now_s() >= deadline
 
+    def _steady_deadline(self, timeout: float) -> float:
+        return self._steady_s() + float(timeout)
+
+    def _steady_expired(self, deadline: float) -> bool:
+        return self._steady_s() >= deadline
+
+    def _wait_steady(self, predicate, timeout: float) -> bool:
+        """Discovery and startup wait. The deadline is the steady clock."""
+        deadline = self._steady_deadline(timeout)
+        while not self._steady_expired(deadline):
+            if predicate():
+                return True
+            time.sleep(0.02)
+        return predicate()
+
     def _wait_until(self, predicate, timeout: float) -> bool:
+        """Mission wait. The deadline is the node clock (sim time under use_sim_time)."""
         deadline = self._deadline(timeout)
         while not self._expired(deadline):
             if predicate():
@@ -741,7 +851,7 @@ class Px4ControlNode(Node):
             skipped = self._sim_preflight()
             if skipped is not None and not skipped.success:
                 return skipped
-            if not self._wait_until(lambda: self._pos is not None and self._status is not None, timeout):
+            if not self._wait_steady(lambda: self._pos is not None and self._status is not None, timeout):
                 return ArmDecision(False, 'no vehicle_status or vehicle_odometry received')
             ready = self._wait_until(
                 lambda: self._block_reason() is None,
@@ -865,7 +975,7 @@ class Px4ControlNode(Node):
     def _prepare_flight(self, timeout: float):
         from px4_control.arming import ArmDecision
 
-        if not self._wait_until(lambda: self._param_report is not None, min(float(timeout), 20.0)):
+        if not self._wait_steady(lambda: self._param_report is not None, min(float(timeout), 20.0)):
             return ArmDecision(False, 'timed out reading PX4 parameters back (EKF2_EV_CTRL, EKF2_GPS_CTRL, EKF2_HGT_REF, EKF2_MAG_TYPE, SYS_HAS_MAG)')
         if self._param_report:
             return ArmDecision(False, self._param_report)

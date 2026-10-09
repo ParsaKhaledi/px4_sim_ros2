@@ -1,5 +1,0 @@
-# Example only. Do not load this file in a real world.
-# One wall segment per line, local ENU metres: x1 y1 x2 y2
-# x is East, y is North. Blank lines and # comments are ignored.
-0.0 0.0 4.0 0.0
-4.0 0.0 4.0 3.0

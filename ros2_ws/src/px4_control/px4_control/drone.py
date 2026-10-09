@@ -9,13 +9,15 @@ A script looks like the old MAVROS helpers::
     drone.turn(180.0)
     drone.land()
 
-``turn`` is positive counter-clockwise when viewed from above. Timeouts
-use the node clock, which is sim time when ``use_sim_time`` is set.
+``turn`` is positive counter-clockwise when viewed from above. Finding the
+server uses the steady clock. The call itself uses the node clock, which is
+sim time when ``use_sim_time`` is set.
 """
 
 from __future__ import annotations
 
 import math
+import time
 from typing import TypeVar
 
 import rclpy
@@ -112,8 +114,7 @@ class Drone:
         self._call_action(self._goto, goal, timeout)
 
     def _call_service(self, client, request, timeout: float) -> None:
-        if not client.wait_for_service(timeout_sec=min(timeout, 15.0)):
-            raise TimeoutError(f'{client.srv_name} is not available')
+        self._wait_discovery(client.service_is_ready, timeout, client.srv_name)
         future = client.call_async(request)
         self._wait_future(future, timeout, client.srv_name)
         response = future.result()
@@ -122,8 +123,7 @@ class Drone:
             raise RuntimeError(message or f'{client.srv_name} failed')
 
     def _call_action(self, client: ActionClient, goal, timeout: float) -> None:
-        if not client.wait_for_server(timeout_sec=min(timeout, 15.0)):
-            raise TimeoutError(f'{client._action_name} is not available')
+        self._wait_discovery(client.server_is_ready, timeout, client._action_name)
         send = client.send_goal_async(goal)
         self._wait_future(send, timeout, 'goal')
         handle = send.result()
@@ -136,6 +136,16 @@ class Drone:
         if result is None or not result.success:
             message = '' if result is None else result.message
             raise RuntimeError(message or 'action failed')
+
+    def _wait_discovery(self, ready, timeout: float, label: str) -> None:
+        """Wait until a server is visible. The budget is the steady clock, not ``/clock``."""
+        deadline = time.monotonic() + min(float(timeout), 15.0)
+        while rclpy.ok() and not ready():
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f'{label} is not available')
+            rclpy.spin_once(self._node, timeout_sec=0.05)
+        if not ready():
+            raise TimeoutError(f'{label} is not available')
 
     def _now_s(self) -> float:
         """Node clock. Sim time when the node was started with use_sim_time."""

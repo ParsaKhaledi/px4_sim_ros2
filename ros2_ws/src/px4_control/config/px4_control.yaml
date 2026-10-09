@@ -22,7 +22,7 @@ px4_control:
     settle_time_s: 1.0
     drone_radius_m: 0.35
     wall_margin_m: 0.40
-    # Empty until Simulation adds includes/gz/worlds/walls/<World>.txt
+    # JSON map from includes/gz/walls/<world>.json. Empty means no wall limit.
     wall_segments_file: ""
     preflight_service: /sim/preflight_check
     arm_timeout_s: 25.0

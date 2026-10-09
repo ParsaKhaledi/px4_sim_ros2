@@ -197,6 +197,8 @@ class MotionExecutive:
                 return Setpoint.velocity_hold()
             self._seed(snap, time_s)
         assert self._p is not None
+        # ``time_s`` is the caller clock. The node passes sim time when use_sim_time
+        # follows /clock, so dt is the gap between ticks, not the nominal period.
         dt = 0.0 if self._last_t is None else max(0.0, time_s - self._last_t)
         self._last_t = time_s
         if self.phase == Phase.CMD_VEL and self._cmd_time is not None:
