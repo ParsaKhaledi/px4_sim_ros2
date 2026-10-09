@@ -135,6 +135,7 @@ def test_timeout_runs_docker_not_the_compose_function():
     cli = Path("scripts/compose_cli.sh").read_text(encoding="utf-8")
     assert "timeout" in cli
     assert '"${COMPOSE[@]}" exec -T' in cli
+    assert cli.count("< /dev/null") >= 2
     for name in ("scripts/apply_px4_params.sh", "scripts/assert_px4_params.sh"):
         text = Path(name).read_text(encoding="utf-8")
         assert "timeout 30 compose_exec" not in text

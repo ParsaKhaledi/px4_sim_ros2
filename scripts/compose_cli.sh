@@ -49,7 +49,9 @@ compose_ps_status() {
 compose_exec() {
   local service="$1"
   shift
-  "${COMPOSE[@]}" exec -T "${service}" "$@"
+  # Close stdin. An open stdin lets exec consume the caller's remaining input,
+  # which drops every parameter command after the first.
+  "${COMPOSE[@]}" exec -T "${service}" "$@" < /dev/null
 }
 
 # GNU timeout execs a program. compose_exec is a function, so timeout
@@ -58,5 +60,5 @@ compose_exec_timeout() {
   local seconds="$1"
   local service="$2"
   shift 2
-  timeout "${seconds}" "${COMPOSE[@]}" exec -T "${service}" "$@"
+  timeout "${seconds}" "${COMPOSE[@]}" exec -T "${service}" "$@" < /dev/null
 }
