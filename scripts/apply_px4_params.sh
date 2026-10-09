@@ -17,7 +17,7 @@ ready=""
 attempt=1
 while [ "${attempt}" -le 8 ]; do
   if ready="$(compose_exec_timeout 30 PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
-    if printf '%s\n' "${ready}" | grep -q 'NAV_DLL_ACT'; then
+    if grep -q 'NAV_DLL_ACT' <<< "${ready}"; then
       break
     fi
   fi
@@ -27,7 +27,7 @@ while [ "${attempt}" -le 8 ]; do
   attempt=$((attempt + 1))
 done
 
-if [ -z "${ready}" ] || ! printf '%s\n' "${ready}" | grep -q 'NAV_DLL_ACT'; then
+if [ -z "${ready}" ] || ! grep -q 'NAV_DLL_ACT' <<< "${ready}"; then
   echo "PX4 shell did not respond before parameter set." >&2
   exit 1
 fi

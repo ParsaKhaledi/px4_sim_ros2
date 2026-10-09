@@ -14,7 +14,7 @@ output=""
 attempt=1
 while [ "${attempt}" -le 8 ]; do
   if output="$(compose_exec_timeout 30 PX4 bash -lc "cd '${BUILD_DIR}' && ./bin/px4-param show")"; then
-    if printf '%s\n' "${output}" | grep -q 'NAV_DLL_ACT'; then
+    if grep -q 'NAV_DLL_ACT' <<< "${output}"; then
       break
     fi
   fi

@@ -121,9 +121,11 @@ run_attempt() {
   result="${CONTAINER_FLIGHTS}/attempt-${attempt}.json"
   compose_setup
   # ROS_DISTRO is expanded inside the container, not by this shell.
+  # -e is a compose option, so it has to come before the service name.
+  # After the service name, compose runs it as the container command.
   # shellcheck disable=SC2016
   timeout --foreground "${E2E_ATTEMPT_TIMEOUT}" \
-    "${COMPOSE[@]}" exec -T PX4 \
+    "${COMPOSE[@]}" exec -T \
     -e E2E_TAKEOFF_HEIGHT_M \
     -e E2E_HOVER_S \
     -e E2E_LEG_LENGTH_M \
@@ -153,6 +155,7 @@ run_attempt() {
     -e E2E_RESULT_PATH="${result}" \
     -e World \
     -e PX4_GZ_MODEL \
+    PX4 \
     bash -lc '
       set -eo pipefail
       set +u
@@ -182,9 +185,9 @@ check_distance_sensor() {
   fi
   compose_setup
   # shellcheck disable=SC2016
-  if ! compose_exec PX4 bash -lc \
-      'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && ros2 topic list' \
-      | grep -q '/fmu/out/distance_sensor'; then
+  topics="$(compose_exec PX4 bash -lc \
+      'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && ros2 topic list')"
+  if ! grep -q '/fmu/out/distance_sensor' <<< "${topics}"; then
     echo "Expected /fmu/out/distance_sensor in ros2 topic list for ${model}." >&2
     return 1
   fi

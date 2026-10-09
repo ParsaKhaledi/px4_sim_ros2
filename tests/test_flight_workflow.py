@@ -47,3 +47,5 @@ def test_flight_job_loads_the_image_instead_of_building():
     assert "make px4_sitl_default" in start
     e2e = Path("scripts/run_e2e.sh").read_text(encoding="utf-8")
     assert 'chmod 777 "${ROOT}/logs" "${ROOT}/logs/flights" "${FLIGHTS}"' in e2e
+    window = e2e[e2e.index('"${COMPOSE[@]}" exec -T'):]
+    assert window.index("-e E2E_TAKEOFF_HEIGHT_M") < window.index("\n    PX4 \\")
