@@ -28,6 +28,19 @@ def test_camera_flight_is_non_blocking():
     assert "timeout-minutes: 15" in plain
 
 
+def test_image_build_uses_actions_cache_v2():
+    workflow = Path(".github/workflows/_build.yml").read_text(encoding="utf-8")
+    action = Path(".github/actions/setup-buildx-login/action.yml").read_text(encoding="utf-8")
+    assert "crazy-max/ghaction-github-runtime@v4" in action
+    assert "version: v0.38.0" in action
+    assert "driver: docker-container" in action
+    assert 'cache_from="type=gha,scope=${cache_scope},version=2"' in workflow
+    assert "mode=max,version=2,timeout=30m" in workflow
+    assert "ACTIONS_RESULTS_URL" in workflow
+    assert "ACTIONS_RUNTIME_TOKEN" in workflow
+    assert "GH_CACHE_TOKEN: ${{ github.token }}" in workflow
+
+
 def test_flight_job_loads_the_image_instead_of_building():
     workflow = Path(".github/workflows/_build.yml").read_text(encoding="utf-8")
     ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")

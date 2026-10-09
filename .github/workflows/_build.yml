@@ -101,6 +101,8 @@ jobs:
         id: build
         if: ${{ !inputs.reuse_image }}
         timeout-minutes: 45
+        env:
+          GH_CACHE_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           set -a
@@ -172,6 +174,18 @@ jobs:
           else
             output_flags=(--load)
           fi
+          if [ -z "${ACTIONS_RESULTS_URL:-}" ] || [ -z "${ACTIONS_RUNTIME_TOKEN:-}" ]; then
+            echo "BuildKit cache credentials are missing." >&2
+            echo "ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN must be set." >&2
+            exit 1
+          fi
+          # version=2 is the cache service that replaced the v1 API.
+          # Credentials come from the runtime step; Buildx reads them itself.
+          cache_from="type=gha,scope=${cache_scope},version=2"
+          cache_to="type=gha,scope=${cache_scope},mode=max,version=2,timeout=30m"
+          cache_to="${cache_to},ghtoken=${GH_CACHE_TOKEN},repository=${GITHUB_REPOSITORY}"
+          cache_to="${cache_to},ignore-error=true"
+          echo "Build cache: ${cache_from}"
           docker buildx build \
             --file "${dockerfile}" \
             --build-arg "PX4_VERSION=${PX4_VERSION}" \
@@ -183,12 +197,14 @@ jobs:
             "${extra_args[@]}" \
             "${tags[@]}" \
             "${output_flags[@]}" \
-            --cache-from "type=gha,scope=${cache_scope}" \
-            --cache-to "type=gha,scope=${cache_scope},mode=max" \
+            --cache-from "${cache_from}" \
+            --cache-to "${cache_to}" \
             --metadata-file /tmp/build-metadata.json \
             --provenance=false \
             --sbom=false \
-            .
+            . 2>&1 | tee "${RUNNER_TEMP}/buildx.log"
+          cached="$(grep -c 'CACHED' "${RUNNER_TEMP}/buildx.log" || true)"
+          imported="$(grep -c 'importing cache manifest' "${RUNNER_TEMP}/buildx.log" || true)"
           digest="$(python3 -c 'import json; print(json.load(open("/tmp/build-metadata.json")).get("containerimage.digest",""))')"
           if [ "${{ inputs.push }}" = "true" ] && [ -n "${digest}" ]; then
             image_ref="${REGISTRY}/${IMAGE_NAME}@${digest}"
@@ -198,11 +214,15 @@ jobs:
           echo "image_mode=built" >> "${GITHUB_OUTPUT}"
           echo "image_digest=${digest}" >> "${GITHUB_OUTPUT}"
           echo "build $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "cache_scope=${cache_scope} cached_steps=${cached} imports=${imported}" \
+            >> "${RUNNER_TEMP}/image_timing.txt"
           {
             echo "### Image"
             echo "- plan: build"
             echo "- ref: \`${local_tag}\`"
             echo "- digest: \`${digest}\`"
+            echo "- cache: \`type=gha\` scope \`${cache_scope}\` version 2"
+            echo "- cached steps: ${cached}, cache imports: ${imported}"
             echo "- flight_test loads this artifact and does not build."
           } >> "${GITHUB_STEP_SUMMARY}"
 
