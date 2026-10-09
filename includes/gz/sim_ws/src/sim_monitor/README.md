@@ -1,6 +1,6 @@
 # sim_monitor
 
-Real-time factor, the spawn frame, preflight, and the optional PX4 IMU relay. The bridge script starts these next to `ros_gz_bridge`. The longer description is in [docs/simulation.md](../../../../../docs/simulation.md).
+Real-time factor, the spawn frame, and preflight. The bridge script starts these next to `ros_gz_bridge`. `/imu` is the camera bridge. The longer description is in [docs/simulation.md](../../../../../docs/simulation.md).
 
 ## Contents
 
@@ -9,10 +9,9 @@ Real-time factor, the spawn frame, preflight, and the optional PX4 IMU relay. Th
 | `real_time_factor.py` | Δsim/Δwall from Gazebo world stats |
 | `spawn_frame.py` | Static TF `world` → `spawn`, and TF from ground truth |
 | `preflight_check.py` | `/sim/preflight_check` |
-| `px4_imu_relay.py` | PX4 IMU on `/imu` when `IMU_SOURCE=px4` |
 | `checks.py` | Rate, pose, and leak checks (no ROS node) |
-| `imu_source.py` | Which publisher owns `/imu` |
-| `imu_frames.py` | FRD/NED to FLU/ENU for the relay |
+| `imu_source.py` | The camera bridge is the only `/imu` publisher |
+| `imu_frames.py` | FRD/NED to FLU/ENU helpers |
 
 ## Run
 
@@ -23,7 +22,6 @@ export PYTHONPATH=includes/gz/sim_ws/src/sim_monitor
 python3 -m sim_monitor.real_time_factor
 python3 -m sim_monitor.spawn_frame
 python3 -m sim_monitor.preflight_check
-python3 -m sim_monitor.px4_imu_relay   # only when IMU_SOURCE=px4
 ```
 
 `includes/gz/startFiles/gz_start_sim_helpers.sh` does this inside the PX4 container. `USE_SIM_TIME` defaults to true on the spawn frame and the preflight node.
@@ -45,7 +43,7 @@ The tests do not need a running simulator or rclpy.
 | `PX4_GZ_MODEL_POSE` | `-3,-1.6,0.15,0,0,3.14` | Spawn pose. The `spawn` frame uses x, y, yaw and z = 0 |
 | `GT_CHILD_FRAME` | `base_link_gt` | Child of the ground-truth TF |
 | `PREFLIGHT_GT_TOPIC` | `/ground_truth/odom` | Ground-truth odometry |
-| `IMU_SOURCE` | `oak` | `oak` bridges the camera IMU. `px4` runs the relay |
+| `IMU_SOURCE` | `oak` | Bridges the camera IMU onto `/imu` |
 | `IMU_STAMP_MODE` | `receive` | `px4_offset` adds one startup offset onto `/clock` |
 | `PREFLIGHT_MIN_RTF` | `0.15` if `HEADLESS_SOFTWARE=1`, else `0.8` | Real-time-factor floor |
 | `PREFLIGHT_MIN_GT_HZ` | `20` | Ground-truth rate floor, sim time |
@@ -73,8 +71,7 @@ The IMU floor is `PREFLIGHT_MIN_IMU_HZ` when set. Otherwise it is `IMU_MIN_FRACT
 | `/ground_truth/odom` | input to the spawn TF and to preflight |
 | `/clock` | sim time for rate gates. Freshness is wall time |
 | `/sim/preflight_check` | `std_srvs/Trigger` |
-| `/imu` | relay output when `IMU_SOURCE=px4`. Oak mode is the bridge |
-| `/fmu/out/sensor_combined`, `/fmu/out/vehicle_attitude` | relay inputs. A `_vN` topic is used when one is advertised |
+| `/imu` | camera IMU, bridged from Gazebo |
 | `/rtabmap/odom`, `/rtabmap/odom_info` | pose check |
 | `/fmu/out/vehicle_status`, `estimator_status_flags` | PX4 checks, versioned names included |
 | `/fmu/out/distance_sensor` | downward lidar, when `LIDAR_DOWN=1` |

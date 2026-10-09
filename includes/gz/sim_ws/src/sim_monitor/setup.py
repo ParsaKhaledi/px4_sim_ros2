@@ -18,7 +18,6 @@ setup(
             "sim_real_time_factor = sim_monitor.real_time_factor:main",
             "sim_spawn_frame = sim_monitor.spawn_frame:main",
             "sim_preflight_check = sim_monitor.preflight_check:main",
-            "px4_imu_relay = sim_monitor.px4_imu_relay:main",
         ],
     },
 )

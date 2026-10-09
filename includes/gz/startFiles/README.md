@@ -47,7 +47,7 @@ python3 -m pytest includes/gz/scripts/test_gz_resolve_dir.py
 | `PX4_GZ_MODEL_POSE` | `-3,-1.6,0.15,0,0,3.14` | Spawn pose passed to PX4. z is drop clearance |
 | `SIM_ORIGIN_LAT`, `SIM_ORIGIN_LON`, `SIM_ORIGIN_ALT` | Amirkabir, 1205 m | See [scripts/README.md](../scripts/README.md) |
 | `SIM_GZ_DIR` | unset | Override for `GZ_DIR` |
-| `IMU_SOURCE` | `oak` | `oak` bridges gz `/imu`. `px4` starts `px4_imu_relay` and does not bridge it |
+| `IMU_SOURCE` | `oak` | Bridges gz `/imu` from the camera. This is the only `/imu` publisher |
 | `USE_SIM_TIME` | `true` | Bridge, Nav2, and Nav2 RViz follow `/clock` |
 | `World` argument | `default` | Non-default sets `PX4_GZ_WORLD` |
 
@@ -55,7 +55,7 @@ python3 -m pytest includes/gz/scripts/test_gz_resolve_dir.py
 
 ## Topics and services
 
-The bridge publishes `/clock` from Gazebo when `USE_SIM_TIME` is true. `config_gz_bridge_sim.yaml` adds `/ground_truth/odom`. The IMU bridge is a separate file and is appended only for `IMU_SOURCE=oak`.
+The bridge publishes `/clock` from Gazebo when `USE_SIM_TIME` is true. `config_gz_bridge_sim.yaml` adds `/ground_truth/odom`. The camera IMU bridge is a separate file and is always appended. `config_gz_bridge.yaml` does not also bridge `/imu`.
 
 `gz_start_sim_helpers.sh` then starts:
 
@@ -64,7 +64,6 @@ The bridge publishes `/clock` from Gazebo when `USE_SIM_TIME` is true. `config_g
 | `sim_monitor.real_time_factor` | publishes `/sim/real_time_factor` |
 | `sim_monitor.spawn_frame` | TF `world` → `spawn` and `world` → `base_link_gt` |
 | `sim_monitor.preflight_check` | serves `/sim/preflight_check` |
-| `sim_monitor.px4_imu_relay` | publishes `/imu` when `IMU_SOURCE=px4` |
 
 Rate checks use sim time. The discovery timers in those nodes use a steady wall clock so they keep running when `/clock` is slow.
 

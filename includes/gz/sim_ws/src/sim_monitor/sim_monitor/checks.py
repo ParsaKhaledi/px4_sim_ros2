@@ -126,27 +126,19 @@ def _env_float(environ: dict[str, str], name: str) -> float | None:
 
 
 def expected_sensor_hz(kind: str, environ: dict[str, str] | None = None) -> float:
-    """Camera rate from ``CAM_RATE_HZ`` or ``VISION_PROFILE``, or the IMU rate.
+    """Camera rate from ``CAM_RATE_HZ``, else the cpu profile at 10 Hz.
 
-    ``full`` is 30 Hz cameras. ``cpu`` is 10 Hz cameras. With no profile the
-    camera rate is 30 Hz. The IMU rate is :func:`expected_imu_hz`.
+    The IMU rate is :func:`expected_imu_hz`.
     """
     env = os.environ if environ is None else environ
     if kind == "camera":
         override = _env_float(env, "CAM_RATE_HZ")
         if override is not None:
             return override
-        if env.get("VISION_PROFILE", "").strip().lower() == "cpu":
-            return 10.0
-        return 30.0
+        return 10.0
     if kind != "imu":
         raise ValueError(f"unknown sensor kind {kind!r}")
     return expected_imu_hz(env)
-
-
-def _imu_source(env: dict[str, str]) -> str:
-    raw = env.get("IMU_SOURCE", "oak").strip().lower()
-    return "oak" if raw in {"", "oak"} else raw
 
 
 def _load_geometry():
@@ -210,9 +202,9 @@ def _oak_model_imu_hz(env: dict[str, str]) -> float | None:
 def _resolve_imu_hz(env: dict[str, str]) -> tuple[float, str]:
     """Expected IMU rate and which rule supplied it.
 
-    Precedence: ``IMU_RATE_HZ``, the vision profile ``imu_hz`` when
+    Precedence: ``IMU_RATE_HZ``, the cpu profile ``imu_hz`` when
     ``geometry`` imports, the bridged model's SDF ``update_rate``, then
-    50 Hz for oak or 80 Hz for px4.
+    100 Hz.
     """
     override = _env_float(env, "IMU_RATE_HZ")
     if override is not None:
@@ -220,12 +212,10 @@ def _resolve_imu_hz(env: dict[str, str]) -> tuple[float, str]:
     profile = _profile_imu_hz(env)
     if profile is not None:
         return profile, "profile"
-    if _imu_source(env) != "px4":
-        model = _oak_model_imu_hz(env)
-        if model is not None:
-            return model, "model"
-        return 50.0, "fallback"
-    return 80.0, "fallback"
+    model = _oak_model_imu_hz(env)
+    if model is not None:
+        return model, "model"
+    return 100.0, "fallback"
 
 
 # A cpu profile measured exactly 100 Hz sim, so the floor sits under the expected rate.
@@ -241,9 +231,9 @@ def expected_imu_hz(environ: dict[str, str] | None = None) -> float:
 def minimum_rate_hz(kind: str, environ: dict[str, str] | None = None) -> float:
     """Preflight minimum. ``PREFLIGHT_MIN_*_HZ`` wins.
 
-    Cameras use half the expected rate. Every IMU source uses
-    ``IMU_MIN_FRACTION`` of its expected rate: ``IMU_RATE_HZ``, the vision
-    profile, the model SDF, and the oak or px4 fallback.
+    Cameras use half the expected rate. The camera IMU uses
+    ``IMU_MIN_FRACTION`` of its expected rate: ``IMU_RATE_HZ``, the cpu
+    profile, the model SDF, or the 100 Hz fallback.
     """
     env = os.environ if environ is None else environ
     name = "PREFLIGHT_MIN_CAMERA_HZ" if kind == "camera" else "PREFLIGHT_MIN_IMU_HZ"

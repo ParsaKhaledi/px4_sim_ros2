@@ -34,6 +34,11 @@ services:
         World: ${World:-default}
         IMU_SOURCE: ${IMU_SOURCE:-oak}
         IMU_STAMP_MODE: ${IMU_STAMP_MODE:-receive}
+        VISION_PROFILE: ${VISION_PROFILE:-cpu}
+        CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+        CAM_X: ${CAM_X:-0.12}
+        CAM_Y: ${CAM_Y:-0.03}
+        CAM_Z: ${CAM_Z:-0.242}
         XRCE_DDS_AGENT_IP: "10.20.10.7"
         HEADLESS: ${HEADLESS:-0}
         HEADLESS_BACKEND: ${HEADLESS_BACKEND:-egl}
@@ -100,10 +105,13 @@ services:
         px4:
           ipv4_address: "10.20.10.3"
 
-      # environment:
-      #   DISPLAY: ${DISPLAY}
-      #   XAUTHORITY: ${XAUTH}
-          
+      environment:
+        VISION_PROFILE: ${VISION_PROFILE:-cpu}
+        CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
+        CAM_X: ${CAM_X:-0.12}
+        CAM_Y: ${CAM_Y:-0.03}
+        CAM_Z: ${CAM_Z:-0.242}
+
       volumes:
         - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
         - ./includes/gz/:/home/px4/volume/includes/gz/
@@ -252,6 +260,8 @@ services:
         - DISPLAY=${DISPLAY}
         - XAUTHORITY=${XAUTH}
         - CameraType=${CameraType}
+        - VISION_PROFILE=${VISION_PROFILE:-cpu}
+        - RTABMAPVIZ=${RTABMAPVIZ:-false}
 
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/

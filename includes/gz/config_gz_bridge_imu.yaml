@@ -1,6 +1,5 @@
-# Oak-D IMU. Included only when IMU_SOURCE=oak.
+# Oak-D camera IMU. This is the only ROS /imu publisher.
 # The model publishes gz /imu with gz_frame_id imu_link.
-# IMU_SOURCE=px4 publishes ROS /imu from px4_imu_relay instead.
 # Do not also bridge /imu from config_gz_bridge.yaml.
 
 - ros_topic_name: "/imu"
