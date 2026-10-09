@@ -101,7 +101,7 @@ def test_ci_override_is_headless():
 
 
 CAMERA_ENV = {
-    "RTABMAPVIZ": "true",
+    "RTABMAPVIZ": "false",
     "CameraType": "rgbd",
     "CAM_PITCH_DEG": "17",
     "CAM_X": "0.12",

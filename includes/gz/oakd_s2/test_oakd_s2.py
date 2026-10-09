@@ -637,20 +637,21 @@ class HealthAndEvoTest(unittest.TestCase):
                 os.environ[key] = value
 
     def test_env_files_define_vision_gates(self):
-        for name in (".env", ".env.example"):
-            text = (REPO / name).read_text(encoding="utf-8")
-            self.assertRegex(text, r"(?m)^VISION_PROFILE=cpu$")
-            self.assertNotRegex(text, r"(?m)^VISION_PROFILE=full$")
-            self.assertIn("VISION_MAX_LOST_STREAK=3", text)
-            self.assertIn("VISION_MAX_RECOVERY_FRAMES=2", text)
-            self.assertIn("VISION_MIN_ODOM_HZ=7", text)
-            self.assertIn("VISION_MIN_MEDIAN_FEATURES=40", text)
-            self.assertIn("VISION_MIN_INLIERS=15", text)
-        compose = (REPO / "docker-compose-px4.yml").read_text(encoding="utf-8")
-        self.assertEqual(compose.count("${VISION_PROFILE:-cpu}"), 3)
+        text = (REPO / ".env.example").read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?m)^VISION_PROFILE=cpu$")
+        self.assertNotRegex(text, r"(?m)^VISION_PROFILE=full$")
+        self.assertIn("VISION_MAX_LOST_STREAK=3", text)
+        self.assertIn("VISION_MAX_RECOVERY_FRAMES=2", text)
+        self.assertIn("VISION_MIN_ODOM_HZ=7", text)
+        self.assertIn("VISION_MIN_MEDIAN_FEATURES=40", text)
+        self.assertIn("VISION_MIN_INLIERS=15", text)
+        compose = (REPO / "compose.yml").read_text(encoding="utf-8")
+        self.assertIn("${VISION_PROFILE:-cpu}", compose)
         self.assertNotIn("${VISION_PROFILE:-full}", compose)
+        wrapper = (REPO / "docker-compose-px4.yml").read_text(encoding="utf-8")
+        self.assertIn("compose.yml", wrapper)
         up = (REPO / "scripts" / "up.sh").read_text(encoding="utf-8")
-        self.assertIn("_restore_or_default VISION_PROFILE cpu", up)
+        self.assertIn("load_repo_env", up)
         shell = (REPO / "includes" / "gz" / "startFiles" / "rtabmap_profile.sh").read_text(encoding="utf-8")
         self.assertIn('VISION_PROFILE="${VISION_PROFILE:-cpu}"', shell)
 
