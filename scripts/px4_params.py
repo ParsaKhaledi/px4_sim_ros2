@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Merge PX4 parameter files with PX4_PARAM_* overrides and render a .post script.
 
-The airframe .post file is sourced from rcS. Stock PX4 v1.17 sources it after
-commander and ekf2 have already started. apply() writes the .post files and
-moves that source to just before `dataman start`, which is before both.
+Stock PX4 sources `$autostart_file.post` after the airframe `param set-default`.
+apply() writes that file beside every airframe and clears the SITL parameter
+store. It does not edit rcS.
 """
 
 from __future__ import annotations
@@ -18,13 +18,6 @@ NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 VALUE_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
 PARAM_META_RE = re.compile(r'<parameter\b[^>]*\bname="([^"]+)"')
 JSON_NAME_RE = re.compile(r'"name"\s*:\s*"([A-Z][A-Z0-9_]*)"')
-EARLY_HOOK = (
-    "# Parameter files run after the airframe and before commander and ekf2.\n"
-    '[ -e "$autostart_file".post ] && . "$autostart_file".post\n'
-)
-POST_MARKER = '[ -e "$autostart_file".post ] && . "$autostart_file".post'
-
-
 class ParamConflict(Exception):
     """Two listed files set one parameter to different values."""
 
@@ -52,7 +45,7 @@ def parse_params_text(text: str, filename: str) -> dict[str, str]:
 
 def file_list(environ: dict[str, str] | None = None) -> list[str]:
     env = os.environ if environ is None else environ
-    raw = env.get("PX4_PARAM_FILES", "sim.params")
+    raw = env.get("PX4_PARAM_FILES", "headless.params")
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
@@ -90,23 +83,6 @@ def env_overrides(environ: dict[str, str] | None = None) -> list[tuple[str, str]
     return found
 
 
-def commands_from_printenv(text: str) -> list[str]:
-    """Turn a container `printenv` dump into `px4-param set` commands.
-
-    rcS applies PX4_PARAM_* before the airframe. A value equal to the firmware
-    default is not stored, so the airframe `param set-default` puts it back.
-    These commands run after the shell is up and override that.
-    """
-    environ: dict[str, str] = {}
-    for line in text.splitlines():
-        if not line.startswith("PX4_PARAM_"):
-            continue
-        key, separator, value = line.partition("=")
-        if separator:
-            environ[key] = value
-    return [f"px4-param set {name} {value}" for name, value in env_overrides(environ)]
-
-
 def merge_expected(
     directory: Path | None = None,
     environ: dict[str, str] | None = None,
@@ -139,19 +115,6 @@ def render_post(ordered: list[tuple[str, str, str]], overrides: list[tuple[str, 
         emit(name, value, "override")
     lines.append("")
     return "\n".join(lines)
-
-
-def ensure_post_before_ekf2(text: str) -> str:
-    """Source the airframe .post before dataman, commander, and ekf2."""
-    ekf = text.find("ekf2 start")
-    early = text.find(POST_MARKER)
-    if early != -1 and (ekf == -1 or early < ekf):
-        return text
-    marker = "dataman start"
-    index = text.find(marker)
-    if index < 0:
-        raise ValueError("rcS has no dataman start line to anchor the parameter hook")
-    return text[:index] + EARLY_HOOK + "\n" + text[index:]
 
 
 def names_in_metadata(text: str) -> set[str]:
@@ -197,22 +160,13 @@ def write_posts(airframes: Path, script: str) -> list[Path]:
     return written
 
 
-def apply(params_dir: Path, airframes: Path, rcs: Path, rootfs: Path) -> None:
+def apply(params_dir: Path, airframes: Path, rootfs: Path) -> None:
     _merged, ordered = load_param_files(params_dir, file_list())
     overrides = env_overrides()
     for name, value in overrides:
         print(f"PX4 params: override {name} {value}")
     script = render_post(ordered, overrides)
     write_posts(airframes, script)
-    if not rcs.is_file():
-        raise FileNotFoundError(f"rcS not found: {rcs}")
-    original = rcs.read_text(encoding="utf-8")
-    updated = ensure_post_before_ekf2(original)
-    if updated != original:
-        rcs.write_text(updated, encoding="utf-8")
-        print(f"Sourced airframe .post before ekf2 in {rcs}")
-    else:
-        print(f"Airframe .post already runs before ekf2 in {rcs}")
     clear_parameter_store(rootfs)
 
 
@@ -220,26 +174,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    apply_parser = sub.add_parser("apply", help="Write .post files, patch rcS, clear the SITL store")
+    apply_parser = sub.add_parser("apply", help="Write one .post per airframe and clear the SITL store")
     apply_parser.add_argument("--params-dir", type=Path, required=True)
     apply_parser.add_argument("--airframes", type=Path, required=True)
-    apply_parser.add_argument("--rcs", type=Path, required=True)
     apply_parser.add_argument("--rootfs", type=Path, required=True)
 
     meta = sub.add_parser("check-metadata", help="Reject parameter names missing from the image metadata")
     meta.add_argument("--metadata", type=Path, required=True)
     meta.add_argument("--params-dir", type=Path, default=default_params_dir())
 
-    sub.add_parser("commands", help="Print px4-param set lines for PX4_PARAM_* on stdin")
-
     args = parser.parse_args(argv)
     try:
         if args.command == "apply":
-            apply(args.params_dir, args.airframes, args.rcs, args.rootfs)
-            return 0
-        if args.command == "commands":
-            for command in commands_from_printenv(sys.stdin.read()):
-                print(command)
+            apply(args.params_dir, args.airframes, args.rootfs)
             return 0
         problems = unknown_names(args.metadata.read_text(encoding="utf-8"), args.params_dir)
     except (ParamConflict, ValueError, FileNotFoundError) as exc:

@@ -69,7 +69,6 @@ make px4_sitl_default
 python3 /home/px4/volume/scripts/px4_params.py apply \
     --params-dir /home/px4/volume/config/px4/params \
     --airframes "${HOME}/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes" \
-    --rcs "${HOME}/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/rcS" \
     --rootfs "${HOME}/PX4-Autopilot/build/px4_sitl_default/rootfs"
 if [ -z "${WORLD}" ]; then
     WORLD=default

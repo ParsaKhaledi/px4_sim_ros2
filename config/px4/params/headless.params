@@ -1,4 +1,4 @@
-# SITL failsafes. Shared files (ekf2, rate control) can be listed beside this one.
+# SITL failsafes. List more files in PX4_PARAM_FILES, for example ekf2_vision.params.
 # Data-link loss stays disabled so a missing GCS does not command Return.
 # RC loss holds. The loss timer matches the value the start script requests.
 NAV_DLL_ACT 0

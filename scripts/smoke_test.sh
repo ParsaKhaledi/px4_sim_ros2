@@ -32,7 +32,6 @@ trap cleanup EXIT
 
 "${ROOT}/scripts/compose_stack.sh" down || true
 "${ROOT}/scripts/compose_stack.sh" up
-"${ROOT}/scripts/apply_px4_params.sh"
 "${ROOT}/scripts/assert_px4_params.sh"
 compose_setup
 

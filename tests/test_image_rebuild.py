@@ -16,7 +16,7 @@ def test_dockerfile_and_manifest_rebuild():
 def test_runtime_files_do_not_rebuild():
     assert not image_rebuild_paths.needs_rebuild([
         "compose.yml",
-        "config/px4/params/sim.params",
+        "config/px4/params/headless.params",
         "includes/gz/worlds/apt_world.sdf",
         "scripts/run_e2e.sh",
         "docs/templates/FOLDER_README.md",
