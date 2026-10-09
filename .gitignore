@@ -1,3 +1,4 @@
+.env
 vagrant/.vagrant
 volume/
 .qground/config/QGroundControl.org

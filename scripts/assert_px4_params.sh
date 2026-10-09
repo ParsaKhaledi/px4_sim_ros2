@@ -24,7 +24,7 @@ while [ "${attempt}" -le 8 ]; do
 done
 
 printf '%s\n' "${output}" > "${SHOW}"
-printf '%s\n' "${output}" | grep -E 'NAV_DLL_ACT|NAV_RCL_ACT|COM_RC_IN_MODE|COM_RC_LOSS_T' || true
+printf '%s\n' "${output}" | grep -E 'NAV_DLL_ACT|EKF2_GPS_CTRL|EKF2_EV_CTRL|EKF2_HGT_REF|EKF2_MAG_TYPE|EKF2_RNG_CTRL' || true
 printf '%s\n' "${output}" | python3 "${ROOT}/scripts/check_px4_params.py"
 
 # Same capture, wrong expectation. No second boot. A gate that cannot

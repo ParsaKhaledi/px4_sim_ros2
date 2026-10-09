@@ -56,6 +56,11 @@ def test_repo_sim_file_parses():
     assert parsed["NAV_RCL_ACT"] == "1"
     assert parsed["COM_RC_IN_MODE"] == "1"
     assert parsed["COM_RC_LOSS_T"] == "35"
+    assert parsed["EKF2_GPS_CTRL"] == "0"
+    assert parsed["EKF2_EV_CTRL"] == "9"
+    assert parsed["EKF2_HGT_REF"] == "0"
+    assert parsed["EKF2_MAG_TYPE"] == "5"
+    assert parsed["EKF2_RNG_CTRL"] == "1"
 
 
 def test_two_files_disagree(tmp_path):

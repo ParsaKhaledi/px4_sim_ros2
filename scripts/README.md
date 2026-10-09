@@ -21,21 +21,20 @@ Helpers for launching the stack, checking health, and running the headless tests
 ```bash
 CameraType=rgbd World=default ./scripts/up.sh
 COMPOSE_PROFILES= ./scripts/up.sh
-GPU=1 ./scripts/up.sh
 ```
 
-`GPU=1` selects [docker-compose-px4-GPU.yml](../docker-compose-px4-GPU.yml). The same stack is `docker compose -f compose.yml -f compose.gpu.yml -f compose.gui.yml up`.
+`up.sh` starts [docker-compose-px4.yml](../docker-compose-px4.yml).
 
 ## smoke_test.sh
 
-Brings the stack up with [compose.ci.yml](../compose.ci.yml): `HEADLESS=1`, `RTABMAPVIZ=false`, no X11 socket, no `/dev` bind, no host ports. Waits until healthchecks pass, checks camera rates, then the rest of the PX4 graph.
+Brings the stack up with [docker-compose-px4.yml](../docker-compose-px4.yml) and the headless [compose.ci.yml](../compose.ci.yml) override: `HEADLESS=1`, `RTABMAPVIZ=false`, no X11 socket, no `/dev` bind, no host ports. Waits until healthchecks pass, checks camera rates, then the rest of the PX4 graph. CI runs this once. It does not start an offboard controller.
 
 ```bash
 ./scripts/smoke_test.sh docker.io/alienkh/px4_sim:1.17.0_121
 SMOKE_KEEP_UP=1 SMOKE_TEST_TIMEOUT=900 ./scripts/smoke_test.sh px4_sim:ci
 ```
 
-The pull-request flight renders the depth camera with Mesa llvmpipe, so this smoke check is the one that still expects the topics to already be healthy. Run it on a machine that can launch the sim, or dispatch the nightly workflow onto a self-hosted runner.
+Run it on a machine that can launch the sim. This is the one CI flight.
 
 ## run_e2e.sh and record_flight.sh
 

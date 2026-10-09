@@ -101,8 +101,6 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 
 **Without `up.sh`:** `CameraType=rgbd World=default docker compose -f docker-compose-px4.yml --profile gcs up -d`
 
-**GPU:** `GPU=1 ./scripts/up.sh` or `docker compose -f compose.yml -f compose.gpu.yml -f compose.gui.yml up -d`. [docker-compose-px4-GPU.yml](docker-compose-px4-GPU.yml) is the same stack with the NVIDIA image and device reservation.
-
 **Display / X11:** QGC and RViz need `DISPLAY` and `xhost +local:`. Set `XAUTH` if your setup uses `/tmp/.docker.xauth` (Compose may warn if unset).
 
 | Service | Alias | Role |
@@ -168,34 +166,19 @@ CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
 ## CI and local tests
 
-Pull requests run lint, colcon, the CPU image build, and two headless flights on that image. Nothing is pushed from a pull request. The GPU image is not built on a pull request. There is no GPU flight.
+Pull requests run lint, unit tests (pytest and colcon), one image build, and one headless hover/smoke on that image. The flight job loads the image from the build job and runs `scripts/smoke_test.sh` with `docker-compose-px4.yml` and the headless `compose.ci.yml` override. It uses the plain `x500` (`CameraType=none`). It does not run an offboard controller. Nothing is pushed from a pull request.
 
-The fast flight uses the plain `x500` (`CameraType=none`, `PX4_GZ_MODEL=x500`). That flight is the required gate. The second flight uses `x500_depth` with `CameraType=rgbd`, `VISION_PROFILE=cpu`, and renders on the CPU through Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`). It is non-blocking: the model link is still `OakD-Lite/base_link`, so the spawn waits on PR #20's `camera_link` models, and the step logs that before it runs. Gazebo starts with `--headless-rendering` (`GZ_HEADLESS_RENDERING=1`). That step asks the copied model for 10 Hz (`GZ_CAMERA_UPDATE_RATE`) and leaves the image size alone. The camera health floor is 1 Hz (`HEALTH_CAMERA_MIN_HZ`). The Oak-D files in the repo are not edited. If the rgb or depth frames are missing, or flat (variance under `E2E_CAMERA_MIN_VARIANCE`, default 1), the script recreates the sim on Xvfb (`GZ_USE_XVFB=1`, [compose.xvfb.yml](compose.xvfb.yml)). Expect a real-time factor around 0.3–0.6. PX4 lockstep keeps the mission valid; `E2E_WALL_SCALE=3` stretches the wall-clock timeouts. `flight_test` loads the image from the build job. An attempt that runs longer than `E2E_ATTEMPT_TIMEOUT` (8 minutes) fails with that reason in the step summary.
-
-Each flight takes off to 2 m, hovers 10 s, flies `E2E_LEG_LENGTH_M` (0.3 m), yaws 180°, flies back, then lands. The hover clock starts only after height has held ±5 cm for 2 s. Each leg and the yaw wait until they settle: position inside ±2 cm for 1 s, and that hold finishing within 4 s of the step. Yaw settles inside ±3°. Grading uses the Gazebo track, so a step that overshoots (3 cm, or 5° in yaw) or never settles fails even if the driver moves on. Legs must finish at 30 cm ± 3 cm, and the landing must be within 5 cm of the start. The log includes the PX4 `vehicle_local_position` error against the Gazebo pose. `logs/flights/*/trajectory.json` also stores the Gazebo real-time factor and, for the camera flight, each camera topic's rate, mean, and variance. If `px4_control.Drone` imports, that API flies the same mission. The grade is the same either way.
-
-A crash (tilt past about 60°, a ground impact, an unexpected disarm, failsafe, or land, pose far from the setpoint, or a few seconds without odometry) records the reason and restarts the PX4 container. `E2E_MAX_RETRIES` (default 2) is how many restarts are allowed after the first try. The run fails when every attempt crashes. Thresholds are the `E2E_*` keys in `.env`.
-
-Nightly keeps the 1.0 m leg and the depth-camera model (`x500_depth`) on a self-hosted runner.
+Copy `.env.example` to `.env` for a local run. `.env` is not committed.
 
 ```bash
 # Static checks
 ./scripts/check_versions.sh
 docker compose -f docker-compose-px4.yml config -q
-docker compose -f docker-compose-px4-GPU.yml config -q
+docker compose -f docker-compose-px4.yml -f compose.ci.yml config -q
 
-# Headless smoke against a local or pulled image.
-HEADLESS=1 RTABMAPVIZ=false ./scripts/smoke_test.sh "${PX4_IMAGE}"
-
-# Fast out-and-back, same shape as the first pull-request flight.
-CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
-
-# Camera model on Mesa llvmpipe. Software RTF is well below 1.
-CameraType=rgbd PX4_GZ_MODEL=x500_depth GZ_HEADLESS_RENDERING=1 \
-  E2E_CHECK_CAMERAS=1 E2E_WALL_SCALE=3 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
-
-# Nightly shape: depth camera and a 1 m leg, on a machine that can render.
-CameraType=rgbd PX4_GZ_MODEL=x500_depth E2E_LEG_LENGTH_M=1.0 ./scripts/run_e2e.sh
+# The one headless hover/smoke.
+HEADLESS=1 RTABMAPVIZ=false CameraType=none PX4_GZ_MODEL=x500 \
+  COMPOSE_SERVICES=PX4 ./scripts/smoke_test.sh "${PX4_IMAGE}"
 ```
 
 See [scripts/README.md](scripts/README.md).

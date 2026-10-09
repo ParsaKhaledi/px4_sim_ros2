@@ -5,7 +5,7 @@
 
 compose_setup() {
   local file profile old_ifs
-  COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+  COMPOSE_FILES="${COMPOSE_FILES:-docker-compose-px4.yml:compose.ci.yml}"
   COMPOSE=(docker compose)
   if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
     COMPOSE+=(-p "${COMPOSE_PROJECT_NAME}")

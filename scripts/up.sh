@@ -16,14 +16,7 @@ fi
 CameraType="${CameraType:-rgbd}"
 World="${World:-default}"
 COMPOSE_PROFILES="${COMPOSE_PROFILES:-gcs,slam,nav}"
-GPU="${GPU:-0}"
-
-if [ "${GPU}" = "1" ]; then
-  COMPOSE_FILE="${COMPOSE_FILE:-docker-compose-px4-GPU.yml}"
-  export PX4_IMAGE="${PX4_GPU_IMAGE}"
-else
-  COMPOSE_FILE="${COMPOSE_FILE:-docker-compose-px4.yml}"
-fi
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose-px4.yml}"
 
 if [ -n "${DISPLAY:-}" ] && [ "${HEADLESS:-0}" != "1" ]; then
   xhost +local: >/dev/null 2>&1 || true

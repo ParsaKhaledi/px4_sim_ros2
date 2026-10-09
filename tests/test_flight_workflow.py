@@ -1,64 +1,22 @@
 from pathlib import Path
 
 
-def _step(text: str, name: str) -> str:
-    marker = f"name: {name}"
-    start = text.index(marker)
-    rest = text[start + len(marker):]
-    nxt = rest.find("\n      - name:")
-    if nxt < 0:
-        nxt = len(rest)
-    return rest[:nxt]
-
-
-def test_camera_flight_is_non_blocking():
-    text = Path(".github/workflows/_build.yml").read_text(encoding="utf-8")
-    plain = _step(text, "Flight test (plain x500)")
-    camera = _step(text, "Flight test (x500_depth, software rendering)")
-    assert "continue-on-error" not in plain
-    assert "continue-on-error: true" in camera
-    assert "PR #20" in camera
-    assert "camera_link" in camera
-    assert 'GZ_CAMERA_UPDATE_RATE: "10"' in camera
-    assert 'HEALTH_CAMERA_MIN_HZ: "1"' in camera
-    assert "VISION_PROFILE: cpu" in camera
-    assert "GZ_CAMERA_WIDTH" not in camera
-    assert "GZ_CAMERA_HEIGHT" not in camera
-    assert 'E2E_ATTEMPT_TIMEOUT: "480"' in plain
-    assert "timeout-minutes: 15" in plain
-
-
-def test_image_build_uses_actions_cache_v2():
-    workflow = Path(".github/workflows/_build.yml").read_text(encoding="utf-8")
-    action = Path(".github/actions/setup-buildx-login/action.yml").read_text(encoding="utf-8")
-    assert "crazy-max/ghaction-github-runtime@v4" in action
-    assert "version: v0.38.0" in action
-    assert "driver: docker-container" in action
-    assert 'cache_from="type=gha,scope=${cache_scope},version=2"' in workflow
-    assert "mode=max,version=2,timeout=30m" in workflow
-    assert "ACTIONS_RESULTS_URL" in workflow
-    assert "ACTIONS_RUNTIME_TOKEN" in workflow
-    assert "GH_CACHE_TOKEN: ${{ github.token }}" in workflow
-
-
-def test_flight_job_loads_the_image_instead_of_building():
-    workflow = Path(".github/workflows/_build.yml").read_text(encoding="utf-8")
-    ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "reuse_image: true" in ci
-    assert "upload_image: true" in ci
-    assert "cancel-in-progress: true" in ci
-    assert "if: ${{ !inputs.reuse_image }}" in workflow
-    assert "docker load" in workflow
-    assert "download-artifact" in workflow
-    assert "upload-artifact" in workflow
-    assert "timeout-minutes: 10" in ci
-    assert "timeout-minutes: 20" in ci
-    start = Path("includes/gz/startFiles/gz_start_px4_gz_sim.sh").read_text(encoding="utf-8")
-    assert "gz_${MODEL}_${WORLD}" not in start
-    assert "PX4_GZ_WORLD" in start
-    assert 'make px4_sitl "gz_${MODEL}"' not in start
-    assert "make px4_sitl_default" in start
-    e2e = Path("scripts/run_e2e.sh").read_text(encoding="utf-8")
-    assert 'chmod 777 "${ROOT}/logs" "${ROOT}/logs/flights" "${FLIGHTS}"' in e2e
-    window = e2e[e2e.index('"${COMPOSE[@]}" exec -T'):]
-    assert window.index("-e E2E_TAKEOFF_HEIGHT_M") < window.index("\n    PX4 \\")
+def test_ci_is_one_headless_hover():
+    names = {path.name for path in Path(".github/workflows").glob("*.yml")}
+    assert names == {"ci.yml"}
+    assert not Path(".github/actions").exists()
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Dockerfile_px4_sim_NO_GPU" in text
+    assert "Dockerfile_px4_sim_with_GPU" not in text
+    assert "Headless hover/smoke" in text
+    assert 'CameraType: none' in text
+    assert "PX4_GZ_MODEL: x500" in text
+    assert "./scripts/smoke_test.sh" in text
+    assert "px4_offboard.py" not in text
+    assert "microxrce_offboard.py" not in text
+    assert "run_e2e.sh" not in text
+    assert "continue-on-error" not in text
+    assert "docker load" in text
+    assert 'cache_from="type=gha,scope=${cache_scope},version=2"' in text
+    assert "mode=max,version=2,timeout=30m" in text
+    assert "ACTIONS_RESULTS_URL" in text

@@ -1,8 +1,13 @@
-# Sim-only failsafes. Shared files such as ekf2_vision.params and
-# control_x500.params can be listed beside this one in PX4_PARAM_FILES.
-# Data-link loss stays disabled so a missing GCS does not command Return.
+# One file, applied before EKF2 starts.
+# NAV_DLL_ACT 0: headless can arm with no GCS.
 # RC loss holds. The loss timer matches the value the start script requests.
+# EKF2_HGT_REF 0 is baro. The other EKF2 values are the vision set.
 NAV_DLL_ACT 0
 NAV_RCL_ACT 1
 COM_RC_IN_MODE 1
 COM_RC_LOSS_T 35
+EKF2_GPS_CTRL 0
+EKF2_EV_CTRL 9
+EKF2_HGT_REF 0
+EKF2_MAG_TYPE 5
+EKF2_RNG_CTRL 1
