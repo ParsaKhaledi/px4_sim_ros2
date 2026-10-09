@@ -58,8 +58,8 @@ def test_gpu_and_cpu_stacks_match_apart_from_gpu():
     for name in cpu["services"]:
         assert "MicroXRCEAgent" in _command_text(cpu["services"]["PX4"])
         assert "healthcheck.py" in " ".join(cpu["services"][name]["healthcheck"]["test"])
-        assert cpu["services"][name]["environment"]["PX4_GZ_MODEL_POSE"] == "-3,-1.6,0,0,0,3.14"
-        assert gpu["services"][name]["environment"]["PX4_GZ_MODEL_POSE"] == "-3,-1.6,0,0,0,3.14"
+        assert cpu["services"][name]["environment"]["PX4_GZ_MODEL_POSE"] == "-3,-1.6,0.15,0,0,3.14"
+        assert gpu["services"][name]["environment"]["PX4_GZ_MODEL_POSE"] == "-3,-1.6,0.15,0,0,3.14"
         assert "nvidia" not in cpu["services"][name].get("deploy", {}).get("resources", {}).get("reservations", {}).get("devices", [{}])[0].get("driver", "")
     assert gpu["services"]["PX4"]["deploy"]["resources"]["reservations"]["devices"][0]["driver"] == "nvidia"
     assert gpu["services"]["PX4"]["image"].endswith("1.17.0_01_GPU_GPUEnabled")

@@ -36,11 +36,12 @@ COMPOSE_PROFILES= ./scripts/up.sh
 |----------|-------------|---------|
 | `registry` / `PX4_IMAGE` | Image to run | `docker.io/alienkh/px4_sim:1.17.0_121` |
 | `px4TAG` | Tag inside `PX4_IMAGE` | `1.17.0_121` |
-| `PX4_GZ_MODEL_POSE` | Spawn pose `x,y,z,roll,pitch,yaw` | `-3,-1.6,0,0,0,3.14` |
+| `PX4_GZ_MODEL_POSE` | Spawn pose `x,y,z,roll,pitch,yaw`. z is drop clearance | `-3,-1.6,0.15,0,0,3.14` |
 | `CameraType` | `rgbd` or `stereo` | `rgbd` |
 | `CAM_PITCH_DEG` | OAK-D pitch, degrees, positive lens-down | `17` |
 | `CAM_X`, `CAM_Y`, `CAM_Z` | OAK-D mount on the x500, meters | `0.12`, `0.03`, `0.242` |
-| `VISION_PROFILE` | Camera profile. `cpu` on the base stack, `full` on the GPU files | `cpu` |
+| `VISION_PROFILE` | Camera profile. `cpu` is the one this line runs | `cpu` |
+| `IMU_SOURCE` | Camera IMU on `/imu` | `oak` |
 | `World` | Gazebo world filename stem | `default` |
 | `HEADLESS` | `1` skips the Gazebo GUI | `0` |
 | `RTABMAPVIZ` | RTAB-Map visualization. Unset stays closed. | `false` |
@@ -66,8 +67,8 @@ COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
 # Full robotics stack
 COMPOSE_PROFILES=gcs,slam,nav CameraType=rgbd World=default ./scripts/up.sh
 
-# Stereo camera in a custom world
-COMPOSE_PROFILES=gcs CameraType=stereo World=husarion_office ./scripts/up.sh
+# Stereo camera in the apartment
+COMPOSE_PROFILES=gcs CameraType=stereo World=apt_world ./scripts/up.sh
 ```
 
 You can also set `CameraType` and `World` in `.env` instead of the command line.
@@ -78,10 +79,6 @@ World names match SDF **filenames** under `includes/gz/worlds/` (without `.sdf`)
 
 - `default` — PX4 default world
 - `apt_world`
-- `husarion_office`
-- `husarion_world`
-- `sonoma_raceway`
-- `empty_with_plugins`
 
 ### Runtime configuration (brief)
 
@@ -111,7 +108,7 @@ CameraType=stereo World=apt_world ./scripts/up.sh
 | Rtabmap | `rtabmap` | SLAM (`slam`) |
 | NAV2 / Nav2_Rviz | `nav2`, `nav2_rviz` | Navigation + RViz (`nav`) |
 
-Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout and GitHub automation. Folder READMEs follow [docs/templates/FOLDER_README.md](docs/templates/FOLDER_README.md).
+Simulation assets and startup scripts live under [includes/](includes/). See [includes/README.md](includes/README.md) for layout. Headless Gazebo, sim time, ground truth, and preflight checks are described in [docs/simulation.md](docs/simulation.md). `/imu` is the camera IMU (`IMU_SOURCE=oak`).
 
 Operational scripts: [scripts/README.md](scripts/README.md).
 

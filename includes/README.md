@@ -6,7 +6,7 @@ Runtime simulation assets mounted into Docker containers from the host repo. Cha
 
 | Path | Purpose |
 |------|---------|
-| [gz/](gz/) | **Active** Gazebo Harmonic stack: worlds, models, bridge config, Nav2 params, startup scripts |
+| [gz/](gz/) | **Active** Gazebo Harmonic stack: worlds, models, bridge config, Nav2 params, startup scripts. See [gz/README.md](gz/README.md) and [docs/simulation.md](../docs/simulation.md). |
 | [gazebo_classic/](gazebo_classic/) | Legacy Gazebo Classic assets (not used by current `docker-compose-px4.yml`) |
 
 ### gz/ (used at runtime)

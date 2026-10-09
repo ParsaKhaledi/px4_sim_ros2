@@ -21,6 +21,9 @@ Helpers for launching the stack, checking health, and running the headless tests
 ```bash
 CameraType=rgbd World=default ./scripts/up.sh
 COMPOSE_PROFILES= ./scripts/up.sh
+
+# Sim + QGroundControl in the indoor world
+COMPOSE_PROFILES=gcs CameraType=rgbd World=apt_world ./scripts/up.sh
 ```
 
 `up.sh` starts [docker-compose-px4.yml](../docker-compose-px4.yml).

@@ -1,0 +1,10 @@
+# Oak-D IMU. Included only when IMU_SOURCE=oak.
+# The model publishes gz /imu with gz_frame_id imu_link.
+# IMU_SOURCE=px4 publishes ROS /imu from px4_imu_relay instead.
+# Do not also bridge /imu from config_gz_bridge.yaml.
+
+- ros_topic_name: "/imu"
+  gz_topic_name: "/imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS

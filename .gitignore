@@ -7,3 +7,5 @@ logs/*
 !logs/health/.gitkeep
 !logs/flights/
 !logs/flights/.gitkeep
+__pycache__/
+*.pyc
