@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Merge PX4 parameter files with PX4_PARAM_* overrides and render a .post script.
 
-Stock PX4 sources `$autostart_file.post` after the airframe `param set-default`.
-apply() writes that file beside every airframe and clears the SITL parameter
-store. It does not edit rcS.
+PX4 v1.17 sources `$autostart_file.post` after commander and ekf2 have started.
+apply() writes one .post beside every airframe, moves that source to just
+before `dataman start`, and clears the SITL parameter store.
 """
 
 from __future__ import annotations
@@ -18,6 +18,13 @@ NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 VALUE_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
 PARAM_META_RE = re.compile(r'<parameter\b[^>]*\bname="([^"]+)"')
 JSON_NAME_RE = re.compile(r'"name"\s*:\s*"([A-Z][A-Z0-9_]*)"')
+POST_LINE = '[ -e "$autostart_file".post ] && . "$autostart_file".post'
+EARLY_HOOK = (
+    "# Parameter files run after the airframe and before commander and ekf2.\n"
+    f"{POST_LINE}\n"
+)
+
+
 class ParamConflict(Exception):
     """Two listed files set one parameter to different values."""
 
@@ -45,7 +52,7 @@ def parse_params_text(text: str, filename: str) -> dict[str, str]:
 
 def file_list(environ: dict[str, str] | None = None) -> list[str]:
     env = os.environ if environ is None else environ
-    raw = env.get("PX4_PARAM_FILES", "headless.params")
+    raw = env.get("PX4_PARAM_FILES", "sim.params")
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
@@ -117,6 +124,31 @@ def render_post(ordered: list[tuple[str, str, str]], overrides: list[tuple[str, 
     return "\n".join(lines)
 
 
+def ensure_post_before_ekf2(text: str) -> str:
+    """Source the airframe .post after set-defaults and before startup modules.
+
+    PX4 v1.17 posix rcS sources the airframe, then starts dataman, commander,
+    and ekf2, and only then sources `$autostart_file.post`. Modules that read
+    parameters at start would otherwise miss the file. The hook moves to just
+    before `dataman start`.
+    """
+    ekf = text.find("ekf2 start")
+    dataman = text.find("dataman start")
+    if ekf < 0 or dataman < 0 or dataman > ekf:
+        raise ValueError("rcS has no dataman start before ekf2")
+    first = text.find(POST_LINE)
+    if first != -1 and first < ekf:
+        return text
+    updated = text
+    if first != -1:
+        end = first + len(POST_LINE)
+        if end < len(updated) and updated[end] == "\n":
+            end += 1
+        updated = updated[:first] + updated[end:]
+        dataman = updated.find("dataman start")
+    return updated[:dataman] + EARLY_HOOK + "\n" + updated[dataman:]
+
+
 def names_in_metadata(text: str) -> set[str]:
     names = set(PARAM_META_RE.findall(text))
     names.update(JSON_NAME_RE.findall(text))
@@ -160,13 +192,22 @@ def write_posts(airframes: Path, script: str) -> list[Path]:
     return written
 
 
-def apply(params_dir: Path, airframes: Path, rootfs: Path) -> None:
+def apply(params_dir: Path, airframes: Path, rcs: Path, rootfs: Path) -> None:
     _merged, ordered = load_param_files(params_dir, file_list())
     overrides = env_overrides()
     for name, value in overrides:
         print(f"PX4 params: override {name} {value}")
     script = render_post(ordered, overrides)
     write_posts(airframes, script)
+    if not rcs.is_file():
+        raise FileNotFoundError(f"rcS not found: {rcs}")
+    original = rcs.read_text(encoding="utf-8")
+    updated = ensure_post_before_ekf2(original)
+    if updated != original:
+        rcs.write_text(updated, encoding="utf-8")
+        print(f"Sourced airframe .post before ekf2 in {rcs}")
+    else:
+        print(f"Airframe .post already runs before ekf2 in {rcs}")
     clear_parameter_store(rootfs)
 
 
@@ -177,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     apply_parser = sub.add_parser("apply", help="Write one .post per airframe and clear the SITL store")
     apply_parser.add_argument("--params-dir", type=Path, required=True)
     apply_parser.add_argument("--airframes", type=Path, required=True)
+    apply_parser.add_argument("--rcs", type=Path, required=True)
     apply_parser.add_argument("--rootfs", type=Path, required=True)
 
     meta = sub.add_parser("check-metadata", help="Reject parameter names missing from the image metadata")
@@ -186,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "apply":
-            apply(args.params_dir, args.airframes, args.rootfs)
+            apply(args.params_dir, args.airframes, args.rcs, args.rootfs)
             return 0
         problems = unknown_names(args.metadata.read_text(encoding="utf-8"), args.params_dir)
     except (ParamConflict, ValueError, FileNotFoundError) as exc:

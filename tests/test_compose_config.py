@@ -84,7 +84,7 @@ def test_ci_override_is_headless():
                 targets.append(volume.get("target", ""))
         assert not any(item in ("/dev", "/dev/", "/tmp/.X11-unix") or str(item).endswith("/dev") for item in targets)
     px4_env = rendered["services"]["PX4"]["environment"]
-    assert str(px4_env["PX4_PARAM_FILES"]) == "headless.params"
+    assert str(px4_env["PX4_PARAM_FILES"]) == "sim.params"
     px4_volumes = " ".join(
         volume if isinstance(volume, str) else volume.get("target", "")
         for volume in rendered["services"]["PX4"]["volumes"]

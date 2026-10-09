@@ -40,18 +40,18 @@ def test_datalink_failsafe_left_at_return_fails():
 
 
 def test_parse_file_and_env_override(tmp_path):
-    (tmp_path / "headless.params").write_text("# note\nNAV_DLL_ACT 0\nNAV_RCL_ACT 1\n", encoding="utf-8")
+    (tmp_path / "sim.params").write_text("# note\nNAV_DLL_ACT 0\nNAV_RCL_ACT 1\n", encoding="utf-8")
     merged = px4_params.merge_expected(
         directory=tmp_path,
-        environ={"PX4_PARAM_FILES": "headless.params", "PX4_PARAM_NAV_DLL_ACT": "0"},
+        environ={"PX4_PARAM_FILES": "sim.params", "PX4_PARAM_NAV_DLL_ACT": "0"},
     )
     assert merged["NAV_DLL_ACT"] == 0
     assert merged["NAV_RCL_ACT"] == 1
 
 
-def test_repo_headless_file_parses():
-    text = (px4_params.default_params_dir() / "headless.params").read_text(encoding="utf-8")
-    parsed = px4_params.parse_params_text(text, "headless.params")
+def test_repo_sim_file_parses():
+    text = (px4_params.default_params_dir() / "sim.params").read_text(encoding="utf-8")
+    parsed = px4_params.parse_params_text(text, "sim.params")
     assert parsed["NAV_DLL_ACT"] == "0"
     assert parsed["NAV_RCL_ACT"] == "1"
     assert parsed["COM_RC_IN_MODE"] == "1"
@@ -72,20 +72,20 @@ def test_two_files_disagree(tmp_path):
 
 
 def test_env_override_replaces_the_file(tmp_path):
-    (tmp_path / "headless.params").write_text("COM_RC_LOSS_T 35\n", encoding="utf-8")
+    (tmp_path / "sim.params").write_text("COM_RC_LOSS_T 35\n", encoding="utf-8")
     merged = px4_params.merge_expected(
         directory=tmp_path,
-        environ={"PX4_PARAM_FILES": "headless.params", "PX4_PARAM_COM_RC_LOSS_T": "10"},
+        environ={"PX4_PARAM_FILES": "sim.params", "PX4_PARAM_COM_RC_LOSS_T": "10"},
     )
     assert merged["COM_RC_LOSS_T"] == 10
 
 
 def test_files_merge_in_listed_order(tmp_path):
-    (tmp_path / "headless.params").write_text("NAV_DLL_ACT 0\n", encoding="utf-8")
+    (tmp_path / "sim.params").write_text("NAV_DLL_ACT 0\n", encoding="utf-8")
     (tmp_path / "ekf2_vision.params").write_text("EKF2_EV_DELAY 0\n", encoding="utf-8")
     merged = px4_params.merge_expected(
         directory=tmp_path,
-        environ={"PX4_PARAM_FILES": "headless.params,ekf2_vision.params", "PX4_PARAM_EKF2_EV_DELAY": "5"},
+        environ={"PX4_PARAM_FILES": "sim.params,ekf2_vision.params", "PX4_PARAM_EKF2_EV_DELAY": "5"},
     )
     assert merged["NAV_DLL_ACT"] == 0
     assert merged["EKF2_EV_DELAY"] == 5
@@ -98,7 +98,7 @@ def test_post_is_written_for_every_airframe(tmp_path):
     (airframes / "4019_gz_x500_depth").write_text("param set-default NAV_DLL_ACT 2\n", encoding="utf-8")
     (airframes / "4020_gz_oak").write_text("param set-default NAV_DLL_ACT 2\n", encoding="utf-8")
     (airframes / "notes.txt").write_text("skip\n", encoding="utf-8")
-    script = px4_params.render_post([("NAV_DLL_ACT", "0", "headless.params")], [])
+    script = px4_params.render_post([("NAV_DLL_ACT", "0", "sim.params")], [])
     written = px4_params.write_posts(airframes, script)
     assert sorted(path.name for path in written) == [
         "4001_gz_x500.post",
@@ -108,17 +108,54 @@ def test_post_is_written_for_every_airframe(tmp_path):
     assert "param set NAV_DLL_ACT 0" in (airframes / "4020_gz_oak.post").read_text(encoding="utf-8")
 
 
-def test_start_script_does_not_edit_rcs():
+def test_start_script_clears_the_store_and_patches_rcs():
     start = Path("includes/gz/startFiles/gz_start_px4_gz_sim.sh").read_text(encoding="utf-8")
     assert "px4_params.py apply" in start
-    assert "--rcs" not in start
+    assert "--rcs" in start
+    assert "--rootfs" in start
+    assert start.index("px4_params.py apply") < start.index("exec ../bin/px4")
     assert "apply_px4_params.sh" not in start
-    for name in ("scripts/smoke_test.sh", "scripts/run_e2e.sh"):
-        assert "apply_px4_params.sh" not in Path(name).read_text(encoding="utf-8")
+
+
+STOCK_RCS = """
+if [ -e "$autostart_file" ]
+then
+	. "$autostart_file"
+fi
+
+dataman start
+commander start
+if param compare -s EKF2_EN 1
+then
+	ekf2 start &
+fi
+# execute autostart post script if any
+[ -e "$autostart_file".post ] && . "$autostart_file".post
+"""
+
+
+def test_post_hook_moves_before_ekf2_and_is_idempotent():
+    once = px4_params.ensure_post_before_ekf2(STOCK_RCS)
+    twice = px4_params.ensure_post_before_ekf2(once)
+    assert twice == once
+    assert once.count(px4_params.POST_LINE) == 1
+    hook = once.index(px4_params.POST_LINE)
+    assert hook > once.index('"$autostart_file"')
+    assert hook < once.index("dataman start")
+    assert hook < once.index("commander start")
+    assert hook < once.index("ekf2 start")
+
+
+def test_clear_parameter_store_removes_bson_files(tmp_path):
+    (tmp_path / "parameters.bson").write_bytes(b"old")
+    (tmp_path / "parameters_backup.bson").write_bytes(b"old")
+    px4_params.clear_parameter_store(tmp_path)
+    assert not (tmp_path / "parameters.bson").exists()
+    assert not (tmp_path / "parameters_backup.bson").exists()
 
 
 def test_unknown_metadata_name(tmp_path):
-    (tmp_path / "headless.params").write_text("EKF2_EV_DLAY 5\n", encoding="utf-8")
+    (tmp_path / "sim.params").write_text("EKF2_EV_DLAY 5\n", encoding="utf-8")
     metadata = '<parameters><parameter name="NAV_DLL_ACT" type="INT32"/></parameters>'
     problems = px4_params.unknown_names(metadata, tmp_path)
     assert any("EKF2_EV_DLAY" in problem for problem in problems)
@@ -145,7 +182,7 @@ def test_timeout_runs_docker_not_the_compose_function():
 
 
 def test_render_logs_an_override():
-    script = px4_params.render_post([("NAV_DLL_ACT", "0", "headless.params")], [("NAV_RCL_ACT", "1")])
-    assert 'echo "PX4 params: headless.params NAV_DLL_ACT 0"' in script
+    script = px4_params.render_post([("NAV_DLL_ACT", "0", "sim.params")], [("NAV_RCL_ACT", "1")])
+    assert 'echo "PX4 params: sim.params NAV_DLL_ACT 0"' in script
     assert 'echo "PX4 params: override NAV_RCL_ACT 1"' in script
     assert "exit 1" in script
