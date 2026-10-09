@@ -92,8 +92,23 @@ fi
 
 cd "${HOME}/PX4-Autopilot" || exit 1
 
+# Sim profile written by gz_modifications.bash. Stock v1.17 rcS reads
+# PX4_PARAM_* before ekf2 start. Missing file: airframe defaults, and
+# px4_control refuses to arm after the read-back fails.
+PARAM_ENV="${HOME}/PX4-Autopilot/px4_control_params.env"
+if [ -f "${PARAM_ENV}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${PARAM_ENV}"
+  set +a
+  echo "px4_control sim params loaded from ${PARAM_ENV}"
+else
+  echo "px4_control sim params missing (${PARAM_ENV}); PX4 keeps airframe defaults" >&2
+fi
+
 # Repo worlds such as apt_world are not ninja targets. PX4_GZ_WORLD selects
-# the sdf; the airframe target stays gz_<model>.
+# the sdf; the airframe target stays gz_<model>. Spawn pose stays the value
+# already exported above (z is drop clearance).
 if [ -n "${WORLD}" ] && [ "${WORLD}" != "default" ]; then
   export PX4_GZ_WORLD="${WORLD}"
 fi

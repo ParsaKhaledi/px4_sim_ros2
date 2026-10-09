@@ -1,0 +1,41 @@
+px4_control:
+  ros__parameters:
+    estimation_mode: vision
+    setpoint_rate_hz: 20.0
+    offboard_min_hz: 2.0
+    offboard_warmup_s: 1.0
+    cmd_vel_timeout_s: 0.5
+    cmd_vel_topic: /cmd_vel
+    vision_odom_topic: /rtabmap/odom
+    vision_odom_info_topic: /rtabmap/odom_info
+    vision_timeout_s: 0.3
+    vision_reset_jump_m: 0.75
+    vision_max_variance: 25.0
+    max_horizontal_speed: 1.0
+    max_vertical_speed: 0.6
+    max_accel: 1.0
+    a_brake: 1.0
+    max_yaw_rate_deg_s: 30.0
+    max_yaw_accel_deg_s2: 60.0
+    settle_position_m: 0.02
+    settle_yaw_deg: 3.0
+    settle_time_s: 1.0
+    drone_radius_m: 0.35
+    wall_margin_m: 0.40
+    # JSON map from includes/gz/walls/<world>.json. Empty means no wall limit.
+    wall_segments_file: ""
+    preflight_service: /sim/preflight_check
+    arm_timeout_s: 25.0
+    offboard_timeout_s: 10.0
+    takeoff_timeout_s: 90.0
+    land_timeout_s: 90.0
+    goto_timeout_s: 120.0
+    # 0 disables the end-to-end height abort. Set E2E_HEIGHT_TOLERANCE_M to enable it.
+    e2e_height_tolerance_m: 0.0
+    ground_truth_odom_topic: /ground_truth/odom
+    # Downward distance_sensor versus EKF2 height above the floor.
+    lidar_height_tolerance_m: 0.3
+    lidar_height_duration_s: 0.5
+    # Sensor height above the floor at rest: base_link is 0.24 m above the
+    # model origin and the sensor is 5 cm below base_link.
+    lidar_mount_offset_m: 0.19

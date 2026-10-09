@@ -1,0 +1,8 @@
+# Climb to height metres above the ground reference (positive up).
+# Succeeds only after the vehicle has stayed inside the settle tolerance.
+float32 height
+---
+bool success
+string message
+---
+float32 altitude

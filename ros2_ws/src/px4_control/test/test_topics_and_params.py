@@ -1,0 +1,118 @@
+import socket
+import struct
+import threading
+
+from px4_control.mavlink_params import param_request_read, parse_frames, read_params
+from px4_control.px4_params import expected_sim_params, readback_mismatch
+from px4_control.topics import load_px4_topics, subscription_names
+
+
+def test_topic_config_uses_v1_only_where_px4_msgs_does():
+    topics = load_px4_topics()
+    assert topics['vehicle_status'] == '/fmu/out/vehicle_status_v1'
+    assert topics['vehicle_local_position'] == '/fmu/out/vehicle_local_position_v1'
+    assert topics['vehicle_odometry'] == '/fmu/out/vehicle_odometry'
+    assert topics['vehicle_attitude'] == '/fmu/out/vehicle_attitude'
+    assert topics['vehicle_command_ack'] == '/fmu/out/vehicle_command_ack'
+    assert topics['failsafe_flags'] == '/fmu/out/failsafe_flags'
+    assert topics['estimator_status_flags'] == '/fmu/out/estimator_status_flags'
+    assert topics['vehicle_land_detected'] == '/fmu/out/vehicle_land_detected'
+    assert topics['distance_sensor'] == '/fmu/out/distance_sensor'
+    assert topics['vehicle_visual_odometry'] == '/fmu/in/vehicle_visual_odometry'
+    assert subscription_names(topics['vehicle_status']) == [
+        '/fmu/out/vehicle_status_v1',
+        '/fmu/out/vehicle_status',
+    ]
+    assert subscription_names(topics['vehicle_odometry']) == ['/fmu/out/vehicle_odometry']
+
+
+def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
+    expected = expected_sim_params('vision')
+    assert expected['NAV_DLL_ACT'] == 0.0
+    assert expected['EKF2_EV_CTRL'] == 9.0
+    assert expected['EKF2_EV_DELAY'] == 0.0
+    assert expected['EKF2_HGT_REF'] == 0.0
+    assert expected['EKF2_RNG_CTRL'] == 1.0
+    assert expected['GF_MAX_VER_DIST'] == 3.0
+    assert expected['GF_ACTION'] == 5.0
+    assert 'EKF2_EV_POS_Z' not in expected
+    assert expected['EKF2_GPS_CTRL'] == 0.0
+    assert 'EKF2_GPS_P_NOISE' not in expected
+    assert 'EKF2_GPS_V_NOISE' not in expected
+    assert expected['EKF2_MAG_TYPE'] == 5.0
+    assert expected['SYS_HAS_MAG'] == 1.0
+    gps = expected_sim_params('gps')
+    assert gps['EKF2_MAG_TYPE'] == 0.0
+    assert gps['SYS_HAS_MAG'] == 1.0
+    actual = {
+        'EKF2_EV_CTRL': 0.0,
+        'EKF2_GPS_CTRL': 7.0,
+        'EKF2_HGT_REF': 1.0,
+        'EKF2_MAG_TYPE': 0.0,
+        'SYS_HAS_MAG': 0.0,
+        'NAV_RCL_ACT': 2.0,
+        'NAV_DLL_ACT': 2.0,
+        'UXRCE_DDS_SYNCT': 1.0,
+    }
+    message = readback_mismatch(actual, expected)
+    assert message is not None
+    assert 'EKF2_EV_CTRL=0' in message
+    assert 'EKF2_MAG_TYPE=0' in message
+    assert 'SYS_HAS_MAG=0' in message
+    assert 'NAV_RCL_ACT=2' in message
+    assert 'NAV_DLL_ACT=2' in message
+    assert readback_mismatch(
+        {name: expected[name] for name in (
+            'EKF2_EV_CTRL', 'EKF2_EV_DELAY', 'EKF2_GPS_CTRL', 'EKF2_HGT_REF', 'EKF2_MAG_TYPE',
+            'EKF2_RNG_CTRL', 'SYS_HAS_MAG', 'GF_MAX_VER_DIST', 'GF_ACTION',
+            'NAV_RCL_ACT', 'NAV_DLL_ACT', 'UXRCE_DDS_SYNCT',
+        )},
+        expected,
+    ) is None
+
+
+def test_param_request_round_trip(tmp_path):
+    del tmp_path
+    # Bytewise INT32 11, the encoding PX4 uses when PARAM_ENCODE_BYTEWISE is set.
+    payload = struct.pack('<fHH', struct.unpack('<f', struct.pack('<i', 11))[0], 100, 7)
+    payload += b'EKF2_EV_CTRL' + bytes(4) + bytes((6,))
+    header = bytes((len(payload), 2, 255, 190, 22))
+    # CRC is not checked by the parser. A v1 frame is enough to lock the layout.
+    packet = bytes((0xFE,)) + header + payload + b'\x00\x00'
+    parsed = parse_frames(packet)
+    assert parsed[0].name == 'EKF2_EV_CTRL'
+    assert parsed[0].value == 11.0
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.bind(('127.0.0.1', 0))
+    port = server.getsockname()[1]
+    stop = threading.Event()
+
+    def serve():
+        while not stop.is_set():
+            server.settimeout(0.2)
+            try:
+                _data, addr = server.recvfrom(2048)
+            except socket.timeout:
+                continue
+            server.sendto(packet, addr)
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        values = read_params(['EKF2_EV_CTRL'], host='127.0.0.1', port=port, attempts=2, recv_timeout=0.5)
+    finally:
+        stop.set()
+        thread.join(timeout=1.0)
+        server.close()
+    assert values['EKF2_EV_CTRL'] == 11.0
+    assert param_request_read('EKF2_EV_CTRL', 0).startswith(bytes((0xFD,)))
+
+
+def test_vision_timeout_default_covers_three_cpu_frames():
+    text = (
+        __import__('pathlib').Path(__file__).resolve().parents[1] / 'config' / 'px4_control.yaml'
+    ).read_text(encoding='utf-8')
+    line = next(item for item in text.splitlines() if item.strip().startswith('vision_timeout_s:'))
+    value = float(line.split(':', 1)[1])
+    assert value >= 0.3

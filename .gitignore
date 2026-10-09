@@ -7,5 +7,10 @@ logs/*
 !logs/health/.gitkeep
 !logs/flights/
 !logs/flights/.gitkeep
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
 __pycache__/
+**/__pycache__/
 *.pyc
+**/.pytest_cache/
