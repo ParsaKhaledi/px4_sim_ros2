@@ -1,4 +1,5 @@
 #!/bin/bash
+# Standalone stereo RTAB-Map helper. Prefer gz_start_rtabmap.sh from compose.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -12,6 +13,8 @@ case "${RTABMAPVIZ}" in
   true|TRUE|True|1|yes|YES) RTABMAPVIZ=true ;;
   *) RTABMAPVIZ=false ;;
 esac
+
+USE_SIM_TIME="${USE_SIM_TIME:-true}"
 
 # Right camera_info from Gazebo has Tx = 0 unless <projection><tx> is honored.
 # The relay publishes P[3] = -fx * 0.075 either way, and it keeps header.stamp.
@@ -40,6 +43,7 @@ ros2 launch rtabmap_launch rtabmap.launch.py \
      left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
      right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
      imu_topic:=/imu  frame_id:=base_link  \
+     map_frame_id:=map vo_frame_id:=odom \
      approx_sync:=false  wait_imu_to_init:=true  \
-     use_sim_time:=true \
+     use_sim_time:=${USE_SIM_TIME} \
      qos:=2  rtabmap_viz:=${RTABMAPVIZ}  rviz:=false

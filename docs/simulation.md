@@ -15,6 +15,8 @@ Gazebo Harmonic (gz) runs inside the PX4 container. Worlds and models under `inc
 
 The static TF `world` -> `spawn` is the spawn pose, so a pose can be expressed relative to the takeoff point by transforming through `spawn`.
 
+Nav2 / RTAB-Map TF contracts (including spawn yaw vs map, and why GT uses `base_link_gt`) are in [tf_requirements.md](tf_requirements.md).
+
 ## Headless Gazebo
 
 `HEADLESS=0` (the default) starts the gz server and the gz GUI. The GUI needs `DISPLAY` and `xhost`.
@@ -83,7 +85,7 @@ The check fails if any world under `includes/gz/worlds/` still contains `fuel.ga
 
 ## Obstacle limits
 
-Wall keep-out and near-wall slowdown come from **SLAM occupancy → Nav2** only (RTAB-Map map / obstacle cloud → costmap inflation → planner and DWB). There is no wall JSON prior under `includes/gz/walls/`, and `px4_control` does not load or apply an offboard geofence substitute. See [nav2_obstacle_limits.md](nav2_obstacle_limits.md).
+Wall keep-out and near-wall slowdown are owned by **Nav2** from RTAB-Map occupancy (inflation + DWB `BaseObstacle`). The offboard JSON wall geofence and `includes/gz/walls/*.json` exporter are removed from this tip. See [nav2_obstacle_limits.md](nav2_obstacle_limits.md) and [tf_requirements.md](tf_requirements.md).
 
 ## trajectory_eval
 

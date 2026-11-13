@@ -1,4 +1,8 @@
 #!/bin/bash
+# RTAB-Map entry used by compose (CameraType=rgbd|stereo).
+# frame_id must be base_link (Nav2 robot_base_frame + URDF root).
+# use_sim_time must match the bridge /clock and Nav2 (USE_SIM_TIME).
+# map_frame_id / vo_frame_id must match Nav2 global_frame / local odom (see docs/tf_requirements.md).
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -11,6 +15,7 @@ case "${RTABMAPVIZ}" in
   *) RTABMAPVIZ=false ;;
 esac
 
+USE_SIM_TIME="${USE_SIM_TIME:-true}"
 export CamerType=$1
 if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
      echo "Run Rtabmap with $CamerType camera"
@@ -34,8 +39,9 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
           left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
           right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
           imu_topic:=/imu  frame_id:=base_link  \
+          map_frame_id:=map vo_frame_id:=odom \
           approx_sync:=false  wait_imu_to_init:=true  \
-          use_sim_time:=true \
+          use_sim_time:=${USE_SIM_TIME} \
           qos:=2  rtabmap_viz:=${RTABMAPVIZ}  rviz:=false
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      echo "Run Rtabmap with $CamerType camera"
@@ -53,7 +59,8 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           odom_args:="${RTAB_ODOM}" \
           rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \
           imu_topic:=/imu  frame_id:=base_link  approx_sync:=true  wait_imu_to_init:=true  \
-          use_sim_time:=true  qos:=2    rtabmap_viz:=${RTABMAPVIZ}     rviz:=false   subscribe_rgbd:=false
+          map_frame_id:=map vo_frame_id:=odom \
+          use_sim_time:=${USE_SIM_TIME}  qos:=2    rtabmap_viz:=${RTABMAPVIZ}     rviz:=false   subscribe_rgbd:=false
 else
     echo "Invalid CameraType"
     exit 1

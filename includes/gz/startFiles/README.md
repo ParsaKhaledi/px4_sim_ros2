@@ -12,6 +12,10 @@ Shell scripts the PX4 container runs. This page covers the headless server, the 
 | `gz_start_sim_helpers.sh` | Real-time factor, spawn TF, preflight, optional IMU relay |
 | `start_nav2.sh` | Nav2 with sim time |
 | `start_nav2_rviz.sh` | Nav2 RViz with sim time |
+| `gz_start_rtabmap.sh` | Compose RTAB-Map (`frame_id:=base_link`, sim time) |
+| `gz_start_rtabmap_rgbd.sh` / `_stereo.sh` | Standalone RTAB-Map helpers (same frame rules) |
+
+TF rules for spawn / GT / SLAM / Nav2: [docs/tf_requirements.md](../../../docs/tf_requirements.md).
 
 `includes/gz/bin/gz` is the wrapper PX4's `gz` calls go through. With `HEADLESS=1` and the EGL backend it adds `--headless-rendering` so cameras still render. GUI launches are unchanged. `REAL_GZ` is the real binary (default `/usr/bin/gz`).
 
@@ -47,8 +51,8 @@ python3 -m pytest includes/gz/scripts/test_gz_resolve_dir.py
 | `PX4_GZ_MODEL_POSE` | `-3,-1.6,0.15,0,0,3.14` | Spawn pose passed to PX4. z is drop clearance |
 | `SIM_ORIGIN_LAT`, `SIM_ORIGIN_LON`, `SIM_ORIGIN_ALT` | Amirkabir, 1205 m | See [scripts/README.md](../scripts/README.md) |
 | `SIM_GZ_DIR` | unset | Override for `GZ_DIR` |
-| `IMU_SOURCE` | `oak` | Bridges gz `/imu` from the camera. This is the only `/imu` publisher |
-| `USE_SIM_TIME` | `true` | Bridge, Nav2, and Nav2 RViz follow `/clock` |
+| `IMU_SOURCE` | `oak` | `oak` bridges gz `/imu`. `px4` starts `px4_imu_relay` and does not bridge it |
+| `USE_SIM_TIME` | `true` | Bridge, Nav2, Nav2 RViz, and RTAB-Map follow `/clock` |
 | `World` argument | `default` | Non-default sets `PX4_GZ_WORLD` |
 
 `HEADLESS=1` still renders cameras. The floor for `/sim/preflight_check` drops to 0.15 when `HEADLESS_SOFTWARE=1`.

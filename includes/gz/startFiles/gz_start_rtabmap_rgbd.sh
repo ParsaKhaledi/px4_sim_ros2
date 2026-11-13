@@ -1,4 +1,5 @@
 #!/bin/bash
+# Standalone RGB-D RTAB-Map helper. Prefer gz_start_rtabmap.sh from compose.
 
 USER_NAME=px4
 HOME=/home/${USER_NAME}
@@ -11,6 +12,8 @@ case "${RTABMAPVIZ}" in
   true|TRUE|True|1|yes|YES) RTABMAPVIZ=true ;;
   *) RTABMAPVIZ=false ;;
 esac
+
+USE_SIM_TIME="${USE_SIM_TIME:-true}"
 
 # Color (IMX378) and depth (rgb_aligned_depth) are separate sensors, so exact
 # sync is not used here. rtabmap_viz is the ROS 2 launch argument.
@@ -27,4 +30,5 @@ ros2 launch rtabmap_launch rtabmap.launch.py   \
      odom_args:="${RTAB_ODOM}" \
      rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info \
      imu_topic:=/imu  frame_id:=base_link  approx_sync:=true  wait_imu_to_init:=true  \
-     use_sim_time:=true qos:=2 rtabmap_viz:=${RTABMAPVIZ} rviz:=false subscribe_rgbd:=false
+     map_frame_id:=map vo_frame_id:=odom \
+     use_sim_time:=${USE_SIM_TIME} qos:=2 rtabmap_viz:=${RTABMAPVIZ} rviz:=false subscribe_rgbd:=false
