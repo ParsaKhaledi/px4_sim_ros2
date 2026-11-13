@@ -7,7 +7,7 @@ Launch-time patches and offline helpers for the Gazebo tree. `gz_start_px4_gz_si
 | Script | Role |
 |--------|------|
 | `sim_origin.py` | World origin from the spawn geographic coordinate |
-| `patch_x500_ground_truth.py` | Ground-truth odometry plugin on x500 models |
+| `patch_x500_ground_truth.py` | Updates the stable repo `models/x500_depth` GT plugin (not a SITL start patch) |
 | `patch_x500_lidar_down.py` | Single-ray downward lidar on x500_depth |
 | `patch_x500_sensor_systems.py` | IMU, air pressure, magnetometer, and NavSat once on x500_base |
 | `wall_geometry.py` | Write [walls/](../walls/README.md) |
@@ -23,7 +23,9 @@ python3 includes/gz/scripts/wall_geometry.py
 python3 includes/gz/scripts/fuel_assets.py
 ```
 
-The patch scripts edit PX4's model files when those paths exist (`~/PX4-Autopilot` or `/home/px4/PX4-Autopilot`). On a machine without that tree they print a warning and exit 0, except the sensor-system script, which exits 1 when the launched world file is missing.
+`patch_x500_ground_truth.py` only rewrites `includes/gz/models/x500_depth/model.sdf`. Run it after you change the stock layout; SITL does not call it. `gz_modifications.bash` copies that folder into the PX4 model tree at container start.
+
+The lidar and sensor-system patch scripts still edit PX4's model files when those paths exist (`~/PX4-Autopilot` or `/home/px4/PX4-Autopilot`). On a machine without that tree they print a warning and exit 0, except the sensor-system script, which exits 1 when the launched world file is missing.
 
 ## Test
 
@@ -49,13 +51,19 @@ python3 -m pytest includes/gz/scripts
 
 ## Topics
 
-The ground-truth plugin publishes gz `/ground_truth/odom` at 50 Hz and the pose with covariance on `/ground_truth/odom_with_covariance`. The covariance topic is set on purpose. The plugin default is `/model/<model>/odometry_with_covariance`, and PX4's GZBridge feeds that topic to EKF2 as external vision.
+The ground-truth plugin is baked into `includes/gz/models/x500_depth/model.sdf`. It publishes gz `/ground_truth/odom` at 50 Hz and the pose with covariance on `/ground_truth/odom_with_covariance`. The covariance topic is set on purpose. The plugin default is `/model/<model>/odometry_with_covariance`, and PX4's GZBridge feeds that topic to EKF2 as external vision.
+
+```bash
+python3 includes/gz/scripts/patch_x500_ground_truth.py              # refresh repo model
+python3 includes/gz/scripts/patch_x500_ground_truth.py --reset-stock # rebuild from stock + plugin
+```
 
 The lidar names (`lidar_sensor_link`, sensor `lidar`) are what GZBridge subscribes to. The patch does not publish a ROS topic itself.
 
 ## Outputs
 
 * `sim_origin.py` rewrites `<spherical_coordinates>` on the copies PX4 loads, including `default.sdf`. The worlds committed in this repo are left as they are.
-* The patch scripts rewrite `model.sdf` in the PX4 tree. A second run is a no-op when the block is already correct.
+* `patch_x500_ground_truth.py` rewrites only the repo `models/x500_depth/model.sdf`. A second run is a no-op when the plugin is already correct.
+* The lidar and sensor-system patch scripts rewrite `model.sdf` in the PX4 tree. A second run is a no-op when the block is already correct.
 * `wall_geometry.py` writes `includes/gz/walls/<world>.json`. The schema is in the [walls README](../walls/README.md).
 * `fuel_assets.py` fills `includes/gz/models/` and rewrites Fuel URIs to `model://`.

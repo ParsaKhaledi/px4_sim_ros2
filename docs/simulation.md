@@ -37,11 +37,25 @@ Nav2 (`navigation_launch.py` and `start_nav2.sh`), Nav2 RViz, the x500 `robot_st
 
 ## Ground truth and the spawn frame
 
-`patch_x500_ground_truth.py` adds a Gazebo `OdometryPublisher` to `x500_depth` before SITL starts. The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`, and the pose with covariance on `/ground_truth/odom_with_covariance`. That covariance topic is set in the plugin. The default is `/model/<model_name>/odometry_with_covariance`, and PX4 v1.17 GZBridge subscribes to exactly that topic and feeds it to EKF2 as external vision, so the default would inject the true pose into the estimator. `config_gz_bridge_sim.yaml` bridges `/ground_truth/odom` to `nav_msgs/Odometry`. Preflight runs `gz topic -i` on `/model/<model>/odometry_with_covariance` (model name from `PX4_GZ_MODEL` or `PX4_SIM_MODEL` plus the instance, default `x500_depth_0`) and fails when that topic has a publisher. It reports SKIP when the `gz` CLI is absent.
+Ground truth is Gazebo’s true model pose, published on a ROS topic so you can score SLAM and EKF without feeding that truth into the estimator.
+
+The stable overlay `includes/gz/models/x500_depth/model.sdf` already contains a Gazebo `OdometryPublisher`. `gz_modifications.bash` copies it into the PX4 model tree at container start, so SITL does not run a Python patch for ground truth. Refresh the committed file when the stock layout changes:
+
+```bash
+python3 includes/gz/scripts/patch_x500_ground_truth.py
+```
+
+The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`, and the pose with covariance on `/ground_truth/odom_with_covariance`. That covariance topic is set in the plugin. The default is `/model/<model_name>/odometry_with_covariance`, and PX4 v1.17 GZBridge subscribes to exactly that topic and feeds it to EKF2 as external vision, so the default would inject the true pose into the estimator. `config_gz_bridge_sim.yaml` bridges `/ground_truth/odom` to `nav_msgs/Odometry`. Preflight runs `gz topic -i` on `/model/<model>/odometry_with_covariance` (model name from `PX4_GZ_MODEL` or `PX4_SIM_MODEL` plus the instance, default `x500_depth_0`) and fails when that topic has a publisher. It reports SKIP when the `gz` CLI is absent.
 
 * `header.frame_id`: `world` (ENU)
 * `child_frame_id`: `base_link_gt` (`GT_CHILD_FRAME`)
 * stamp: Gazebo sim time
+
+| TF / topic | Meaning |
+|------------|---------|
+| `world` → `spawn` | Static takeoff frame on the floor (x, y, yaw from `PX4_GZ_MODEL_POSE`; z = 0) |
+| `world` → `base_link_gt` | Moving ground-truth pose from `/ground_truth/odom` |
+| `/ground_truth/odom` | True Gazebo pose (`nav_msgs/Odometry`) |
 
 `PX4_GZ_MODEL_POSE` (default `-3,-1.6,0.15,0,0,3.14`, x,y,z,roll,pitch,yaw in radians) is the spawn pose. `sim_monitor.spawn_frame` publishes static TF `world` -> `spawn` from that x, y, and yaw with z = 0, so the frame sits on the ground under the drone and takeoff heights relative to `spawn` are heights above the floor. It also publishes TF `world` -> `base_link_gt` from `/ground_truth/odom`. The child frame is not `base_link`. RTAB-Map publishes `odom` -> `base_link`, and a second parent splits the TF tree. `trajectory_eval` scores the pose inside the odometry message, so it does not depend on that child frame name.
 

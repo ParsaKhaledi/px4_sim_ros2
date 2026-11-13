@@ -11,6 +11,8 @@ from patch_x500_ground_truth import (
     candidate_models,
     covariance_topic_problems,
     patch_text,
+    repo_x500_depth_sdf,
+    update_repo_model,
     watched_model_sdfs,
 )
 
@@ -106,4 +108,16 @@ def test_candidate_model_paths_are_unique(monkeypatch):
     )
     monkeypatch.setenv("PX4_GZ_MODELS", "/home/px4/PX4-Autopilot/Tools/simulation/gz/models")
     resolved = [path.resolve() for path in candidate_models()]
-    assert len(resolved) == 1
+    assert len(resolved) == len(set(resolved))
+    assert resolved[0] == repo_x500_depth_sdf().resolve()
+
+
+def test_repo_x500_depth_has_safe_ground_truth_plugin():
+    path = repo_x500_depth_sdf()
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "OdometryPublisher" in text
+    assert "/ground_truth/odom" in text
+    assert "base_link_gt" in text
+    assert covariance_topic_problems(text) == []
+    assert update_repo_model() is False
