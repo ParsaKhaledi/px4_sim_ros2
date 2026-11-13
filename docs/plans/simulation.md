@@ -20,7 +20,6 @@ Indoor flight in `apt_world`. Nav2 closed loop is the product. This branch provi
 ## What stays
 
 - Worlds: `apt_world` and PX4 `default`.
-- Wall map: `includes/gz/walls/apt_world.json` only.
 - One camera: OAK-D S2, cpu profile only.
 - The Gazebo magnetometer world plugin, so PX4 sees a compass. It is not a line in `sim.params`.
 - One `/imu` publisher for the whole stack (the camera IMU, today's default). RTAB-Map subscribes to it.
@@ -34,7 +33,7 @@ This branch adds 191 files and about 275k lines, mostly assets. Those assets com
 
 - Worlds `sonoma_raceway`, `husarion_office`, `husarion_world`, and `empty_with_plugins`.
 - Mop-cart (`mopcart2`, `mopcart3`) and the other extra meshes (tables, chairs, fridge, sink, toilet, shelves, cabinets, bins). `apt_world` keeps its apartment mesh.
-- Generated wall JSON other than `apt_world.json`.
+- All wall JSON under `includes/gz/walls/` and the `wall_geometry.py` exporter (obstacle limits are SLAM → Nav2 only).
 - The classic `.pyc` files this branch added under `includes/gazebo_classic`. The base plan removes `includes/gazebo_classic`; this plan does not carry classic assets.
 - The committed `.env`.
 
@@ -48,7 +47,7 @@ Also cut: the mission benchmark, the demo GIF, the long cleanup-PR series, and a
 
 ## Next, in order
 
-1. Delete the extra worlds, meshes, other wall JSON, classic `.pyc` files, and `.env`.
+1. Delete the extra worlds, meshes, wall JSON / `wall_geometry.py`, classic `.pyc` files, and `.env`.
 2. Take the OAK-D S2 and the cpu profile from `feature/oakd-s2-vision` and `feature/vision-profiles`.
 3. Keep the single camera-IMU publisher on `/imu`. Load the magnetometer world plugin. Confirm ground truth is still off the PX4 vision topic.
 4. One cleanup that may keep the golden snapshots from `refactor/vision-golden-tests` and the hygiene fixes from `refactor/vision-hygiene`.
@@ -64,6 +63,6 @@ Merge order: `feature/devops-compose-health-ci`, then `feature/sim-headless-grou
 ## Done when
 
 - Headless `apt_world` runs with the OAK-D S2 cpu camera, RTAB-Map, `/clock`, one `/imu`, and `/ground_truth/odom` off EKF2. `default` still starts.
-- The extra worlds, extra meshes, other wall JSON, and `.env` are gone. `.env.example` remains.
+- The extra worlds, extra meshes, wall JSON / exporter, and `.env` are gone. `.env.example` remains. Obstacle limits are SLAM → Nav2.
 - `spawn.json` is written by `trajectory_eval record` and is not grown further.
 - This branch is rebased on `feature/devops-compose-health-ci` and ready for `feature/px4-control`.

@@ -6,7 +6,7 @@ Gazebo Harmonic (gz) runs inside the PX4 container. Worlds and models under `inc
 
 | Name | Axes | Used for |
 |------|------|----------|
-| ENU world | x east, y north, z up | Gazebo world, `/ground_truth/odom`, spawn TF, wall maps |
+| ENU world | x east, y north, z up | Gazebo world, `/ground_truth/odom`, spawn TF |
 | FLU body | x forward, y left, z up | ROS `base_link`, RTAB-Map odometry |
 | NED world | x north, y east, z down | PX4 local position (`vehicle_odometry.position`) |
 | FRD body | x forward, y right, z down | PX4 attitude (`vehicle_odometry.q`, body to NED) |
@@ -67,30 +67,9 @@ python3 includes/gz/scripts/check_offline_worlds.py
 
 The check fails if any world under `includes/gz/worlds/` still contains `fuel.gazebosim.org` or `fuel.ignitionrobotics.org`.
 
-## Wall maps
+## Obstacle limits
 
-`includes/gz/scripts/wall_geometry.py` slices each world's collision geometry with a horizontal plane at `z = 0.5 m` and writes `includes/gz/walls/<world>.json`.
-
-```json
-{
-  "world": "apt_world",
-  "frame": "world_enu",
-  "units": "m",
-  "slice_z_m": 0.5,
-  "segment_count": 0,
-  "segments": [
-    {"start": [0.0, 0.0], "end": [1.0, 0.0], "source": "model/link/collision", "kind": "box"}
-  ]
-}
-```
-
-`start` and `end` are `[x, y]` in the Gazebo ENU world, in metres. `kind` is `box`, `cylinder`, or `mesh`. Shapes shorter than 0.25 m (floors) are skipped. Segments shorter than 5 cm are dropped. `unresolved_uris` lists meshes that were not on disk. A control node can compute the distance from a point to the nearest segment.
-
-Regenerate with:
-
-```bash
-python3 includes/gz/scripts/wall_geometry.py
-```
+Wall keep-out and near-wall slowdown come from **SLAM occupancy → Nav2** only (RTAB-Map map / obstacle cloud → costmap inflation → planner and DWB). There is no wall JSON prior under `includes/gz/walls/`, and `px4_control` does not load or apply an offboard geofence substitute. See [nav2_obstacle_limits.md](nav2_obstacle_limits.md).
 
 ## trajectory_eval
 
