@@ -1,14 +1,19 @@
 #!/bin/bash
-# Write the sim-only PX4 parameter profile as PX4_PARAM_* assignments.
+# Write the sim-only PX4 parameter profile as PX4_PARAM_* assignments
+# and airframe .post scripts that survive the x500 set-default.
 #
 # PX4 v1.17 rcS applies every PX4_PARAM_<NAME> from the environment
 # before the airframe and before ekf2 start:
 #   ROMFS/px4fmu_common/init.d-posix/rcS
 # Appending "param set" to px4-rc.params does not work. That file is
-# not sourced. gz_start_px4_gz_sim.sh sources the file this writes.
+# not sourced. gz_start_px4_gz_sim.sh sources the env file this writes
+# before `make px4_sitl`.
 #
-# NAV_DLL_ACT=0 is sim-only. The x500 airframe default is 2, which
-# blocks arming when headless SITL has no QGroundControl.
+# NAV_DLL_ACT's compiled default is already 0, so the early PX4_PARAM_
+# set does not mark it configured. 4001_gz_x500 / 4002_gz_x500_depth
+# then run `param set-default NAV_DLL_ACT 2`. The .post file is sourced
+# after that airframe block and forces 0 so headless SITL can arm
+# without QGroundControl.
 #
 # Usage: install_px4_control_params <env-file> [vision|gps]
 #
@@ -29,6 +34,36 @@ _px4_control_number() {
     if (value < min + 0 || value > max + 0) { printf "%s must be in [%s, %s], got %s\n", name, min, max, raw > "/dev/stderr"; exit 1 }
     print value
   }'
+}
+
+# Force failsafes after the airframe. Keep this in sync with the env exports.
+_px4_control_write_failsafe_post() {
+  local post_file="$1"
+  cat > "$post_file" << 'EOF'
+# Written by install_px4_control_params.bash. Sourced after the airframe.
+# NAV_DLL_ACT must be set here: PX4_PARAM_ alone does not stick when the
+# firmware default is already 0 and the airframe set-default puts 2 back.
+param set NAV_DLL_ACT 0
+param set NAV_RCL_ACT 1
+EOF
+}
+
+_px4_control_install_airframe_posts() {
+  local px4_root="$1"
+  local written=0
+  local airframes
+  for airframes in \
+      "$px4_root/ROMFS/px4fmu_common/init.d-posix/airframes" \
+      "$px4_root/build/px4_sitl_default/etc/init.d-posix/airframes"
+  do
+    if [ ! -d "$airframes" ]; then
+      continue
+    fi
+    _px4_control_write_failsafe_post "$airframes/4001_gz_x500.post"
+    _px4_control_write_failsafe_post "$airframes/4002_gz_x500_depth.post"
+    written=1
+  done
+  return 0
 }
 
 install_px4_control_params() {
@@ -54,9 +89,10 @@ install_px4_control_params() {
   local tmp
   tmp="$(mktemp)"
   {
-    echo "# px4_control sim profile. Sourced by gz_start_px4_gz_sim.sh."
+    echo "# px4_control sim profile. Sourced by gz_start_px4_gz_sim.sh before make."
     echo "# mode=$mode"
     echo "# NAV_DLL_ACT=0 is sim-only so headless SITL can arm without QGroundControl."
+    echo "# Airframe .post (same installer) re-applies NAV_DLL_ACT after set-default."
     echo "export PX4_PARAM_COM_OF_LOSS_T=1.0"
     echo "export PX4_PARAM_COM_OBL_RC_ACT=4"
     echo "export PX4_PARAM_COM_RC_LOSS_T=35.0"
@@ -70,6 +106,7 @@ install_px4_control_params() {
       echo "export PX4_PARAM_EKF2_GPS_P_NOISE=0.5"
       echo "export PX4_PARAM_EKF2_GPS_V_NOISE=0.3"
     else
+      # Vision: EV horizontal + yaw (9), baro height (0), GNSS fusion off (0).
       echo "export PX4_PARAM_EKF2_EV_CTRL=${ev_ctrl}"
       echo "export PX4_PARAM_EKF2_MAG_TYPE=5"
       echo "export PX4_PARAM_EKF2_HGT_REF=0"
@@ -83,6 +120,11 @@ install_px4_control_params() {
     fi
   } > "$tmp"
   mv "$tmp" "$env_file"
+
+  # Derive PX4-Autopilot root from the env file path when possible.
+  local px4_root
+  px4_root="$(cd "$dir" && pwd)"
+  _px4_control_install_airframe_posts "$px4_root"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

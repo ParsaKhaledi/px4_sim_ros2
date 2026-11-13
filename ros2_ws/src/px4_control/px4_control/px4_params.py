@@ -7,6 +7,8 @@ does nothing: v1.17 never sources that file.
 
 ``NAV_DLL_ACT`` is 0 only in this sim profile. The x500 airframe default
 is 2, which refuses to arm when no QGroundControl heartbeat is present.
+``install_px4_control_params.bash`` exports ``PX4_PARAM_NAV_DLL_ACT=0`` and
+writes an airframe ``.post`` that re-applies it after ``set-default``.
 """
 
 from __future__ import annotations

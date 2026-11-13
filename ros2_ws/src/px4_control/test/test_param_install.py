@@ -52,6 +52,20 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert 'EKF2_HGT_REF=0' not in gps
 
 
+def test_installer_writes_airframe_post_for_nav_dll(tmp_path):
+    """NAV_DLL_ACT must be re-applied after the airframe set-default."""
+    px4_root = tmp_path / 'PX4-Autopilot'
+    airframes = px4_root / 'ROMFS' / 'px4fmu_common' / 'init.d-posix' / 'airframes'
+    airframes.mkdir(parents=True)
+    env_file = px4_root / 'px4_control_params.env'
+    _install(env_file, 'vision')
+    for name in ('4001_gz_x500.post', '4002_gz_x500_depth.post'):
+        post = (airframes / name).read_text(encoding='utf-8')
+        assert 'param set NAV_DLL_ACT 0' in post
+        assert 'param set NAV_RCL_ACT 1' in post
+
+
+
 def test_vision_delay_and_ctrl_come_from_the_environment(tmp_path, monkeypatch):
     env_file = tmp_path / 'px4_control_params.env'
     monkeypatch.setenv('EKF2_EV_DELAY', '80')
@@ -68,4 +82,8 @@ def test_start_script_sources_the_env_file():
     script = Path(__file__).resolve().parents[4] / 'includes' / 'gz' / 'startFiles' / 'gz_start_px4_gz_sim.sh'
     text = script.read_text(encoding='utf-8')
     assert 'px4_control_params.env' in text
-    assert 'PX4_PARAM_' not in text or '. "${PARAM_ENV}"' in text
+    assert '. "${PARAM_ENV}"' in text
+    assert 'install_px4_control_params' in text
+    # Env must be sourced before make so PX4_PARAM_* is in the process.
+    assert text.index('install_px4_control_params') < text.index('make px4_sitl')
+    assert text.index('. "${PARAM_ENV}"') < text.index('make px4_sitl')
