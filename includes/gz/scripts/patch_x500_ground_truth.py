@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""Keep the stable repo ``x500_depth`` model’s ground-truth plugin up to date.
+"""Ground-truth OdometryPublisher for PX4 Gazebo x500 airframes.
 
-The committed model is ``includes/gz/models/x500_depth/model.sdf``. It already
-contains ``OdometryPublisher`` so SITL start does not patch PX4 at runtime.
-``gz_modifications.bash`` copies that folder into the PX4 model tree.
+Two jobs:
 
-Run this script when you change the stock layout or the plugin block. It
-rewrites only the repo model. It does not edit ``~/PX4-Autopilot`` at start.
+1. **Runtime (default).** Flight CI sets ``PX4_GZ_MODEL=x500``. The camera
+   airframe is ``x500_depth``. At SITL start this script inserts the plugin
+   into whichever of those models exist in the PX4 tree, so
+   ``/ground_truth/odom`` is published by the model that actually loads. A
+   bridge entry alone advertises the ROS topic and the health check then
+   sees 0 Hz.
+
+2. **Repo bake (``--repo``).** Rewrites only
+   ``includes/gz/models/x500_depth/model.sdf``. ``gz_modifications.bash``
+   copies that overlay into PX4, so camera flights already have the plugin
+   before this script runs (idempotent no-op).
 
 The plugin publishes the model’s true world pose (Gazebo ENU, Z up) on
 ``/ground_truth/odom`` at 50 Hz, and the same pose with covariance on
@@ -75,22 +82,7 @@ def repo_x500_depth_sdf() -> Path:
     return repo_models_root() / "x500_depth" / "model.sdf"
 
 
-def candidate_models() -> list[Path]:
-    """Return the repo ``x500_depth`` path first, then optional PX4 lookups.
-
-    Tests still call this name. Runtime generation targets the repo path only.
-    """
-    raw: list[Path] = [repo_x500_depth_sdf()]
-    env_models = os.environ.get("PX4_GZ_MODELS", "")
-    if env_models:
-        raw.append(Path(env_models) / "x500_depth" / "model.sdf")
-    home = Path.home()
-    raw.append(
-        home / "PX4-Autopilot" / "Tools" / "simulation" / "gz" / "models" / "x500_depth" / "model.sdf"
-    )
-    raw.append(
-        Path("/home/px4/PX4-Autopilot/Tools/simulation/gz/models/x500_depth/model.sdf")
-    )
+def _unique_paths(raw: list[Path]) -> list[Path]:
     found: list[Path] = []
     seen: set[Path] = set()
     for path in raw:
@@ -103,6 +95,67 @@ def candidate_models() -> list[Path]:
         seen.add(key)
         found.append(path)
     return found
+
+
+def model_sdf_candidates(model_name: str) -> list[Path]:
+    """Return ``model.sdf`` paths for one PX4 gz airframe."""
+    raw: list[Path] = []
+    env_models = os.environ.get("PX4_GZ_MODELS", "")
+    if env_models:
+        raw.append(Path(env_models) / model_name / "model.sdf")
+    home = Path.home()
+    raw.append(
+        home / "PX4-Autopilot" / "Tools" / "simulation" / "gz" / "models" / model_name / "model.sdf"
+    )
+    raw.append(
+        Path("/home/px4/PX4-Autopilot/Tools/simulation/gz/models") / model_name / "model.sdf"
+    )
+    return _unique_paths(raw)
+
+
+def airframe_name(environ: dict[str, str] | None = None) -> str:
+    """Model directory PX4 will spawn. ``gz_`` and a trailing instance are stripped."""
+    env = os.environ if environ is None else environ
+    raw = env.get("PX4_GZ_MODEL", "").strip()
+    if not raw:
+        raw = env.get("PX4_SIM_MODEL", "").strip()
+        if raw.startswith("gz_"):
+            raw = raw[3:]
+    if re.fullmatch(r".+_\d+", raw):
+        raw = raw.rsplit("_", 1)[0]
+    return raw
+
+
+def ground_truth_model_names(environ: dict[str, str] | None = None) -> list[str]:
+    """Camera airframe plus the airframe this process will spawn.
+
+    ``x500_depth`` stays in the list so a camera flight still gets the
+    plugin when ``PX4_GZ_MODEL`` is unset. Flight CI sets ``x500``.
+    """
+    names = ["x500_depth"]
+    selected = airframe_name(environ)
+    if selected and selected not in names:
+        names.append(selected)
+    return names
+
+
+def candidate_models() -> list[Path]:
+    """Return the repo ``x500_depth`` path first, then optional PX4 lookups.
+
+    Tests still call this name. Runtime generation targets the spawned
+    airframes via ``ground_truth_models``.
+    """
+    raw: list[Path] = [repo_x500_depth_sdf()]
+    raw.extend(model_sdf_candidates("x500_depth"))
+    return _unique_paths(raw)
+
+
+def ground_truth_models(environ: dict[str, str] | None = None) -> list[Path]:
+    """model.sdf paths that should carry the ground-truth plugin at SITL start."""
+    raw: list[Path] = []
+    for name in ground_truth_model_names(environ):
+        raw.extend(model_sdf_candidates(name))
+    return _unique_paths(raw)
 
 
 def _plugin_blocks(model_xml: str) -> list[tuple[int, int]]:
@@ -267,30 +320,54 @@ def update_repo_model(*, source: Path | None = None, reset_stock: bool = False) 
     return True
 
 
+def patch_runtime_models() -> int:
+    """Patch the spawned airframe and x500_depth in the PX4 tree. Missing files are skipped."""
+    names = ", ".join(ground_truth_model_names())
+    patched = False
+    for path in ground_truth_models():
+        if path.is_file():
+            patch_file(path)
+            patched = True
+    if not patched:
+        print(
+            f"model.sdf not found for {names}; ground-truth plugin was not applied. "
+            "This is expected outside the PX4 SITL container.",
+            file=sys.stderr,
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Update ``includes/gz/models/x500_depth/model.sdf`` only."""
+    """Runtime-patch PX4 models by default; ``--repo`` refreshes the baked overlay."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo",
+        action="store_true",
+        help="Rewrite includes/gz/models/x500_depth/model.sdf only (no PX4 tree edit)",
+    )
     parser.add_argument(
         "--from",
         dest="source",
         type=Path,
-        help="Stock model.sdf to start from (default: current repo file or built-in stock)",
+        help="Stock model.sdf to start from when using --repo",
     )
     parser.add_argument(
         "--reset-stock",
         action="store_true",
-        help="Rebuild from the built-in stock x500_depth layout (plus the GT plugin)",
+        help="With --repo, rebuild from the built-in stock x500_depth layout",
     )
     args = parser.parse_args(argv)
-    if args.source is not None and not args.source.is_file():
-        print(f"source model not found: {args.source}", file=sys.stderr)
-        return 1
-    update_repo_model(source=args.source, reset_stock=args.reset_stock)
-    problems = covariance_topic_problems(repo_x500_depth_sdf().read_text(encoding="utf-8"))
-    if problems:
-        print("covariance topic problems:", *problems, sep="\n  ", file=sys.stderr)
-        return 1
-    return 0
+    if args.repo or args.source is not None or args.reset_stock:
+        if args.source is not None and not args.source.is_file():
+            print(f"source model not found: {args.source}", file=sys.stderr)
+            return 1
+        update_repo_model(source=args.source, reset_stock=args.reset_stock)
+        problems = covariance_topic_problems(repo_x500_depth_sdf().read_text(encoding="utf-8"))
+        if problems:
+            print("covariance topic problems:", *problems, sep="\n  ", file=sys.stderr)
+            return 1
+        return 0
+    return patch_runtime_models()
 
 
 if __name__ == "__main__":

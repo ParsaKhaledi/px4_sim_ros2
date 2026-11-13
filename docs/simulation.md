@@ -41,10 +41,10 @@ Nav2 (`navigation_launch.py` and `start_nav2.sh`), Nav2 RViz, the x500 `robot_st
 
 Ground truth is Gazebo’s true model pose, published on a ROS topic so you can score SLAM and EKF without feeding that truth into the estimator.
 
-The stable overlay `includes/gz/models/x500_depth/model.sdf` already contains a Gazebo `OdometryPublisher`. `gz_modifications.bash` copies it into the PX4 model tree at container start, so SITL does not run a Python patch for ground truth. Refresh the committed file when the stock layout changes:
+The stable overlay `includes/gz/models/x500_depth/model.sdf` already contains a Gazebo `OdometryPublisher`. `gz_modifications.bash` copies it into the PX4 model tree at container start. Flight CI sets `PX4_GZ_MODEL=x500`, which is not that overlay, so `gz_start_px4_gz_sim.sh` also runs `patch_x500_ground_truth.py` against the PX4 tree for the spawned airframe (and `x500_depth`). Without that step the ros_gz bridge still advertises `/ground_truth/odom` and the health check fails at 0 Hz. Refresh the committed overlay when the stock layout changes:
 
 ```bash
-python3 includes/gz/scripts/patch_x500_ground_truth.py
+python3 includes/gz/scripts/patch_x500_ground_truth.py --repo
 ```
 
 The plugin publishes the true model pose at 50 Hz on gz topic `/ground_truth/odom`, and the pose with covariance on `/ground_truth/odom_with_covariance`. That covariance topic is set in the plugin. The default is `/model/<model_name>/odometry_with_covariance`, and PX4 v1.17 GZBridge subscribes to exactly that topic and feeds it to EKF2 as external vision, so the default would inject the true pose into the estimator. `config_gz_bridge_sim.yaml` bridges `/ground_truth/odom` to `nav_msgs/Odometry`. Preflight runs `gz topic -i` on `/model/<model>/odometry_with_covariance` (model name from `PX4_GZ_MODEL` or `PX4_SIM_MODEL` plus the instance, default `x500_depth_0`) and fails when that topic has a publisher. It reports SKIP when the `gz` CLI is absent.

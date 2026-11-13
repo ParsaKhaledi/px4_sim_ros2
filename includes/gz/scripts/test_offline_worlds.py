@@ -10,6 +10,9 @@ from patch_x500_ground_truth import (
     COVARIANCE_TOPIC,
     candidate_models,
     covariance_topic_problems,
+    ground_truth_model_names,
+    ground_truth_models,
+    main as patch_ground_truth_main,
     patch_text,
     repo_x500_depth_sdf,
     update_repo_model,
@@ -120,4 +123,42 @@ def test_repo_x500_depth_has_safe_ground_truth_plugin():
     assert "/ground_truth/odom" in text
     assert "base_link_gt" in text
     assert covariance_topic_problems(text) == []
+    assert update_repo_model() is False
+
+
+def test_ground_truth_targets_include_spawned_x500(monkeypatch):
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500")
+    assert ground_truth_model_names() == ["x500_depth", "x500"]
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500_depth_0")
+    assert ground_truth_model_names() == ["x500_depth"]
+    monkeypatch.delenv("PX4_GZ_MODEL", raising=False)
+    monkeypatch.setenv("PX4_SIM_MODEL", "gz_x500")
+    assert ground_truth_model_names() == ["x500_depth", "x500"]
+
+
+def test_main_patches_spawned_x500(tmp_path, monkeypatch):
+    models = tmp_path / "models"
+    for name in ("x500", "x500_depth"):
+        path = models / name / "model.sdf"
+        path.parent.mkdir(parents=True)
+        path.write_text(f"<sdf><model name='{name}'>\n</model></sdf>\n", encoding="utf-8")
+    monkeypatch.setenv("PX4_GZ_MODELS", str(models))
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500")
+    monkeypatch.setattr(
+        "patch_x500_ground_truth.Path.home",
+        staticmethod(lambda: tmp_path / "missing-home"),
+    )
+    assert patch_ground_truth_main([]) == 0
+    plain = (models / "x500" / "model.sdf").read_text(encoding="utf-8")
+    depth = (models / "x500_depth" / "model.sdf").read_text(encoding="utf-8")
+    assert "OdometryPublisher" in plain
+    assert "/ground_truth/odom" in plain
+    assert "OdometryPublisher" in depth
+    names = {path.parent.name for path in ground_truth_models()}
+    assert "x500" in names
+    assert "x500_depth" in names
+
+
+def test_repo_flag_updates_baked_overlay_only(monkeypatch):
+    assert patch_ground_truth_main(["--repo"]) == 0
     assert update_repo_model() is False
