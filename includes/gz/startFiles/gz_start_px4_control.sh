@@ -26,10 +26,12 @@ fi
 export ESTIMATION_MODE="${ESTIMATION_MODE:-vision}"
 export PX4_MAX_YAW_RATE_DEG_S="${PX4_MAX_YAW_RATE_DEG_S:-30}"
 
-WORLD_NAME="${World:-default}"
-WALLS="${HOME_DIR}/volume/includes/gz/worlds/walls/${WORLD_NAME}.txt"
-if [ -f "${WALLS}" ]; then
-  export PX4_WALL_SEGMENTS_FILE="${WALLS}"
+# Wall geofence is optional/off by default. Prefer SLAM occupancy → Nav2 for
+# keep-out and near-obstacle slowdown. Pass PX4_WALL_SEGMENTS_FILE only when
+# you intentionally want the sim-prior JSON/text loader.
+if [ -n "${PX4_WALL_SEGMENTS_FILE:-}" ] && [ ! -f "${PX4_WALL_SEGMENTS_FILE}" ]; then
+  echo "PX4_WALL_SEGMENTS_FILE=${PX4_WALL_SEGMENTS_FILE} not found; leaving wall_segments_file empty" >&2
+  unset PX4_WALL_SEGMENTS_FILE
 fi
 
 exec ros2 launch px4_control px4_control.launch.py \

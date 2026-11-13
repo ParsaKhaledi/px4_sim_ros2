@@ -48,7 +48,7 @@ Topic names are in `ros2_ws/src/px4_control/config/topics.yaml`, checked against
 | publish | `/fmu/in/offboard_control_mode`, `/fmu/in/trajectory_setpoint`, `/fmu/in/vehicle_command` |
 | publish (vision mode) | `/fmu/in/vehicle_visual_odometry` |
 | subscribe | `/fmu/out/vehicle_status_v1` (and the base name), `/fmu/out/vehicle_odometry`, `/fmu/out/failsafe_flags`, `/fmu/out/vehicle_land_detected`, `/fmu/out/vehicle_command_ack` |
-| subscribe | `/cmd_vel`, `/rtabmap/odom` (both configurable) |
+| subscribe | `/cmd_vel` (`geometry_msgs/TwistStamped`), `/rtabmap/odom` (both configurable) |
 | publish | `/px4_control/state` (`VehicleState`), `/px4_control/odom` (`nav_msgs/Odometry`, frame `odom`, child `base_link`, twist body FLU) |
 | service | `/px4_control/arm`, `/px4_control/set_mode` |
 | action | `/px4_control/takeoff`, `/px4_control/land`, `/px4_control/goto`, `/px4_control/hold` |
@@ -113,7 +113,7 @@ A null pose or a 9999 covariance is never forwarded to `/fmu/in/vehicle_visual_o
 
 The bridge keeps the odometry header stamp and copies it, in microseconds, onto `VehicleOdometry.timestamp` and `timestamp_sample`. It does not re-stamp the last pose and it does not read the wall clock. `reset_counter` increments only when `/rtabmap/odom_info` reports a new map or a reset: a sample that is not lost and whose covariance is 9999, which is how RTAB-Map asks the mapper to start a new map after `Odom/ResetCountdown`. A pose jump does not bump the counter.
 
-While vision is lost or the stream is stale the setpoint brakes to a stop, latches position, and takes yaw rate to zero. It does not yaw in place. `/cmd_vel` is ignored until the next valid sample. Takeoff and land keep climbing or descending and only freeze the yaw command. A `GoTo` or `Hold` that was running is aborted with `vision tracking lost`. After recovery the vehicle stays on that hold until a new command. The EKF re-anchors only when the reset counter was bumped by a new map.
+While vision is lost or the stream is stale the setpoint brakes to a stop, then lands (including during takeoff). Yaw rate goes to zero. It does not yaw in place. `/cmd_vel` is ignored until the next valid sample. An in-progress land keeps descending and only freezes the yaw command. A `Takeoff`, `GoTo`, or `Hold` that was running is aborted with `vision tracking lost`. After recovery the vehicle stays on that hold or continues the land until a new command. The EKF re-anchors only when the reset counter was bumped by a new map.
 
 `rtabmap_msgs` is optional. Without it, loss is detected from the null pose and the 9999 covariance on the odometry stream itself, and `reset_counter` stays put because the new-map signal is on `odom_info`.
 
@@ -121,13 +121,13 @@ While vision is lost or the stream is stale the setpoint brakes to a stop, latch
 
 ROS parameter `estimation_mode`. Environment key `ESTIMATION_MODE=vision|gps`. Default is `vision`.
 
-`includes/gz/gz_modifications.bash` calls `includes/gz/params/install_px4_control_params.bash`, which rewrites `PX4-Autopilot/px4_control_params.env`. `gz_start_px4_gz_sim.sh` sources that file. Stock PX4 v1.17 `rcS` applies every `PX4_PARAM_<NAME>` before the airframe and before `ekf2 start` (`ROMFS/px4fmu_common/init.d-posix/rcS`). Appending `param set` to `px4-rc.params` does not: that file is not sourced, which is why a flight log can still show `NAV_RCL_ACT` 2 after the old append. Re-running the installer replaces the env file. `param set` inside rcS overrides a value stored from a previous run.
+`includes/gz/gz_modifications.bash` and `gz_start_px4_gz_sim.sh` both call `includes/gz/params/install_px4_control_params.bash`. That script is the only place that writes the sim `PX4_PARAM_*` profile. It rewrites `PX4-Autopilot/px4_control_params.env` and airframe `.post` files (`4001_gz_x500.post`, `4002_gz_x500_depth.post`). `gz_start_px4_gz_sim.sh` sources the env file **before** `make px4_sitl`, then runs the installer again after make so the build tree gets the `.post` files. Stock PX4 v1.17 `rcS` applies every `PX4_PARAM_<NAME>` before the airframe and before `ekf2 start` (`ROMFS/px4fmu_common/init.d-posix/rcS`). The x500 airframe then does `param set-default NAV_DLL_ACT 2`; the `.post` forces `NAV_DLL_ACT 0` and `NAV_RCL_ACT 1` after that. Appending `param set` to `px4-rc.params` does not work: that file is not sourced.
 
 After PX4 connects, the node reads `EKF2_EV_CTRL`, `EKF2_EV_DELAY`, `EKF2_GPS_CTRL`, `EKF2_HGT_REF`, `EKF2_MAG_TYPE`, `EKF2_RNG_CTRL`, `SYS_HAS_MAG`, `GF_MAX_VER_DIST`, `GF_ACTION`, `NAV_RCL_ACT`, `NAV_DLL_ACT`, and `UXRCE_DDS_SYNCT` back over the SITL MAVLink port (18570) and logs each value. `EKF2_EV_DELAY`, `EKF2_RNG_CTRL`, `GF_MAX_VER_DIST`, and `GF_ACTION` are checked in vision mode. Arming is refused if any of them disagree with this profile. uXRCE in v1.17 has no parameter-by-name topic, and these EKF parameters are reboot-required, so a runtime set after `ekf2 start` would not change the running estimator.
 
 Both modes also set `COM_OF_LOSS_T 1.0`, `COM_OBL_RC_ACT 4` (Land), `COM_RC_LOSS_T 35.0`, `NAV_RCL_ACT 1`, `NAV_DLL_ACT 0`, and `UXRCE_DDS_SYNCT 0`.
 
-`NAV_DLL_ACT` 0 is sim-only. The x500 airframe default is 2, and then PX4 refuses to arm with "No connection to the GCS" when headless SITL has no QGroundControl. The prearm text names that cause. Do not put `NAV_DLL_ACT` 0 on a real vehicle.
+`NAV_DLL_ACT` 0 is sim-only. The x500 airframe default is 2, and then PX4 refuses to arm with "No connection to the GCS" when headless SITL has no QGroundControl. `PX4_PARAM_NAV_DLL_ACT=0` alone is not enough: the firmware default is already 0, so that early set is not stored, and the airframe `set-default` puts 2 back. The installer's airframe `.post` is what sticks. The prearm text names that cause. Do not put `NAV_DLL_ACT` 0 on a real vehicle.
 
 `UXRCE_DDS_SYNCT` defaults to 1 in v1.17: the client measures the offset between the agent OS clock and PX4 time and rewrites message stamps. In this stack every clock is `/clock`. Syncing to the agent would turn those stamps into wall time, so the profile forces 0. The client starts after the `PX4_PARAM_*` loop, which is what the reboot-required flag needs.
 
@@ -213,9 +213,11 @@ The parameter read-back has to match before arming. A mismatch is returned as th
 
 ## Walls
 
-If Simulation drops a segment file at `includes/gz/worlds/walls/<World>.txt`, the start script exports `PX4_WALL_SEGMENTS_FILE`. Each line is `x1 y1 x2 y2` in local ENU metres (x East, y North). Blank lines and `#` comments are ignored.
+**Prefer SLAM occupancy → Nav2 for wall and obstacle limits.** On hardware the offboard node has no Gazebo wall file. Boundaries appear when RTAB-Map fills the occupancy grid and Nav2 uses that grid (inflation / planner rejection / DWB slowdown). Keep `wall_segments_file` empty for the product path (`px4_control.yaml` default). JSON or text wall geofence loaders remain an optional sim prior only; do not treat them as the primary limiter.
 
-Speed toward a wall is limited with the same `a_brake` used for holds. The cap along a commanded direction uses the clearance along that direction, so a diagonal approach is not given the head-on stopping speed:
+If you still want the optional sim prior, Simulation can drop a segment file and the start script exports `PX4_WALL_SEGMENTS_FILE`. Each line is `x1 y1 x2 y2` in local ENU metres (x East, y North). Blank lines and `#` comments are ignored.
+
+Speed toward a wall (when that optional file is loaded) is limited with the same `a_brake` used for holds. The cap along a commanded direction uses the clearance along that direction, so a diagonal approach is not given the head-on stopping speed:
 
 ```
 v_max = sqrt(2 * a_brake * max(0, d - r_drone - margin))
