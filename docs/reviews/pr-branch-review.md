@@ -15,9 +15,22 @@ Nothing from this wave is on `main` yet. `origin/main` tip is still `5eb5fde` (2
 | 1 | [#29](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/29) `feature/devops-compose-health-ci` | Compose, pins, healthchecks, CI smoke | Acceptable as DevOps base after renaming the “hover” step; green `flight` is boot+rates, not a commanded hover |
 | 2 | Closed [#21](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/21) then [#20](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/20) | Headless GT/walls, then OAK-D S2 | Rebase onto #29; do not take their Compose files as the base |
 | 3 | Vision stack [#23](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/23)→[#24](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/24)→[#25](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/25)→[#27](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/27) | Profiles, goldens, hygiene, module split | Land in that order after #20; run `test_golden.py` on the #27 tip |
-| 4 | [#22](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/22) + cherry-picks from `line-control` | Offboard stack | Not ready: GPS read-back `KeyError`, `NAV_DLL_ACT` arming, Twist vs TwistStamped, vision-loss takeoff |
-| 5 | [#28](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/28) / `578017e` | JSON geofence + spawn TF | Rebase after walls (#21) and control tip exist |
-| 6 | [#26](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/26) | Offline ULog grader | Tool-ready with synthetic tests; no real v1.17 log yet |
+| 4 | [#22](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/22) + cherry-picks from `line-control` | Offboard stack | Not ready: GPS read-back `KeyError`, `NAV_DLL_ACT` arming, Twist vs TwistStamped, vision-loss takeoff. Prefer TwistStamped (`309ebe7`); treat JSON geofence as optional |
+| 5 | [#26](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/26) | Offline ULog grader | Tool-ready with synthetic tests; no real v1.17 log yet |
+| — | [#28](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/28) / `578017e` | JSON geofence + spawn TF | **Not the preferred wall path.** Keep only if you want a sim-only prior. Real flights should limit from SLAM occupancy → Nav2 |
+
+### Design choice: walls from SLAM, not from JSON
+
+In the real world the offboard node has no Gazebo wall file. Boundaries appear when RTAB-Map fills the occupancy grid and Nav2 uses that grid. Goal rejection and speed limits should follow that same path in sim, so a green sim flight still means something on hardware.
+
+What that implies for this review:
+
+- **Keep** the `world` → `spawn` (and map) frame relation. Nav2 and the costmap need it whether or not JSON walls exist.
+- **Prefer** RTAB-Map occupancy → Nav2 for wall awareness, goal clearance, and speed shaping.
+- **Treat** `includes/gz/walls/*.json` and the `#28` / `578017e` geofence loader as an optional sim prior, not as the product geofence. Do not make `px4_control` depend on those files for a “safe” flight.
+- **Cherry-pick** `309ebe7` (TwistStamped) onto `#22`. Do not require the JSON geofence cherry-pick for merge readiness of the offboard stack.
+
+`#21` still owns useful pieces beyond wall JSON (headless rendering, ground truth, spawn TF). Rebase that work for those contracts. You can leave the generated wall JSON unmerged or unused if you adopt the SLAM path.
 
 ### How the tips relate
 
@@ -384,21 +397,21 @@ Strengths. The frame rule is one formula, and the tests show the two estimator b
 
 Risks. The PR does not merge cleanly onto its base. `except Exception` hides a missing `tf2_ros` and a bad quaternion in the same warning. `abort` under `_lock` needs a check. Walls stay off if the spawn TF is late and the vehicle is armed from a script that does not wait; the node logs and continues with no fence. Yaw-only alignment ignores a spawn whose floor is not z = 0 in the JSON slice. #21 slices at 0.5 m and puts the TF at z = 0. That is consistent. A future spawn frame that puts z at the drop height (0.15 m) would still be ignored here, which is what you want, as long as the JSON stays a ground slice.
 
-Merge readiness. Do not merge until it rebases cleanly onto `feat/px4-control` and #21’s wall files exist on that branch. The math and the tests are in good shape. The integration (TF in a live graph, abort under the node lock) is not what the unit tests run.
+Merge readiness. **Optional / low priority under the SLAM-first design.** The math and the tests are in good shape if you still want a sim-only prior geofence. For the product path (real vehicle + RTAB-Map + Nav2), do not block control merge on this PR. Prefer occupancy-grid limits and keep the spawn/map TF work from #21 without wiring JSON walls into `px4_control`.
 
 #### 6. Follow-ups
 
-- Rebase onto the current control branch. Resolve the conflict in `node.py` and `geofence.py` by keeping the steady-clock waits and `WallAlignment`.
+- Default product path: leave `wall_segments_file` empty and let Nav2 enforce clearance from the SLAM costmap.
+- If you keep this PR as a sim harness only, document that it has no real-world equivalent and must stay off for hardware flights.
 - Log `ImportError` for `tf2_ros` as its own message. Narrow the lookup exception to `tf2_ros.LookupException` and connectivity errors.
 - Call `abort` without holding `_lock`, or document that `abort` does not acquire it.
-- Add the landed-and-armed heading-reset case to `test_geofence.py`.
-- Point CI at one committed `includes/gz/walls/*.json` from #21 so this loader fails if the schema drifts.
+- Add the landed-and-armed heading-reset case to `test_geofence.py` only if the JSON path stays.
 
 ---
 
 ### Cross-PR merge order
 
-#29 is the only open PR, and it is the base the others have to sit on. #21 and #20 both fork from the same `main` commit and both rewrite Compose and `gz_start_px4_gz_sim.sh`. Rebase #21 first (spawn, ground truth, walls, headless `gz` wrapper, origin), then #20 (renderer and RTAB-Map) onto that, then rebase #28 onto control once the JSON files and the `spawn` frame are on the branch control runs.
+#29 is the only open DevOps PR, and it is the base the others have to sit on. #21 and #20 both fork from the same `main` commit and both rewrite Compose and `gz_start_px4_gz_sim.sh`. Rebase #21 first for spawn TF, ground truth, and headless `gz` (wall JSON optional), then #20 (renderer and RTAB-Map) onto that. Fix #22 with TwistStamped (`309ebe7`) and arming/vision-loss fixes. Do **not** require #28 for that merge. Land walls from SLAM → Nav2; treat JSON geofence as optional sim-only.
 
 Do not add the three Compose files together. Keep #29’s `compose.yml`. Copy environment keys and the `gz` wrapper across. Keep one default for `PX4_GZ_MODEL_POSE`.
 
@@ -530,7 +543,7 @@ Risks, in the order that blocks a flight:
 - The only scored flight in the PR body is a GPS hover at `a123418`, before the commits that changed magnetometer policy, GPS fusion, height reference, the geofence ceiling, and the lidar guard. No vision flight is attached. The plan’s crash note (lost tracking, climb to about 6.5 m) has no report in the tree.
 - Vision loss during takeoff or land does not brake and land. Height in vision mode is the barometer. The 3 m ceiling only helps if `GF_MAX_VER_DIST` survived startup.
 - `/cmd_vel` is `Twist`. Nav2 on this stack publishes `TwistStamped`.
-- Walls do nothing until a per-world text file exists, and that file is not transformed into the EKF frame. `578017e` on `line-control` starts that work and is not here.
+- Text or JSON wall files in `px4_control` are a sim prior. Prefer SLAM occupancy → Nav2 for limits that also exist on hardware. Keep spawn/map TF alignment either way.
 - `node.py` holds the action servers, the param thread, the lidar and e2e guards, and the setpoint loop. `_param_report` is written off the executor thread with no lock.
 - Land can report action success before disarm fails.
 
@@ -542,7 +555,7 @@ Merge readiness: not ready. Closed draft, vision flight absent, and the two armi
 2. Apply `NAV_DLL_ACT` after the airframe, or stop expecting 0 until that post file exists. Re-read until the values match or a deadline fires, and keep the last good read if PX4 is still booting.
 3. On vision loss in every phase, including takeoff, brake, hold, and land. Add a regression that a lost `OdomInfo` during takeoff produces a land goal.
 4. Subscribe to `TwistStamped` and time out on the header stamp, which `309ebe7` already does on `line-control`. Keep a zero stamp from looking infinitely old.
-5. Bring the spawn-frame wall alignment from `578017e` back onto this branch, or drop wall limiting until that lands.
+5. Drop offboard wall limiting for the product path. Rely on RTAB-Map occupancy and Nav2. Keep spawn/map TF. Leave `#28` / `578017e` as an optional sim prior only.
 6. Split `node.py` only after the arming and vision-loss behaviour is stable. The plan’s cleanup list is premature while GPS mode cannot arm.
 7. Fly vision out-and-back on the cpu profile and attach the log. The GPS table in the PR body is not evidence for this head.
 
@@ -931,15 +944,15 @@ The stamp is the right clock when Nav2 uses sim time. A publisher that leaves th
 
 #### 5. Review verdict
 
-`line-control` is ahead of PR #22 on the two integration bugs that will show up as soon as Nav2 and a spawned world are in the loop: stamped velocity commands, and walls expressed in the world frame. The geofence commit is large enough to review on its own (freeze-at-arm, heading-reset brake, JSON schema). It should not be assumed tested just because PR #22’s smaller geofence tests exist.
+`line-control` is ahead of PR #22 on the Nav2 integration bug that will show up first: stamped velocity commands (`309ebe7`). The JSON geofence commit (`578017e`) is large and well tested, but under the SLAM-first design it is not required for a real-world-shaped stack. Nav2 already plans around the occupancy grid once spawn/map frames line up.
 
-Merge readiness: this is an integration branch, not a PR in the set you asked to merge. Cherry-pick `309ebe7` and `578017e` onto `feat/px4-control` before that PR is revived. Do not merge the 81-commit line to `main` to get those two fixes.
+Merge readiness: this is an integration branch, not a PR in the set you asked to merge. Cherry-pick `309ebe7` onto `feat/px4-control` before that PR is revived. Treat `578017e` as optional. Do not merge the 81-commit line to `main` to get either fix.
 
 #### 6. Suggested follow-ups
 
-1. Review `578017e` as its own change: the freeze conditions, what happens if yaw is aligned and the TF is wrong by 90°, and the steady-clock versus sim-clock split.
+1. Prefer SLAM occupancy → Nav2 for wall limits. Keep spawn/map TF from the sim line.
 2. Reject a `TwistStamped` whose stamp is zero, and fall back to the node clock, so an unstamped command does not expire instantly.
-3. Rebase those two commits onto current `feat/px4-control` rather than merging `line-control`.
+3. Rebase `309ebe7` onto current `feat/px4-control` rather than merging `line-control`.
 
 ---
 
@@ -1043,7 +1056,9 @@ You have three unfinished products, not one stack.
 
 The vision product is a clean stack: profiles, then goldens, then hygiene, then the module split. #24, #25, and #27 are safe to keep in that order. #23’s default change to `cpu` and the move of `full` to 1280×800 are the behaviour change, and the health numbers for that new `full` and for `hw` are still unmeasured. Run `includes/gz/oakd_s2/test_golden.py` on the #27 tip before you treat the split as behaviour-preserving.
 
-The control product is PR #22 plus two fixes that already exist on `line-control` (`578017e`, `309ebe7`) and are absent from the PR branch. On the PR head, GPS read-back can throw, `NAV_DLL_ACT` 0 is not reliable against the x500 airframe, vision loss during takeoff does not land, and `/cmd_vel` is the wrong message type. The GPS flight table in the PR body is from an older commit. I would not merge #22 until those four are fixed and one vision cpu flight is logged.
+The control product is PR #22 plus the TwistStamped fix on `line-control` (`309ebe7`). The JSON geofence (`578017e` / #28) is optional under the SLAM-first design: real walls come from RTAB-Map occupancy into Nav2, not from a Gazebo wall file in the offboard node. On the PR head, GPS read-back can throw, `NAV_DLL_ACT` 0 is not reliable against the x500 airframe, vision loss during takeoff does not land, and `/cmd_vel` is the wrong message type. The GPS flight table in the PR body is from an older commit. I would not merge #22 until those four are fixed and one vision cpu flight is logged.
+
+Maintainer direction (2026-11-13 Asia/Tehran): evaluate flight limits from SLAM-gathered data, because the offboard node has no JSON boundaries on hardware.
 
 The grader (PR #26) is a separate tool with synthetic tests and no real log. Its `spawn.json` reader is waiting on a writer that showed up later on `line-sim`, not on this branch. `e2e_limits.py` should not grow a third copy.
 
@@ -1057,7 +1072,8 @@ The IMU-bridge branch is superseded by its own last commit and conflicts with th
 
 | Field | Value |
 |---|---|
-| Generated | 2026-11-12 13:12 Asia/Tehran |
+| Generated | 2026-11-12 13:12 Asia/Tehran; design note updated 2026-11-13 21:52 Asia/Tehran |
 | Reviewer model | Grok 4.7 medium (two parallel passes: sim/DevOps and control/vision) |
 | Source | `gh pr view/diff` for #19–#29; `git log` / `git diff` on `origin/feature/*` and `origin/refactor/*` |
 | Artifacts | `docs/reviews/pr-branch-review.md`, `docs/reviews/pr-branch-review.html`, Cursor canvas |
+| Design note | Wall limits: prefer SLAM occupancy → Nav2 over JSON walls in the offboard node (real-world parity) |
