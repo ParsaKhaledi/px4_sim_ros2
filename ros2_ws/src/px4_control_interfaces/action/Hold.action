@@ -1,0 +1,8 @@
+# Brake to a stop, latch position, then hold for duration_sec.
+# duration_sec of 0 succeeds as soon as the vehicle has settled.
+float32 duration_sec
+---
+bool success
+string message
+---
+float32 elapsed_sec

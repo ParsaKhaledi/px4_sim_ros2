@@ -1,0 +1,42 @@
+#!/bin/bash
+# Wrap the real `gz` binary so a headless server still renders cameras.
+#
+# PX4 starts `gz sim -r -s <world>` and, unless HEADLESS is set, a separate
+# `gz sim -g` GUI. Server-only mode does not render sensors unless
+# `--headless-rendering` (EGL) is passed. This wrapper injects that flag
+# only for headless server launches. GUI mode is unchanged.
+
+set -euo pipefail
+
+REAL_GZ="${REAL_GZ:-/usr/bin/gz}"
+
+if [ ! -x "${REAL_GZ}" ]; then
+  echo "gz wrapper: real gz binary not found at REAL_GZ=${REAL_GZ}" >&2
+  exit 127
+fi
+if [ "$(readlink -f "${REAL_GZ}")" = "$(readlink -f "$0")" ]; then
+  echo "gz wrapper: REAL_GZ points at this wrapper" >&2
+  exit 127
+fi
+
+if [ "${1:-}" = "sim" ] \
+    && [ "${HEADLESS:-0}" = "1" ] \
+    && [ "${HEADLESS_BACKEND:-egl}" != "xvfb" ]; then
+  shift
+  server=0
+  already=0
+  for arg in "$@"; do
+    if [ "${arg}" = "-s" ]; then
+      server=1
+    fi
+    if [ "${arg}" = "--headless-rendering" ]; then
+      already=1
+    fi
+  done
+  if [ "${server}" = "1" ] && [ "${already}" = "0" ]; then
+    exec "${REAL_GZ}" sim --headless-rendering "$@"
+  fi
+  exec "${REAL_GZ}" sim "$@"
+fi
+
+exec "${REAL_GZ}" "$@"

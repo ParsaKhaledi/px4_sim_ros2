@@ -1,0 +1,72 @@
+service: PX4
+log_name: px4
+window_s: 2.0
+discovery_s: 2.0
+processes:
+  - name: px4
+    pattern: bin/px4
+  - name: gz
+    pattern: "gz sim"
+  - name: microxrce
+    pattern: MicroXRCEAgent
+gz_rtf:
+  enabled: true
+topics:
+  - topic: /clock
+    min_rate_hz: 50
+    qos: sensor
+    group: core
+  - auto_detect:
+      - /fmu/out/vehicle_odometry_v1
+      - /fmu/out/vehicle_odometry
+    min_rate_hz: 20
+    qos: sensor
+    group: core
+  - auto_detect:
+      - /fmu/out/vehicle_status_v1
+      - /fmu/out/vehicle_status
+    min_rate_hz: 1
+    qos: sensor
+    group: core
+    capture_fields: true
+  - auto_detect:
+      - /fmu/out/vehicle_local_position_v1
+      - /fmu/out/vehicle_local_position
+    min_rate_hz: 1
+    qos: sensor
+    group: core
+  - topic: /camera/rgb/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/depth/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/stereo/left/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /camera/stereo/right/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  # 50 Hz of sim time. /clock is the 250 Hz physics step, so the
+  # wall rate is about clock_hz * 50/250. The floor is half of that,
+  # taken from this window's /clock. 0 Hz, and a rate far below the
+  # other PX4 topics in the same run, still fails.
+  - topic: /ground_truth/odom
+    model_rate_hz: 50
+    step_rate_hz: 250
+    rate_margin: 0.5
+    qos: sensor
+    group: ground_truth
+    skip_if_absent: true

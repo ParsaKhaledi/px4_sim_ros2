@@ -26,12 +26,12 @@ Tmux_create_session_run_CMDs(){
 
     # Run specific commands in each pane
     ## RUN
-    tmux send-keys -t $SESSION_NAME:0.1 "docker exec -it px4_sim ${HOME}/volume/startFiles/gz_start_ros2_gz_bridge.sh"   Enter
-    tmux send-keys -t $SESSION_NAME:0.2 "docker exec -it px4_sim ${HOME}/volume/startFiles/gz_start_state_publisher.sh"  Enter
-    tmux send-keys -t $SESSION_NAME:0.3 "docker exec -it px4_sim ${HOME}/volume/startFiles/start_nav2.sh" Enter
-    tmux send-keys -t $SESSION_NAME:0.0 "docker exec -it px4_sim ${HOME}/volume/startFiles/gz_start_px4_gz_sim.sh"       Enter
-    tmux send-keys -t $SESSION_NAME:0.4 "docker exec -it px4_sim ${HOME}/volume/startFiles/gz_start_rtabmap.sh " Enter
-    tmux send-keys -t $SESSION_NAME:0.5 "docker exec -it px4_sim ${HOME}/volume/startFiles/start_nav2_rviz.sh" Enter
+    tmux send-keys -t $SESSION_NAME:0.1 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/gz_start_ros2_gz_bridge.sh"   Enter
+    tmux send-keys -t $SESSION_NAME:0.2 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/gz_start_state_publisher.sh"  Enter
+    tmux send-keys -t $SESSION_NAME:0.3 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/start_nav2.sh" Enter
+    tmux send-keys -t $SESSION_NAME:0.0 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/gz_start_px4_gz_sim.sh"       Enter
+    tmux send-keys -t $SESSION_NAME:0.4 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/gz_start_rtabmap.sh " Enter
+    tmux send-keys -t $SESSION_NAME:0.5 "docker compose ${COMPOSE_PROJECT_NAME:+-p ${COMPOSE_PROJECT_NAME}} -f ${COMPOSE_FILE:-docker-compose-px4.yml} exec -T PX4 ${HOME}/volume/startFiles/start_nav2_rviz.sh" Enter
     echo Session Created
 
     # Attach to the session

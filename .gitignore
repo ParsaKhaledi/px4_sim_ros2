@@ -1,3 +1,24 @@
+.env
 vagrant/.vagrant
 volume/
 .qground/config/QGroundControl.org
+logs/*
+!logs/health/
+!logs/health/.gitkeep
+!logs/flights/
+!logs/flights/.gitkeep
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+__pycache__/
+**/__pycache__/
+*.pyc
+**/.pytest_cache/
+
+# Graphify
+graphify-out/cache/
+graphify-out/graph.html
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/.graphify_analysis.json
+graphify-out/.graphify*

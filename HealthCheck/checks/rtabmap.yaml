@@ -1,0 +1,43 @@
+service: Rtabmap
+log_name: rtabmap
+window_s: 2.0
+discovery_s: 2.0
+nodes:
+  - name: rtabmap
+    optional: true
+topics:
+  - topic: /rtabmap/odom
+    min_rate_hz: 5
+    qos: sensor
+    group: slam
+  - topic: /camera/rgb/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/depth/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/stereo/left/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /camera/stereo/right/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /imu
+    min_rate_hz: 20
+    qos: sensor
+    group: camera
+    optional: true
+    when_env:
+      CameraType: stereo

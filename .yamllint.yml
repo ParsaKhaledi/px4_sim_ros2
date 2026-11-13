@@ -1,0 +1,17 @@
+extends: default
+ignore: |
+  includes/
+  vagrant/
+rules:
+  line-length:
+    max: 220
+  document-start: disable
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  braces: disable
+  brackets: disable
+  indentation:
+    spaces: 2
+    indent-sequences: true

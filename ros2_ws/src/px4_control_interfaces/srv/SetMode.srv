@@ -1,0 +1,6 @@
+# PX4 mode name: OFFBOARD, POSCTL, ALTCTL, STABILIZED, AUTO_LOITER,
+# AUTO_LAND, AUTO_TAKEOFF.
+string mode
+---
+bool success
+string message

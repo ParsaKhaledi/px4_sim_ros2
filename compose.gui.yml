@@ -1,0 +1,24 @@
+# GUI overlay. The base file already bind-mounts the X11 socket so local
+# QGroundControl and RViz work. This file forces the host display through
+# when the socket variables are set.
+services:
+  PX4:
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}
+  Qground:
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}
+  Rtabmap:
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}
+  NAV2:
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}
+  Nav2_Rviz:
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: ${XAUTH:-/tmp/.docker.xauth}

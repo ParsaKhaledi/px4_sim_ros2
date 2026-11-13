@@ -95,10 +95,6 @@ if(gz-transport_FOUND)
 		windy
 		baylands
   		lawn
-		empty_with_plugins
-		husarion_office
-		husarion_world
-		sonoma_raceway
         apt_world
 	)
 

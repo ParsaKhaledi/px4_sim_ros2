@@ -1,0 +1,5 @@
+service: Nav2_Rviz
+log_name: nav2_rviz
+processes:
+  - name: rviz2
+    pattern: rviz2
