@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Stable x500_depth overlay for this repo.
+     Ground-truth OdometryPublisher is baked in. Refresh with:
+     python3 includes/gz/scripts/patch_x500_ground_truth.py
+     gz_modifications.bash copies this folder into the PX4 model tree at start. -->
+<sdf version='1.9'>
+  <model name='x500_depth'>
+    <include merge='true'>
+      <uri>x500</uri>
+    </include>
+    <include merge='true'>
+      <uri>model://OakD-Lite</uri>
+      <pose>.12 .03 .242 0 0 0</pose>
+    </include>
+    <joint name="CameraJoint" type="fixed">
+      <parent>base_link</parent>
+      <child>camera_link</child>
+      <pose relative_to="base_link">.12 .03 .242 0 0 0</pose>
+    </joint>
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_link_gt</robot_base_frame>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <odom_topic>/ground_truth/odom</odom_topic>
+      <odom_covariance_topic>/ground_truth/odom_with_covariance</odom_covariance_topic>
+      <tf_topic>/ground_truth/tf</tf_topic>
+      <dimensions>3</dimensions>
+    </plugin>
+  </model>
+</sdf>

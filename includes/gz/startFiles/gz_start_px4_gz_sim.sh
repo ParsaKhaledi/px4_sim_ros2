@@ -41,8 +41,9 @@ if ! origin_env="$(python3 "${REPO_GZ}/scripts/sim_origin.py")"; then
 fi
 eval "${origin_env}"
 
-python3 "${REPO_GZ}/scripts/patch_x500_ground_truth.py" || \
-  echo "WARN: could not patch ${MODEL} with the ground-truth plugin"
+# Ground-truth OdometryPublisher is baked into
+# includes/gz/models/x500_depth/model.sdf (copied by gz_modifications.bash).
+# Refresh that file with: python3 includes/gz/scripts/patch_x500_ground_truth.py
 python3 "${REPO_GZ}/scripts/patch_x500_lidar_down.py" || \
   echo "WARN: could not patch x500_depth with the downward lidar"
 if ! python3 "${REPO_GZ}/scripts/patch_x500_sensor_systems.py" "${WORLD}"; then
