@@ -4,6 +4,8 @@ Wall keep-out and near-wall slowdown are owned by **Nav2**, using the RTAB-Map o
 
 Leave `wall_segments_file` empty on the control node so JSON walls stay off.
 
+Costmaps and keep-out only line up with the vehicle when the TF tree matches [tf_requirements.md](tf_requirements.md) (`map`→`odom`→`base_link` from RTAB-Map; no `world`→`base_link`).
+
 ## What replaces the old geofence behaviours
 
 | Old `px4_control` behaviour | Nav2 owner | Parameters in `includes/gz/Params/nav2/nav2_params.yaml` |
