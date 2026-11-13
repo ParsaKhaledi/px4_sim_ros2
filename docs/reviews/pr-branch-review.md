@@ -1,64 +1,92 @@
 # PX4 Sim ROS 2 — PR and branch review
 
-**Audience:** maintainers deciding merge order and rebase work.  
-**Mode:** explanation (why each branch exists, what the diffs do, what blocks merge).  
-**Reviewed:** 2026-11-12 13:12 Asia/Tehran  
-**Method:** line-level reading of GitHub PR diffs and `origin/*` tips with [Grok 4.7 medium](https://x.ai/).  
-**Scope:** PRs #19–#29 plus pipeline branches `feature/line-base`, `feature/line-sim`, `feature/line-control`, and historical `feature/px4-imu-bridge-indoor-flight`.
+**Audience:** maintainers landing the integrated tip or rebasing leftover PRs.  
+**Mode:** Diátaxis explanation (what landed on the integrated tip vs `main`, why each area exists, merge order used).  
+**Reviewed:** 2026-11-13 (integrated tip refresh)  
+**Method:** merge of open Cursor PR tips onto `feature/line-control`, then `git diff origin/main...cursor/dev-integrate-df62` plus line-level reading of conflict resolutions.  
+**Scope:** integrated tip `cursor/dev-integrate-df62` @ `1529f39` compared to `origin/main` @ `5eb5fde`; historical PRs #19–#29 remain in Part A/B as archive.
 
 ## Verdict in one page
 
-Nothing from this wave is on `main` yet. `origin/main` tip is still `5eb5fde` (2026-06-29). The open drafts that matter for landing work are:
+There is now a single integration branch that acts as the merged **dev tip**:
 
-| Priority | PR / branch | Role | Merge readiness |
-|---|---|---|---|
-| 1 | [#29](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/29) `feature/devops-compose-health-ci` | Compose, pins, healthchecks, CI smoke | Acceptable as DevOps base after renaming the “hover” step; green `flight` is boot+rates, not a commanded hover |
-| 2 | Closed [#21](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/21) then [#20](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/20) | Headless GT/walls, then OAK-D S2 | Rebase onto #29; do not take their Compose files as the base |
-| 3 | Vision stack [#23](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/23)→[#24](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/24)→[#25](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/25)→[#27](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/27) | Profiles, goldens, hygiene, module split | Land in that order after #20; run `test_golden.py` on the #27 tip |
-| 4 | [#22](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/22) + cherry-picks from `line-control` | Offboard stack | Not ready: GPS read-back `KeyError`, `NAV_DLL_ACT` arming, Twist vs TwistStamped, vision-loss takeoff. Prefer TwistStamped (`309ebe7`); treat JSON geofence as optional |
-| 5 | [#26](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/26) | Offline ULog grader | Tool-ready with synthetic tests; no real v1.17 log yet |
-| — | [#28](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/28) / `578017e` | JSON geofence + spawn TF | **Not the preferred wall path.** Keep only if you want a sim-only prior. Real flights should limit from SLAM occupancy → Nav2 |
+| Ref | Role |
+|---|---|
+| [`cursor/dev-integrate-df62`](https://github.com/ParsaKhaledi/px4_sim_ros2/tree/cursor/dev-integrate-df62) @ `1529f39` | Integrated tip (this review) |
+| `origin/main` @ `5eb5fde` | Still the June 2026 baseline — nothing from this wave is on `main` yet |
 
-### Design choice: walls from SLAM, not from JSON
+Against `main`: **236 files**, **+25152 / −10959**.
 
-In the real world the offboard node has no Gazebo wall file. Boundaries appear when RTAB-Map fills the occupancy grid and Nav2 uses that grid. Goal rejection and speed limits should follow that same path in sim, so a green sim flight still means something on hardware.
-
-What that implies for this review:
-
-- **Keep** the `world` → `spawn` (and map) frame relation. Nav2 and the costmap need it whether or not JSON walls exist.
-- **Prefer** RTAB-Map occupancy → Nav2 for wall awareness, goal clearance, and speed shaping.
-- **Treat** `includes/gz/walls/*.json` and the `#28` / `578017e` geofence loader as an optional sim prior, not as the product geofence. Do not make `px4_control` depend on those files for a “safe” flight.
-- **Cherry-pick** `309ebe7` (TwistStamped) onto `#22`. Do not require the JSON geofence cherry-pick for merge readiness of the offboard stack.
-
-`#21` still owns useful pieces beyond wall JSON (headless rendering, ground truth, spawn TF). Rebase that work for those contracts. You can leave the generated wall JSON unmerged or unused if you adopt the SLAM path.
-
-### How the tips relate
+### What the tip contains (merge order)
 
 ```
 main (5eb5fde)
-├── feature/devops-compose-health-ci   PR #29 open draft  (continues closed #19)
-├── feature/sim-headless-groundtruth   PR #21 closed
-├── feature/oakd-s2-vision             PR #20 closed
-│   └── feature/vision-profiles        PR #23 closed
-│       └── refactor/vision-golden-tests  PR #24 closed
-│           └── refactor/vision-hygiene   PR #25 open draft
-│               └── refactor/vision-modules  PR #27 open draft
-├── feature/px4-control                PR #22 closed
-│   └── (PR #28 geofence was based here; tip moved to line-control as 578017e)
-├── feature/flight-analysis            PR #26 closed
-├── feature/line-base                  DevOps CI line (+3 unique commits)
-├── feature/line-sim                   sim + vision pipeline (has spawn.json writer)
-├── feature/line-control               control integration (+ TwistStamped + JSON geofence)
-└── feature/px4-imu-bridge-indoor-flight  superseded by px4_control
+└── feature/line-control                    CI line (sim + vision + TwistStamped control)
+    └── cursor/remove-wall-json-df62        PR #35 — delete wall JSON + geofence
+        ├── cherry-pick #36 readiness       NAV_DLL/.post before make; GPS read-back;
+        │                                   TwistStamped stamp fallback; vision-loss
+        │                                   brake→land during takeoff
+        ├── merge #31 bake GT               x500_depth OdometryPublisher baked in-repo
+        ├── merge #32+#33 Nav2 + TF         SLAM occupancy limits + TF contract docs/tests
+        ├── merge #30 review docs           prior catalog (Parts A/B below)
+        └── cherry-pick #29 lint            RTABMAPVIZ=false + EKF2 mismatch pytest
 ```
 
-GitHub still names `dev/px4-upgrade` as the base for several closed PRs. That ref is gone on `origin`. The first commit parent for those PRs is `5eb5fde` (`main`). Treat them as siblings of `main`, then rebase onto #29.
+| Source PR | Branch | Landed? | Notes |
+|---|---|---|---|
+| [#35](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/35) | `cursor/remove-wall-json-df62` | Yes (base) | `geofence.py`, `walls/*.json`, `wall_geometry.py` removed |
+| [#36](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/36) | `cursor/px4-control-ready-df62` | Yes (cherry-picks) | Conflicts resolved favoring wall removal + CI launch path |
+| [#31](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/31) | `cursor/bake-gt-odometry-model-df62` | Yes | Runtime GT patch dropped from SITL start |
+| [#32](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/32)+[#33](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/33) | `cursor/tf-align-requirements-df62` | Yes | Nav2 `::` plugins; RTAB-Map `map`/`odom`/`base_link` |
+| [#30](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/30) | `cursor/pr-branch-review-df62` | Yes (docs) | Catalog updated here for tip vs `main` |
+| [#29](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/29) | `feature/devops-compose-health-ci` | Partial | Lint commit `50cda67` only; full #29 Compose history already largely in `line-control` |
 
-### What “line by line” means here
+### Design contracts on the tip (must keep)
 
-Each section below walks the important hunks with path, line or hunk context, what the lines do, and the risk if you merge them wrong. Full mesh dumps (#21) and golden SDF blobs (#24) are summarized by contract, not every generated line.
+1. **Walls from SLAM → Nav2, not JSON.** `docs/nav2_obstacle_limits.md`: inflation `robot_radius` 0.35, `inflation_radius` 0.75, `BaseObstacle.scale` 1.0. No `wall_segments_file` / `geofence.py`.
+2. **TF tree.** `docs/tf_requirements.md`: `world→spawn` / `world→base_link_gt` separate from `map→odom→base_link`. RTAB-Map scripts set `frame_id:=base_link`, `map_frame_id:=map`, `vo_frame_id:=odom`, `use_sim_time:=${USE_SIM_TIME}`.
+3. **Ground truth baked.** `includes/gz/models/x500_depth/model.sdf` carries `OdometryPublisher`; refresh with `patch_x500_ground_truth.py` (repo-only). SITL start does not patch PX4 at runtime for GT.
+4. **px4_control readiness.** `install_px4_control_params` before and after `make`; `_read_back_params` only checks names in `expected`; `/cmd_vel` is `TwistStamped` with zero-stamp fallback; `note_vision_lost` → `abort_brake_hold_land` (including takeoff).
+5. **Compose.** Tip keeps `docker-compose-px4.yml` as `include: compose.yml` (line-control / DevOps shape), not the old static-IP file from the sim-gt sibling tip.
+
+### Line-level highlights vs `main`
+
+| Area | Path | What changed |
+|---|---|---|
+| Nav2 keep-out | `includes/gz/Params/nav2/nav2_params.yaml` | `BaseObstacle.scale: 1.0`, `sum_scores: True`; local map 5×5; `robot_radius: 0.35`; inflation `0.75` / `cost_scaling_factor: 10.0`; Jazzy plugins use `nav2_*::…` |
+| TF launch | `includes/gz/startFiles/gz_start_rtabmap*.sh` | Keep CI `RTABMAPVIZ`, stereo `_baseline` + exact sync; add `map_frame_id` / `vo_frame_id` / `USE_SIM_TIME` |
+| GT bake | `includes/gz/models/x500_depth/model.sdf`, `gz_start_px4_gz_sim.sh` | Plugin committed; start script comment-only for GT (lidar/sensor patches remain) |
+| Wall removal | `ros2_ws/src/px4_control/…`, `includes/gz/walls/` | Geofence module and JSON maps deleted; docs point at Nav2 |
+| Arming / vision | `install_px4_control_params.bash`, `motion.py`, `node.py` | `.post` NAV_DLL; GPS-tolerant read-back; vision-loss land |
+| Graphify | `docs/graphify/`, `graphify-out/` | Code-only extract: 3393 nodes, 6587 edges; hubs `Px4ControlNode`, `MotionExecutive` |
+
+### Remaining gaps
+
+- Full sibling history of open vision cleanups [#25](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/25) / [#27](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/27) is **not** folded in (still stacked on golden-tests).
+- Closed [#26](https://github.com/ParsaKhaledi/px4_sim_ros2/pull/26) flight-analysis grader not folded in.
+- No remote `dev` branch existed; this tip is the proposed integrated tip for PR into `main`.
+- Headless SITL arm / Nav2 closed-loop flight still needs a live container check (pytest suites below are offline).
+
+### Automated checks run on the tip
+
+- `px4_control` pytest: **73 passed**
+- `tests/test_compose_config.py` + `test_px4_params.py`: **25 passed**
+- `includes/gz/scripts` TF + offline worlds: **12 passed** (URDF assertion accepts `camera_link` or `OakD-Lite/base_link`)
+- `sim_monitor` + `trajectory_eval` tests: **42 passed**
+
+### Graphify
+
+Open-source Graphify CLI (`graphifyy` / `graphify extract . --code-only` + `cluster-only --no-label`) on the tip:
+
+- Outputs: `graphify-out/` and copies under `docs/graphify/`
+- Report: `docs/graphify/GRAPH_REPORT.md`
+- God nodes: `Px4ControlNode` (68), `MotionExecutive` (57), `FlightWatch` (51), …
 
 ---
+
+## Archive: prior PR-by-PR review (Parts A/B)
+
+The sections below are the original line-level catalog of PRs #19–#29 and pipeline branches, written before the integration tip existed. Prefer the verdict above for “what is on the tip now.” Keep Parts A/B when you need per-PR hunk commentary while rebasing leftovers.
 
 ## Part A — Sim, vision sensors, and DevOps
 

@@ -21,7 +21,7 @@ world ──(dynamic)─► base_link_gt          # same node, from /ground_trut
 
 map ──(RTAB-Map)──► odom ──(RTAB-Map)──► base_link
                                          │
-                                         ├─ OakD-Lite/base_link ─ camera_* / stereo_* / imu_link
+                                         ├─ camera_link (or OakD-Lite/base_link) ─ camera_* / stereo_* / imu_link
                                          └─ (optional lidar_sensor_link from SDF patch)
 ```
 

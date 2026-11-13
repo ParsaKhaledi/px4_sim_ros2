@@ -57,9 +57,10 @@ def test_urdf_has_base_link_and_optical_frames():
         "camera_rgb_optical_frame",
         "stereo_left_camera_optical_frame",
         "imu_link",
-        "OakD-Lite/base_link",
     ):
         assert name in text
+    # Camera module root: oakd_s2 overlay uses camera_link; older Fuel Oak-D used OakD-Lite/base_link.
+    assert ('link name="camera_link"' in text) or ("OakD-Lite/base_link" in text)
 
 
 def test_spawn_frame_never_parents_base_link():

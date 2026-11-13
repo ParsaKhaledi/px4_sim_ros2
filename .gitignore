@@ -14,3 +14,10 @@ __pycache__/
 **/__pycache__/
 *.pyc
 **/.pytest_cache/
+
+# Graphify
+graphify-out/cache/
+graphify-out/graph.html
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/.graphify_analysis.json
