@@ -18,12 +18,10 @@ def generate_launch_description():
     config = os.path.join(share, 'config', 'px4_control.yaml')
     estimation = os.environ.get('ESTIMATION_MODE', 'vision')
     yaw_rate = os.environ.get('PX4_MAX_YAW_RATE_DEG_S', '30.0')
-    walls = os.environ.get('PX4_WALL_SEGMENTS_FILE', '')
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('estimation_mode', default_value=estimation),
         DeclareLaunchArgument('max_yaw_rate_deg_s', default_value=yaw_rate),
-        DeclareLaunchArgument('wall_segments_file', default_value=walls),
         Node(
             package='px4_control',
             executable='px4_control_node',
@@ -35,7 +33,6 @@ def generate_launch_description():
                     'use_sim_time': LaunchConfiguration('use_sim_time'),
                     'estimation_mode': LaunchConfiguration('estimation_mode'),
                     'max_yaw_rate_deg_s': LaunchConfiguration('max_yaw_rate_deg_s'),
-                    'wall_segments_file': LaunchConfiguration('wall_segments_file'),
                 },
             ],
         ),
