@@ -252,6 +252,7 @@ services:
         - DISPLAY=${DISPLAY}
         - XAUTHORITY=${XAUTH}
         - CameraType=${CameraType}
+        - USE_SIM_TIME=${USE_SIM_TIME:-true}
 
       volumes:
         - /tmp/.X11-unix/:/tmp/.X11-unix/
