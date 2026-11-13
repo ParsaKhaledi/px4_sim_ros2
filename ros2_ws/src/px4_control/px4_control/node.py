@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -186,7 +186,11 @@ class Px4ControlNode(Node):
         self._traj_pubs = self._make_publishers(TrajectorySetpoint, self._topics['trajectory_setpoint'], qos)
         self._cmd_pubs = self._make_publishers(VehicleCommand, self._topics['vehicle_command'], qos)
         self._ev_pubs = self._make_publishers(VehicleOdometry, self._topics['vehicle_visual_odometry'], qos)
-        self._subscribe_px4(VehicleStatus, self._topics['vehicle_status'], self._on_status, qos)
+        # This PX4 publishes vehicle_status_v1 only. Do not also subscribe to
+        # the unversioned /fmu/out/vehicle_status name.
+        self._subscribe_px4(
+            VehicleStatus, self._topics['vehicle_status'], self._on_status, qos, fallback=False,
+        )
         self._subscribe_px4(VehicleOdometry, self._topics['vehicle_odometry'], self._on_odometry, qos)
         self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
         self._subscribe_px4(EstimatorStatusFlags, self._topics['estimator_status_flags'], self._on_estimator, qos)
@@ -197,7 +201,7 @@ class Px4ControlNode(Node):
 
         cmd_qos = QoSProfile(depth=10)
         self.create_subscription(
-            Twist,
+            TwistStamped,
             str(self.get_parameter('cmd_vel_topic').value),
             self._on_cmd_vel,
             cmd_qos,
@@ -294,9 +298,16 @@ class Px4ControlNode(Node):
         self.get_logger().info(f'publishing {configured} on {names} (best_effort)')
         return pubs
 
-    def _subscribe_px4(self, msg_type, configured: str, callback, qos: QoSProfile) -> None:
-        for name in subscription_names(configured):
-            self.create_subscription(msg_type, name, lambda msg, topic=name, cb=callback: self._mark_and_call(topic, msg, cb), qos, callback_group=self._cb)
+    def _subscribe_px4(
+        self, msg_type, configured: str, callback, qos: QoSProfile, fallback: bool = True,
+    ) -> None:
+        names = subscription_names(configured) if fallback else [configured]
+        for name in names:
+            self.create_subscription(
+                msg_type, name,
+                lambda msg, topic=name, cb=callback: self._mark_and_call(topic, msg, cb),
+                qos, callback_group=self._cb,
+            )
 
     def _mark_and_call(self, topic: str, msg, callback) -> None:
         base = topic.rsplit('_v', 1)[0] if '_v' in topic.split('/')[-1] else topic
@@ -386,10 +397,16 @@ class Px4ControlNode(Node):
             if self._landed:
                 self._ekf_ground_d = float(self._pos[2])
 
-    def _on_cmd_vel(self, msg: Twist) -> None:
+    def _on_cmd_vel(self, msg: TwistStamped) -> None:
+        # Nav2 publishes TwistStamped. Prefer the command stamp so the
+        # executive times out on the publisher's clock, not the control tick.
+        # A zero stamp would look infinitely old; fall back to node time.
+        stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        if stamp <= 0.0:
+            stamp = self._now_s()
         with self._lock:
-            self._cmd = msg
-            self._cmd_time = self._now_s()
+            self._cmd = msg.twist
+            self._cmd_time = stamp
 
     def _on_vision(self, msg: Odometry) -> None:
         if self._estimation_mode != 'vision':
@@ -497,7 +514,7 @@ class Px4ControlNode(Node):
                     self._motion.note_cmd_vel(self._cmd_time, v_n, v_e, yaw_rate)
             if self._estimation_mode == 'vision':
                 if self._vision.current(now) is None:
-                    self._motion.note_vision_lost(now)
+                    self._motion.note_vision_lost(now, snap)
                 else:
                     self._motion.note_vision_regained()
             setpoint = self._motion.update(now, snap)
@@ -837,30 +854,38 @@ class Px4ControlNode(Node):
         return CancelResponse.ACCEPT
 
     def _read_back_params(self) -> None:
-        """Log EKF and arming parameters and refuse to fly if they are wrong."""
+        """Log EKF and arming parameters and refuse to fly if they are wrong.
+
+        Only names present in ``expected`` are logged. GPS mode does not
+        export ``GF_*`` / ``EKF2_EV_DELAY`` / ``EKF2_RNG_CTRL``, so those
+        must not KeyError the daemon thread (that left ``_param_report``
+        stuck at None and blocked arming).
+        """
         expected = self._expected_params
-        names = list(READBACK_PARAMS)
+        names = [name for name in READBACK_PARAMS if name in expected]
         host = os.environ.get('PX4_MAVLINK_HOST', '127.0.0.1')
         port = int(os.environ.get('PX4_MAVLINK_PORT', '14580'))
         try:
             actual = read_params(names, host=host, port=port)
-        except OSError as exc:
+            for name in names:
+                if name in actual:
+                    self.get_logger().info(
+                        f'param {name}={actual[name]:g} expected {expected[name]:g}'
+                    )
+                else:
+                    self.get_logger().error(f'param {name} had no MAVLink reply')
+            mismatch = readback_mismatch(actual, expected)
+            if mismatch:
+                self.get_logger().error(mismatch)
+                self._param_report = mismatch
+                return
+            self.get_logger().info('PX4 parameter read-back matches the sim profile')
+            self._param_report = ''
+        except Exception as exc:  # noqa: BLE001 — any failure must unblock arming gate
             message = f'could not read PX4 parameters on {host}:{port}: {exc}'
             self.get_logger().error(message)
             self._param_report = message
-            return
-        for name in names:
-            if name in actual:
-                self.get_logger().info(f'param {name}={actual[name]:g} expected {expected[name]:g}')
-            else:
-                self.get_logger().error(f'param {name} had no MAVLink reply')
-        mismatch = readback_mismatch(actual, expected)
-        if mismatch:
-            self.get_logger().error(mismatch)
-            self._param_report = mismatch
-            return
-        self.get_logger().info('PX4 parameter read-back matches the sim profile')
-        self._param_report = ''
+
 
     def _prepare_flight(self, timeout: float):
         from px4_control.arming import ArmDecision
