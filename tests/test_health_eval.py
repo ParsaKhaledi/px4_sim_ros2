@@ -34,6 +34,35 @@ def test_auto_detect_prefers_version_when_neither_has_a_publisher():
     assert chosen == "/fmu/out/vehicle_status_v1"
 
 
+def test_auto_detect_after_measure_prefers_live_unversioned_odometry():
+    """XRCE may advertise vehicle_odometry_v1 with no messages."""
+    checker = healthcheck.HealthRunner.__new__(healthcheck.HealthRunner)
+    item = {
+        "spec": {
+            "auto_detect": [
+                "/fmu/out/vehicle_odometry_v1",
+                "/fmu/out/vehicle_odometry",
+            ]
+        },
+        "target": "/fmu/out/vehicle_odometry_v1",
+        "counts": {
+            "/fmu/out/vehicle_odometry_v1": 1,
+            "/fmu/out/vehicle_odometry": 1,
+        },
+        "graph": {
+            "/fmu/out/vehicle_odometry_v1": ["px4_msgs/msg/VehicleOdometry"],
+            "/fmu/out/vehicle_odometry": ["px4_msgs/msg/VehicleOdometry"],
+        },
+        "publishers": 1,
+    }
+    measurements = {
+        "/fmu/out/vehicle_odometry_v1": {"count": 0, "last_mono": None, "last_msg": None},
+        "/fmu/out/vehicle_odometry": {"count": 210, "last_mono": 1.0, "last_msg": None},
+    }
+    checker._pick_auto_detect_target(item, measurements, 2.0)
+    assert item["target"] == "/fmu/out/vehicle_odometry"
+
+
 def test_software_camera_rate_override():
     spec = {"group": "camera", "min_rate_hz": 5}
     assert healthcheck.effective_min_rate(spec, {}) == 5

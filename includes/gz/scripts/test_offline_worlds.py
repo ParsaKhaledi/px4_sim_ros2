@@ -126,6 +126,21 @@ def test_repo_x500_depth_has_safe_ground_truth_plugin():
     assert update_repo_model() is False
 
 
+
+def test_candidate_models_excludes_plain_x500_for_lidar_helpers(tmp_path, monkeypatch):
+    """Lidar uses candidate_models(); plain x500 must stay out of that list."""
+    models = tmp_path / "models"
+    (models / "x500").mkdir(parents=True)
+    (models / "x500" / "model.sdf").write_text("<sdf/>", encoding="utf-8")
+    (models / "x500_depth").mkdir(parents=True)
+    (models / "x500_depth" / "model.sdf").write_text("<sdf/>", encoding="utf-8")
+    monkeypatch.setenv("PX4_GZ_MODELS", str(models))
+    monkeypatch.setenv("PX4_GZ_MODEL", "x500")
+    names = {path.parent.name for path in candidate_models()}
+    assert "x500_depth" in names
+    assert "x500" not in names
+
+
 def test_ground_truth_targets_include_spawned_x500(monkeypatch):
     monkeypatch.setenv("PX4_GZ_MODEL", "x500")
     assert ground_truth_model_names() == ["x500_depth", "x500"]

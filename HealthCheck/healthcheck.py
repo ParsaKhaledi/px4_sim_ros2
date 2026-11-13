@@ -361,13 +361,22 @@ class HealthRunner:
         for spec in self.config.get("topics", []):
             if not self.selected(spec):
                 continue
+            candidates: list[str] = []
             if spec.get("auto_detect"):
                 chosen = choose_topic(spec["auto_detect"], set(graph), counts)
                 target = chosen or spec["auto_detect"][0]
                 absent = chosen is None
+                # Keep every advertised name so a silent versioned topic can
+                # fall back to a live unversioned publisher after the window.
+                for name in spec["auto_detect"]:
+                    if counts.get(name, 0) > 0 or name in graph:
+                        candidates.append(name)
+                if target not in candidates and not absent:
+                    candidates.append(target)
             else:
                 target = spec["topic"]
                 absent = target not in graph and counts.get(target, 0) <= 0
+                candidates = [target]
             publishers = counts.get(target, 0) if not absent else 0
             type_name = None
             types = graph.get(target) or []
@@ -377,6 +386,9 @@ class HealthRunner:
                 {
                     "spec": spec,
                     "target": target,
+                    "candidates": candidates,
+                    "graph": graph,
+                    "counts": counts,
                     "publishers": publishers,
                     "type_name": type_name,
                     "absent": absent and publishers <= 0,
@@ -389,29 +401,35 @@ class HealthRunner:
         state = {}
         subscriptions = []
         for item in resolved:
-            if item["publishers"] <= 0:
-                continue
-            type_name = item["type_name"]
-            if not type_name:
-                continue
-            try:
-                msg_type = import_message(type_name)
-            except (ImportError, AttributeError):
-                item["import_error"] = type_name
-                continue
-            target = item["target"]
-            bucket = {"count": 0, "last_mono": None, "last_msg": None}
+            graph = item.get("graph") or {}
+            counts = item.get("counts") or {}
+            for target in item.get("candidates") or [item["target"]]:
+                if counts.get(target, 0) <= 0 and target not in graph:
+                    continue
+                if target in state:
+                    continue
+                types = graph.get(target) or []
+                if not types:
+                    continue
+                type_name = types[0]
+                try:
+                    msg_type = import_message(type_name)
+                except (ImportError, AttributeError):
+                    if target == item["target"]:
+                        item["import_error"] = type_name
+                    continue
+                bucket = {"count": 0, "last_mono": None, "last_msg": None}
 
-            def _callback(msg, bucket=bucket):
-                bucket["count"] += 1
-                bucket["last_mono"] = time.monotonic()
-                bucket["last_msg"] = msg
+                def _callback(msg, bucket=bucket):
+                    bucket["count"] += 1
+                    bucket["last_mono"] = time.monotonic()
+                    bucket["last_msg"] = msg
 
-            qos_name = item["spec"].get("qos", "sensor")
-            subscriptions.append(
-                node.create_subscription(msg_type, target, _callback, qos_profile(qos_name))
-            )
-            state[target] = bucket
+                qos_name = item["spec"].get("qos", "sensor")
+                subscriptions.append(
+                    node.create_subscription(msg_type, target, _callback, qos_profile(qos_name))
+                )
+                state[target] = bucket
 
         if state:
             deadline = time.monotonic() + window_s
@@ -419,12 +437,39 @@ class HealthRunner:
                 rclpy.spin_once(node, timeout_sec=0.1)
         return state
 
+    def _pick_auto_detect_target(self, item, measurements, window_s: float) -> None:
+        """Prefer a candidate that actually delivered messages in this window."""
+        spec = item["spec"]
+        candidates = spec.get("auto_detect") or [item["target"]]
+        counts = item.get("counts") or {}
+        best = None
+        best_key = None
+        for index, name in enumerate(candidates):
+            bucket = measurements.get(name)
+            count = bucket["count"] if bucket else 0
+            publishers = counts.get(name, 0)
+            if publishers <= 0 and count <= 0:
+                continue
+            rate = (float(count) / float(window_s)) if window_s else 0.0
+            key = (count > 0, rate, publishers > 0, topic_version(name), -index)
+            if best_key is None or key > best_key:
+                best = name
+                best_key = key
+        if best is None:
+            return
+        item["target"] = best
+        item["publishers"] = counts.get(best, 0)
+        types = (item.get("graph") or {}).get(best) or []
+        item["type_name"] = types[0] if types else item.get("type_name")
+
     def _judge_topics(self, resolved, measurements) -> None:
         window_s = float(self.config.get("window_s", 2.0))
         now = time.monotonic()
         for item in resolved:
             spec = item["spec"]
             started = time.monotonic()
+            if spec.get("auto_detect"):
+                self._pick_auto_detect_target(item, measurements, window_s)
             target = item["target"]
             bucket = measurements.get(target)
             count = bucket["count"] if bucket else 0

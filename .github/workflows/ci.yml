@@ -12,8 +12,11 @@ on:
       - "HealthCheck/**"
       - "ros2_ws/**"
       - "tests/**"
-      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
-      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/startFiles/**"
+      - "includes/gz/scripts/**"
+      - "includes/gz/params/**"
+      - "includes/gz/models/**"
+      - "includes/gz/Params/**"
       - "includes/gz/gz_modifications.bash"
       - "includes/gz/tune_gz_cameras.py"
       - "includes/gz/patch_dds_topics.py"
@@ -24,7 +27,7 @@ on:
       - ".hadolint.yaml"
       - ".yamllint.yml"
   push:
-    branches: [main, dev/px4-upgrade, "feature/**"]
+    branches: [main, dev, "feature/**"]
     tags: ["v*"]
     paths:
       - "dockerFile/**"
@@ -36,8 +39,11 @@ on:
       - "HealthCheck/**"
       - "ros2_ws/**"
       - "tests/**"
-      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
-      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/startFiles/**"
+      - "includes/gz/scripts/**"
+      - "includes/gz/params/**"
+      - "includes/gz/models/**"
+      - "includes/gz/Params/**"
       - "includes/gz/gz_modifications.bash"
       - "includes/gz/tune_gz_cameras.py"
       - "includes/gz/patch_dds_topics.py"
