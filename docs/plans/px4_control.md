@@ -19,7 +19,7 @@ Work stopped on Parsa's request (weekly usage limit). It resumes only when he sa
 | Crash report for the last vision flight (lost tracking on the forward leg, climbed to about 6.5 m, crashed; ground-truth leak through the gz bridge made the hover invalid) | cloud agent | stopped, final report not delivered |
 | Collision check on that crash | cloud agent queue | not started |
 | Wall positions from #21's `world` to `spawn` transform, accept `"frame": "world_enu"` / `"local"`, world-to-local transform worked out at runtime once yaw is aligned and frozen at arming, 90 deg spawn test in both modes | cloud agent queue | not started |
-| Brake-hold then land on vision loss during any action, takeoff included | cloud agent queue | not confirmed in code yet |
+| Brake-hold then land on vision loss during any action, takeoff included | `note_vision_lost` → `abort_brake_hold_land` | done on `cursor/px4-control-ready-df62` |
 | Cleanup and optimization: split `node.py`, per-action modules, loop benchmark, 50 Hz vs 20 Hz, one switch file, golden snapshot tests, sim-time `dt`, startup check against PX4 limits, Python 3.12 | cloud agent queue | not started |
 | Docstrings, `px4_control/README.md`, `includes/gz/params/README.md` | cloud agent queue | not started |
 | Vision out-and-back on UFO, `cpu` profile, CPU only, separate worktree | UFO (4th in queue) | not started |
@@ -28,7 +28,7 @@ Work stopped on Parsa's request (weekly usage limit). It resumes only when he sa
 
 1. Check this branch and fetch the crash report, then run the collision check.
 2. Wall transform from #21's TF, with the 90 deg spawn tests.
-3. Brake-hold then land on vision loss during any action.
+3. Brake-hold then land on vision loss during any action. (done)
 4. Cleanup and optimization of the mission code, then comments and READMEs.
 5. After #19 merges, rebase: EKF2 settings into `ekf2_vision.params` via `PX4_PARAM_FILES`, `docker compose exec` instead of `docker exec px4_sim`, drop the post-boot `param set`, check init-only params apply before ekf2 starts, braking and speed below `MPC_ACC_HOR` / `MPC_XY_VEL_MAX`, QGC `.params` converter, and document that a real Pixhawk needs the `distance_sensor` line in `dds_topics.yaml`. #21 merges before #22.
 6. UFO flight, then post numbers for the Tester and take the PR out of draft.
