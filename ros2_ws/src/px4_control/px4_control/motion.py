@@ -144,28 +144,30 @@ class MotionExecutive:
     def accepts_cmd_vel(self) -> bool:
         return not self._vision_lost and self.phase not in (Phase.TAKEOFF, Phase.LAND)
 
-    def note_vision_lost(self, time_s: float) -> None:
-        """Brake to a position hold and take yaw rate to zero.
+    def note_vision_lost(self, time_s: float, snap: Snapshot | None = None) -> None:
+        """Brake, then land when vision is lost (including during takeoff).
 
         The previous offboard script yawed at 0.2 rad/s while vision was
-        gone. This does not. Takeoff and land keep their vertical path and
-        only freeze the yaw command.
+        gone. This does not. An in-progress land keeps descending and only
+        freezes the yaw command. Every other phase, takeoff included, fails
+        the active goal and runs brake → hold → land so a climb without
+        vision cannot continue.
         """
         if self._vision_lost or self._p is None:
             return
         self._vision_lost = True
-        if self.phase in (Phase.TAKEOFF, Phase.LAND):
+        if self.phase == Phase.LAND:
             self._yaw_goal = self._yaw
             return
-        if self._active is not None and not self._status[self._active].done:
-            status = self._status[self._active]
-            status.done = True
-            status.success = False
-            status.message = 'vision tracking lost'
-            self._active = None
-        self._holding = False
-        self._hold_since = None
-        self._begin_brake(time_s, Phase.HOLD)
+        if snap is None:
+            snap = Snapshot(
+                position_ned=self._p.copy(),
+                velocity_ned=self._v.copy() if self._v is not None else _zeros(),
+                yaw_ned=float(self._yaw),
+                yaw_rate=float(self._yaw_rate),
+                landed=False,
+            )
+        return self.abort_brake_hold_land(time_s, snap, 'vision tracking lost')
 
     def note_vision_regained(self) -> None:
         """Allow new commands again. The vehicle stays on the hold it latched."""

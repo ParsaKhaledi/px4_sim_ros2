@@ -12,7 +12,7 @@ Nav2 closed-loop flight in apt_world (RGBD, cpu vision). Nav2 publishes `/cmd_ve
 - `/cmd_vel` as `geometry_msgs/TwistStamped` only. Read `msg.twist`. Use the header stamp for the timeout. Nav2 sets `enable_stamped_cmd_vel` true in `controller_server`, `behavior_server`, and `velocity_smoother`. Tests already expect a twist timestamp. No parallel `Twist` subscription.
 - `/rtabmap/odom` for vision. One `/imu` source, owned by sim+vision. Do not add `px4_imu_bridge.py`.
 - If this node reads vehicle status, subscribe to `/fmu/out/vehicle_status_v1`. This PX4 does not publish the unversioned `vehicle_status` topic.
-- Safety, only these two in offboard: land on vision loss, lidar-vs-EKF2 height guard. Wall keep-out and near-wall slowdown are owned by Nav2 from SLAM occupancy (not an offboard JSON geofence).
+- Safety, only these two in offboard: brake-hold then land on vision loss (including during takeoff), lidar-vs-EKF2 height guard. Wall keep-out and near-wall slowdown are owned by Nav2 from SLAM occupancy (not an offboard JSON geofence).
 - EKF2 settings in the single base parameter file owned with DevOps (`feature/devops-compose-health-ci`), applied before EKF2 starts. No post-boot MAVLink param set. Agreed values, and no others: `EKF2_GPS_CTRL` 0, `EKF2_EV_CTRL` 9, `EKF2_HGT_REF` 0 (baro), `EKF2_MAG_TYPE` 5 (compass present, not fused), `EKF2_RNG_CTRL` 1.
 - Sim time, kept from the indoor work as a requirement, not a new subsystem: `use_sim_time` true and `UXRCE_DDS_SYNCT` 0. Gazebo `/clock` is the clock.
 

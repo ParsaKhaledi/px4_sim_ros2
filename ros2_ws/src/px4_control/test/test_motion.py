@@ -198,7 +198,7 @@ def test_vision_loss_holds_and_does_not_keep_yawing():
     executive.note_cmd_vel(0.0, 0.0, 0.0, 0.2)
     spinning = executive.update(0.05, snap)
     assert abs(spinning.yaw_rate) > 0.0
-    executive.note_vision_lost(0.05)
+    executive.note_vision_lost(0.05, snap)
     state = snap
     last = spinning
     for index in range(1, 80):
@@ -207,9 +207,38 @@ def test_vision_loss_holds_and_does_not_keep_yawing():
     assert last.use_position is True
     assert last.yaw_rate == pytest.approx(0.0, abs=1e-3)
     assert abs(last.yaw) < math.radians(15.0)
+    # After brake the executive lands; cmd_vel stays ignored while vision is lost.
+    assert executive.phase in (Phase.BRAKE, Phase.LAND, Phase.HOLD)
     executive.note_cmd_vel(6.0, 0.0, 0.0, 0.2)
     held = executive.update(6.05, state)
     assert held.yaw_rate == pytest.approx(0.0, abs=1e-3)
+
+
+def test_vision_loss_during_takeoff_brakes_then_lands():
+    executive = MotionExecutive(_limits())
+    ground = _snap(np.array([0.0, 0.0, 0.0]), landed=True)
+    executive.update(0.0, ground)
+    takeoff_id = executive.request_takeoff(0.0, ground, height=2.0)
+    assert takeoff_id >= 0
+    climbing = executive.update(0.05, ground)
+    assert executive.phase == Phase.TAKEOFF
+    air = _snap(climbing.position.copy(), climbing.velocity.copy())
+    land_id = executive.note_vision_lost(0.1, air)
+    assert land_id == takeoff_id or land_id >= 0
+    assert executive.poll(takeoff_id).done
+    assert executive.poll(takeoff_id).success is False
+    assert 'vision tracking lost' in executive.poll(takeoff_id).message
+    # Brake first, then land (same pattern as lidar abort).
+    assert executive.phase == Phase.BRAKE
+    state = air
+    last = climbing
+    for index in range(1, 120):
+        last = executive.update(0.1 + index * 0.05, state)
+        state = Snapshot(last.position.copy(), last.velocity.copy(), last.yaw, last.yaw_rate, False)
+        if executive.phase == Phase.LAND:
+            break
+    assert executive.phase == Phase.LAND
+    assert float(last.velocity[2]) >= 0.0 or last.use_position is True
 
 
 def test_scalar_and_planar_stop_with_zero_speed_inside_accel_limit():
