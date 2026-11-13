@@ -136,7 +136,10 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
-    # DWB parameters
+    # DWB local planner. Obstacle proximity (near-wall slowdown) is owned here
+    # via BaseObstacle + the inflation layer, not px4_control JSON geofence.
+    # Docs: https://docs.nav2.org/rolling/configuration_and_development/configuration_guide/controller_plugins/dwb_controller/
+    # Critic: https://docs.nav2.org/rolling/configuration_and_development/configuration_guide/controller_plugins/dwb_controller/trajectory_critics/base_obstacle/
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
@@ -168,7 +171,10 @@ controller_server:
       short_circuit_trajectory_evaluation: True
       stateful: True
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.02
+      # Prefer trajectories that stay in low cost (away from inflated obstacles).
+      # Default critic scale is 1.0; 0.02 was too weak to slow near walls.
+      BaseObstacle.scale: 1.0
+      BaseObstacle.sum_scores: True
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
       GoalAlign.scale: 24.0
@@ -188,15 +194,19 @@ local_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       rolling_window: true
-      width: 3
-      height: 3
+      width: 5
+      height: 5
       resolution: 0.05
-      robot_radius: 0.27
+      # Match px4_control drone_radius_m (0.35). Inscribed lethal uses this.
+      robot_radius: 0.35
       plugins: ["voxel_layer", "inflation_layer"]
+      # Inflation: path/goal keep-out + cost gradient for BaseObstacle slowdown.
+      # inflation_radius >= drone_radius_m + wall_margin_m (0.35 + 0.40).
+      # Docs: https://docs.nav2.org/rolling/configuration_and_development/configuration_guide/core_servers/costmap_2d/costmap_plugins/inflation/
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.65
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.75
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -227,7 +237,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      robot_radius: 0.18
+      robot_radius: 0.35
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -247,8 +257,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.65
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.75
       always_send_full_costmap: True
 
 map_server:
@@ -269,9 +279,12 @@ planner_server:
     expected_planner_frequency: 20.0
     use_sim_time: True
     planner_plugins: ["GridBased"]
+    # Global planner rejects goals/paths through lethal/inscribed cells from
+    # the inflated SLAM occupancy map (replaces px4_control path_rejection).
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
-      tolerance: 0.5
+      # Keep small so a goal inside the keep-out does not snap far into free space.
+      tolerance: 0.15
       use_astar: false
       allow_unknown: true
 

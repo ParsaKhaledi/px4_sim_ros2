@@ -72,6 +72,8 @@ Fuel furniture models keep their upstream licence (see each `model.config` when 
 
 ## Wall maps
 
+Optional sim prior only. Goal rejection and near-wall speed limits are owned by Nav2 from SLAM occupancy; see [nav2_obstacle_limits.md](nav2_obstacle_limits.md). Keep `px4_control` `wall_segments_file` empty.
+
 `includes/gz/scripts/wall_geometry.py` slices each world's collision geometry with a horizontal plane at `z = 0.5 m` and writes `includes/gz/walls/<world>.json`.
 
 ```json
