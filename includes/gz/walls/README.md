@@ -2,6 +2,8 @@
 
 2D obstacle maps, one JSON file per world. `includes/gz/scripts/wall_geometry.py` slices collision geometry with a horizontal plane and writes these files. Regenerate them after a world change. Do not edit the JSON by hand.
 
+**Product path:** Nav2 owns goal rejection and near-wall speed limits from SLAM occupancy. Keep `px4_control` `wall_segments_file` empty. These JSON files are an optional sim prior only. See [docs/nav2_obstacle_limits.md](../../../docs/nav2_obstacle_limits.md).
+
 ## Contents
 
 | File | World |
