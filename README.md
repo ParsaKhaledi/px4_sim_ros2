@@ -147,6 +147,20 @@ Bridge config: [includes/gz/config_gz_bridge.yaml](includes/gz/config_gz_bridge.
 
 CycloneDDS is pre-installed in the image (`ros-jazzy-rmw-cyclonedds-cpp`).
 
+### Ground truth (sim)
+
+Ground truth is Gazebo’s true model pose, published on a ROS topic so you can score SLAM and EKF without feeding that truth into the estimator. It is not a second estimate. A Gazebo `OdometryPublisher` on the vehicle model publishes `/ground_truth/odom` (ENU). The covariance topic is kept off PX4’s external-vision input so GZBridge does not inject the true pose into EKF2.
+
+| TF / topic | Meaning |
+|------------|---------|
+| `world` → `spawn` | Static takeoff frame on the floor (x, y, yaw from `PX4_GZ_MODEL_POSE`; z = 0) |
+| `world` → `base_link_gt` | Moving ground-truth pose from `/ground_truth/odom` |
+| `/ground_truth/odom` | True Gazebo pose at ~50 Hz (`nav_msgs/Odometry`) |
+
+The child frame is `base_link_gt`, not `base_link`. RTAB-Map already publishes `odom` → `base_link`; a second parent would split the TF tree. Compare PX4 or SLAM poses to `/ground_truth/odom` after converting PX4 NED/FRD into ENU/FLU.
+
+This path lands with the headless sim / ground-truth work (`feature/sim-headless-groundtruth`). Until that branch is merged, the topic is absent on `main`.
+
 ## Health checks
 
 The PX4 service healthcheck verifies `/clock` and `/fmu/out/vehicle_odometry`. RTAB-Map checks `/rtabmap/odom`. Scripts live in [HealthCheck/](HealthCheck/).

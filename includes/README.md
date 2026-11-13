@@ -20,6 +20,8 @@ Runtime simulation assets mounted into Docker containers from the host repo. Cha
 | `Params/nav2/` | Nav2 and RViz configuration |
 | `startFiles/` | Per-service launch scripts referenced from Compose |
 
+**Ground truth (when the sim-headless branch is active):** `/ground_truth/odom` is Gazebo’s true model pose for scoring SLAM/EKF only — it must not feed the estimator. TF `world` → `base_link_gt` follows that topic; `world` → `spawn` is the static floor frame under takeoff. See the root [README.md](../README.md#ground-truth-sim).
+
 Mount points in Compose (example): `./includes/gz/` → `/home/px4/volume/includes/gz/`, `./includes/gz/startFiles/` → `/home/px4/volume/startFiles/`.
 
 ## GitHub automation
