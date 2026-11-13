@@ -49,17 +49,6 @@ from px4_control.frames import (
     wrap_pi,
     yaw_ned_from_rotation,
 )
-from px4_control.geofence import (
-    LocalFix,
-    SpawnFrame,
-    WallAlignment,
-    goal_rejection,
-    limit_planar_velocity,
-    load_wall_file,
-    max_speed_along,
-    path_rejection,
-    yaw_from_quaternion,
-)
 from px4_control.mavlink_params import read_params
 from px4_control.mode_switch import NAV_NAMES, OffboardStreamGate, parse_mode
 from px4_control.motion import Limits, MotionExecutive, Phase, Snapshot
@@ -79,7 +68,6 @@ from px4_msgs.msg import (
     VehicleCommand,
     VehicleCommandAck,
     VehicleLandDetected,
-    VehicleLocalPosition,
     VehicleOdometry,
     VehicleStatus,
 )
@@ -125,7 +113,6 @@ class Px4ControlNode(Node):
             cmd_timeout=float(self.get_parameter('cmd_vel_timeout_s').value),
         )
         self._motion = MotionExecutive(limits)
-        self._motion.speed_cap = self._speed_cap
         self._gate = OffboardStreamGate(
             min_hz=float(self.get_parameter('offboard_min_hz').value),
             warmup_s=float(self.get_parameter('offboard_warmup_s').value),
@@ -135,13 +122,6 @@ class Px4ControlNode(Node):
             reset_jump_m=float(self.get_parameter('vision_reset_jump_m').value),
             max_variance=float(self.get_parameter('vision_max_variance').value),
         )
-        wall_path = str(self.get_parameter('wall_segments_file').value or '')
-        self._tf_buffer = None
-        self._tf_listener = None
-        self._wall_alignment = WallAlignment(load_wall_file(wall_path))
-        self._walls = self._wall_alignment.walls
-        self._local_fix: LocalFix | None = None
-        self._log_walls(self._wall_alignment.loaded)
 
         self._pos = None
         self._vel = np.zeros(3)
@@ -201,9 +181,6 @@ class Px4ControlNode(Node):
         self._subscribe_px4(FailsafeFlags, self._topics['failsafe_flags'], self._on_flags, qos)
         self._subscribe_px4(EstimatorStatusFlags, self._topics['estimator_status_flags'], self._on_estimator, qos)
         self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
-        self._subscribe_px4(
-            VehicleLocalPosition, self._topics['vehicle_local_position'], self._on_local_position, qos,
-        )
         self._subscribe_px4(DistanceSensor, self._topics['distance_sensor'], self._on_distance, qos)
         self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
@@ -283,9 +260,6 @@ class Px4ControlNode(Node):
             'settle_position_m': 0.02,
             'settle_yaw_deg': 3.0,
             'settle_time_s': 1.0,
-            'drone_radius_m': 0.35,
-            'wall_margin_m': 0.40,
-            'wall_segments_file': '',
             'preflight_service': '/sim/preflight_check',
             'arm_timeout_s': 25.0,
             'offboard_timeout_s': 10.0,
@@ -329,73 +303,6 @@ class Px4ControlNode(Node):
         topic = str(self.get_parameter('vision_odom_info_topic').value)
         self.create_subscription(OdomInfo, topic, self._on_odom_info, 10, callback_group=self._cb)
 
-    def _log_walls(self, loaded) -> None:
-        if loaded.missing:
-            self.get_logger().warning(f'wall file {loaded.path} is missing; using an empty wall set')
-        elif loaded.frame == 'world_enu':
-            self.get_logger().info(
-                f'{loaded.path}: {len(loaded.raw)} world_enu segments; '
-                'geofence stays off until TF world -> spawn matches EKF2 yaw'
-            )
-        elif loaded.walls:
-            self.get_logger().info(f'loaded {len(loaded.walls)} wall segments from {loaded.path}')
-        else:
-            self.get_logger().info('no wall file configured; speed is not wall-limited')
-
-    def _spawn_from_tf(self) -> SpawnFrame | None:
-        """Static TF ``world`` -> ``spawn``: x, y, and ENU yaw. z is ignored."""
-        if self._wall_alignment.loaded.frame != 'world_enu':
-            return None
-        try:
-            from tf2_ros import Buffer, TransformListener
-        except ImportError:
-            return None
-        if self._tf_buffer is None:
-            self._tf_buffer = Buffer()
-            self._tf_listener = TransformListener(self._tf_buffer, self, spin_thread=False)
-        try:
-            transform = self._tf_buffer.lookup_transform('world', 'spawn', rclpy.time.Time())
-        except Exception:
-            return None
-        translation = transform.transform.translation
-        rotation = transform.transform.rotation
-        return SpawnFrame(
-            float(translation.x),
-            float(translation.y),
-            yaw_from_quaternion(
-                float(rotation.x), float(rotation.y), float(rotation.z), float(rotation.w),
-            ),
-        )
-
-    def _update_wall_frame(self, now: float) -> None:
-        if self._wall_alignment.loaded.frame != 'world_enu':
-            return
-        spawn = self._spawn_from_tf()
-        with self._lock:
-            local = self._local_fix
-            landed = self._landed
-            armed = self._armed
-            estimator = self._estimator
-        yaw_aligned = estimator is not None and bool(estimator.cs_yaw_align)
-        step = self._wall_alignment.update(
-            spawn=spawn,
-            local=local,
-            yaw_aligned=yaw_aligned,
-            landed=landed,
-            armed=armed,
-        )
-        for line in step.logs:
-            if step.brake:
-                self.get_logger().error(line)
-            elif line.startswith('geofence off'):
-                self.get_logger().warning(line)
-            else:
-                self.get_logger().info(line)
-        with self._lock:
-            self._walls = self._wall_alignment.walls
-            if step.brake:
-                self._motion.abort(now, step.logs[-1])
-
     def _now_s(self) -> float:
         """Node clock. Sim time when ``use_sim_time`` follows ``/clock``. Control dt uses this."""
         return self.get_clock().now().nanoseconds * 1e-9
@@ -437,17 +344,6 @@ class Px4ControlNode(Node):
     def _on_land(self, msg: VehicleLandDetected) -> None:
         with self._lock:
             self._landed = bool(msg.landed)
-
-    def _on_local_position(self, msg: VehicleLocalPosition) -> None:
-        fix = LocalFix(
-            x=float(msg.x),
-            y=float(msg.y),
-            heading=float(msg.heading),
-            xy_valid=bool(msg.xy_valid),
-            heading_reset_counter=int(msg.heading_reset_counter),
-        )
-        with self._lock:
-            self._local_fix = fix
 
     def _on_distance(self, msg: DistanceSensor) -> None:
         if int(msg.orientation) != int(DistanceSensor.ROTATION_DOWNWARD_FACING):
@@ -557,22 +453,8 @@ class Px4ControlNode(Node):
             self._pos.copy(), self._vel.copy(), self._yaw, self._yaw_rate, self._landed, self._armed,
         )
 
-    def _speed_cap(self, position_ned: np.ndarray, direction_ne: np.ndarray) -> float:
-        enu = ned_to_enu(position_ned)
-        return max_speed_along(
-            float(enu[0]),
-            float(enu[1]),
-            float(direction_ne[1]),
-            float(direction_ne[0]),
-            self._walls,
-            float(self.get_parameter('drone_radius_m').value),
-            float(self.get_parameter('wall_margin_m').value),
-            float(self.get_parameter('a_brake').value),
-        )
-
     def _on_timer(self) -> None:
         now = self._now_s()
-        self._update_wall_frame(now)
         with self._lock:
             snap = self._snapshot()
             if self._cmd is not None and self._cmd_time is not None and snap is not None and self._motion.accepts_cmd_vel():
@@ -582,17 +464,6 @@ class Px4ControlNode(Node):
                         self._cmd.linear.y,
                         self._cmd.angular.z,
                         snap.yaw_ned,
-                    )
-                    enu = ned_to_enu(snap.position_ned)
-                    v_e, v_n = limit_planar_velocity(
-                        v_e,
-                        v_n,
-                        float(enu[0]),
-                        float(enu[1]),
-                        self._walls,
-                        float(self.get_parameter('drone_radius_m').value),
-                        float(self.get_parameter('wall_margin_m').value),
-                        float(self.get_parameter('a_brake').value),
                     )
                     self._motion.note_cmd_vel(self._cmd_time, v_n, v_e, yaw_rate)
             if self._estimation_mode == 'vision':
@@ -1174,17 +1045,9 @@ class Px4ControlNode(Node):
         else:
             target_enu = np.array([float(request.x), float(request.y), float(request.z)], dtype=float)
             yaw = None if not request.yaw_valid else enu_yaw_to_ned(float(request.yaw))
-        radius = float(self.get_parameter('drone_radius_m').value)
-        margin = float(self.get_parameter('wall_margin_m').value)
-        reason = path_rejection(
-            float(current_enu[0]), float(current_enu[1]),
-            float(target_enu[0]), float(target_enu[1]),
-            self._walls, radius, margin,
-        )
-        if reason is None:
-            reason = goal_rejection(float(target_enu[0]), float(target_enu[1]), self._walls, radius, margin)
-        if reason:
-            return None, reason
+        # Goal / path keep-out and near-wall slowdown are owned by Nav2 from
+        # SLAM occupancy (costmap inflation + planner / DWB). Offboard does not
+        # load wall JSON or apply a substitute geofence.
         target_ned = enu_to_ned(target_enu)
         goal_id = self._motion.request_goto(self._now_s(), snap, target_ned, yaw)
         status = self._motion.poll(goal_id)

@@ -1,6 +1,6 @@
 # px4_control
 
-Offboard control node and `Drone` client for PX4 v1.17 over uXRCE-DDS. Architecture, frames, `ESTIMATION_MODE`, and the wall-file format are in [docs/px4_control.md](../../../docs/px4_control.md).
+Offboard control node and `Drone` client for PX4 v1.17 over uXRCE-DDS. Architecture, frames, and `ESTIMATION_MODE` are in [docs/px4_control.md](../../../docs/px4_control.md). Obstacle keep-out is SLAM → Nav2; see [docs/nav2_obstacle_limits.md](../../../docs/nav2_obstacle_limits.md).
 
 ## Run
 
@@ -29,4 +29,4 @@ cd ros2_ws/src/px4_control
 PYTHONPATH=. python3 -m pytest -q test
 ```
 
-Frame, covariance, trajectory, and geofence tests do not start Gazebo. `fake_vision_source` republishes a pose topic (default `/ground_truth/odom`) onto `/rtabmap/odom` and logs that it is a test substitute, not RTAB-Map. The default launch does not start it.
+Frame, covariance, and trajectory tests do not start Gazebo. `fake_vision_source` republishes a pose topic (default `/ground_truth/odom`) onto `/rtabmap/odom` and logs that it is a test substitute, not RTAB-Map. The default launch does not start it.

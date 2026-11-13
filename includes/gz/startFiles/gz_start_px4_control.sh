@@ -26,12 +26,6 @@ fi
 export ESTIMATION_MODE="${ESTIMATION_MODE:-vision}"
 export PX4_MAX_YAW_RATE_DEG_S="${PX4_MAX_YAW_RATE_DEG_S:-30}"
 
-WORLD_NAME="${World:-default}"
-WALLS="${HOME_DIR}/volume/includes/gz/walls/${WORLD_NAME}.json"
-if [ -f "${WALLS}" ]; then
-  export PX4_WALL_SEGMENTS_FILE="${WALLS}"
-fi
-
 exec ros2 launch px4_control px4_control.launch.py \
   use_sim_time:="${USE_SIM_TIME:-true}" \
   estimation_mode:="${ESTIMATION_MODE}" \

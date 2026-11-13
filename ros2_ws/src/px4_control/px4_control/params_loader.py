@@ -13,7 +13,6 @@ import os
 
 ESTIMATION_ENV = 'ESTIMATION_MODE'
 YAW_RATE_ENV = 'PX4_MAX_YAW_RATE_DEG_S'
-WALL_FILE_ENV = 'PX4_WALL_SEGMENTS_FILE'
 
 
 def normalize_estimation_mode(value: str | None) -> str:

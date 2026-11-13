@@ -1,6 +1,6 @@
 # gz/
 
-Gazebo Harmonic worlds, models, and the simulation helpers that run inside the PX4 container. The full description of headless mode, sim time, ground truth, offline models, wall maps, `trajectory_eval`, and `/sim/preflight_check` is in [docs/simulation.md](../../docs/simulation.md).
+Gazebo Harmonic worlds, models, and the simulation helpers that run inside the PX4 container. The full description of headless mode, sim time, ground truth, offline models, `trajectory_eval`, and `/sim/preflight_check` is in [docs/simulation.md](../../docs/simulation.md). Obstacle keep-out is SLAM occupancy → Nav2; see [docs/nav2_obstacle_limits.md](../../docs/nav2_obstacle_limits.md).
 
 ## Commands
 
@@ -11,8 +11,7 @@ HEADLESS=1 CameraType=rgbd World=default ./scripts/up.sh
 # Fail if a world still points at Gazebo Fuel
 python3 includes/gz/scripts/check_offline_worlds.py
 
-# Rebuild wall maps and re-vendor Fuel models
-python3 includes/gz/scripts/wall_geometry.py
+# Re-vendor Fuel models
 python3 includes/gz/scripts/fuel_assets.py
 
 # Trajectory report (math tests do not need a running sim)
@@ -26,9 +25,8 @@ Spawn pose `PX4_GZ_MODEL_POSE` defaults to `-3,-1.6,0.15,0,0,3.14` (ENU, radians
 |------|--------|
 | [sim_ws/src/sim_monitor/](sim_ws/src/sim_monitor/README.md) | Real-time factor, spawn TF, preflight, PX4 IMU relay |
 | [sim_ws/src/trajectory_eval/](sim_ws/src/trajectory_eval/README.md) | Trajectory recording and scores |
-| [scripts/](scripts/README.md) | Origin, x500 patches, wall export, offline models |
+| [scripts/](scripts/README.md) | Origin, x500 patches, offline models |
 | [startFiles/](startFiles/README.md) | Headless SITL, bridge, sim helpers |
-| [walls/](walls/README.md) | 2D obstacle JSON |
 
 ## Sensor systems
 
