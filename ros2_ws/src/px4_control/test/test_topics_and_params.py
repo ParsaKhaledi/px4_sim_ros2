@@ -44,6 +44,10 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
     gps = expected_sim_params('gps')
     assert gps['EKF2_MAG_TYPE'] == 0.0
     assert gps['SYS_HAS_MAG'] == 1.0
+    assert 'GF_ACTION' not in gps
+    assert 'GF_MAX_VER_DIST' not in gps
+    assert 'EKF2_EV_DELAY' not in gps
+    assert 'EKF2_RNG_CTRL' not in gps
     actual = {
         'EKF2_EV_CTRL': 0.0,
         'EKF2_GPS_CTRL': 7.0,
@@ -69,6 +73,34 @@ def test_readback_fails_when_ekf_params_stay_at_the_airframe_default():
         )},
         expected,
     ) is None
+
+
+def test_gps_readback_ignores_vision_only_params():
+    """GPS expected dict omits GF_* / EKF2_EV_DELAY; mismatch must not KeyError."""
+    expected = expected_sim_params('gps')
+    # Full MAVLink reply that also includes vision-only names the GPS profile
+    # does not list. readback_mismatch must skip those names.
+    actual = {
+        'EKF2_EV_CTRL': 0.0,
+        'EKF2_GPS_CTRL': 7.0,
+        'EKF2_HGT_REF': 1.0,
+        'EKF2_MAG_TYPE': 0.0,
+        'SYS_HAS_MAG': 1.0,
+        'NAV_RCL_ACT': 1.0,
+        'NAV_DLL_ACT': 0.0,
+        'UXRCE_DDS_SYNCT': 0.0,
+        'GF_ACTION': 5.0,
+        'GF_MAX_VER_DIST': 3.0,
+        'EKF2_EV_DELAY': 0.0,
+        'EKF2_RNG_CTRL': 1.0,
+    }
+    assert readback_mismatch(actual, expected) is None
+    # Logging loop in the node only formats names in expected.
+    for name in ('GF_ACTION', 'GF_MAX_VER_DIST', 'EKF2_EV_DELAY', 'EKF2_RNG_CTRL'):
+        assert name not in expected
+        # Would have been KeyError: expected[name] on the old GPS path.
+        assert name in actual
+
 
 
 def test_param_request_round_trip(tmp_path):
