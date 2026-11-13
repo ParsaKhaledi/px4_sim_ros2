@@ -15,6 +15,8 @@ Gazebo Harmonic (gz) runs inside the PX4 container. Worlds and models under `inc
 
 The static TF `world` -> `spawn` is the spawn pose, so a pose can be expressed relative to the takeoff point by transforming through `spawn`.
 
+Nav2 / RTAB-Map TF contracts (including spawn yaw vs map, and why GT uses `base_link_gt`) are in [tf_requirements.md](tf_requirements.md).
+
 ## Headless Gazebo
 
 `HEADLESS=0` (the default) starts the gz server and the gz GUI. The GUI needs `DISPLAY` and `xhost`.
