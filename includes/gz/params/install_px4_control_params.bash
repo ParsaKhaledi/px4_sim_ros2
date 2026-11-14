@@ -104,7 +104,10 @@ install_px4_control_params() {
     echo "export PX4_PARAM_NAV_DLL_ACT=0"
     echo "export PX4_PARAM_UXRCE_DDS_SYNCT=0"
     if [ "$mode" = "gps" ]; then
+      # Mag heading is required for yaw align when EV yaw is off. sim.params
+      # defaults MAG_TYPE=5 (none) for vision; override it here for GPS mode.
       echo "export PX4_PARAM_EKF2_EV_CTRL=0"
+      echo "export PX4_PARAM_EKF2_MAG_TYPE=0"
       echo "export PX4_PARAM_EKF2_HGT_REF=1"
       echo "export PX4_PARAM_EKF2_GPS_CTRL=7"
       echo "export PX4_PARAM_EKF2_GPS_P_NOISE=0.5"

@@ -26,9 +26,15 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "x500_tf_publisher" in camera_script
     assert "a+rwX" in camera_script
     assert "ESTIMATION_MODE=gps" in camera_script
+    assert "PX4_PARAM_EKF2_MAG_TYPE=0" in camera_script
+    assert "PX4_GZ_SIM_RENDER_ENGINE" in camera_script
     assert "GZ_USE_XVFB" in camera_script
     assert "unset HEADLESS" in camera_script
     assert "ESTIMATION_MODE: gps" in text
+    installer = Path(
+        "includes/gz/params/install_px4_control_params.bash"
+    ).read_text(encoding="utf-8")
+    assert "EKF2_MAG_TYPE=0" in installer
     xvfb = Path("compose.xvfb.yml").read_text(encoding="utf-8")
     assert "HEADLESS_BACKEND: xvfb" in xvfb
     assert 'HEADLESS: ""' in xvfb

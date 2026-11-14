@@ -50,6 +50,8 @@ x-ros-env: &ros-env
   GZ_CAMERA_HEIGHT: ${GZ_CAMERA_HEIGHT:-}
   HEALTH_CAMERA_MIN_HZ: ${HEALTH_CAMERA_MIN_HZ:-}
   PX4_PARAM_FILES: ${PX4_PARAM_FILES:-sim.params}
+  # Empty = Gazebo default (ogre2). Camera CI may set ogre for Soft-GL.
+  PX4_GZ_SIM_RENDER_ENGINE: ${PX4_GZ_SIM_RENDER_ENGINE:-}
   World: ${World:-default}
   IMU_SOURCE: ${IMU_SOURCE:-oak}
   USE_SIM_TIME: ${USE_SIM_TIME:-true}

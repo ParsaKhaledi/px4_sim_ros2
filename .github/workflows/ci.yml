@@ -457,6 +457,7 @@ jobs:
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
           ESTIMATION_MODE: gps
+          PX4_GZ_SIM_RENDER_ENGINE: ogre
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
@@ -491,6 +492,7 @@ jobs:
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
           ESTIMATION_MODE: gps
+          PX4_GZ_SIM_RENDER_ENGINE: ogre
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml

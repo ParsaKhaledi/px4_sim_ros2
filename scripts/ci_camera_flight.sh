@@ -69,10 +69,14 @@ export SMOKE_TEST_TIMEOUT="${SMOKE_TEST_TIMEOUT:-420}"
 # overrides via install_px4_control_params + host assert_px4_params.
 export ESTIMATION_MODE=gps
 export PX4_PARAM_EKF2_EV_CTRL=0
+# Override sim.params MAG_TYPE=5 so EKF can yaw-align without EV.
+export PX4_PARAM_EKF2_MAG_TYPE=0
 export PX4_PARAM_EKF2_HGT_REF=1
 export PX4_PARAM_EKF2_GPS_CTRL=7
 export PX4_PARAM_EKF2_GPS_P_NOISE=0.5
 export PX4_PARAM_EKF2_GPS_V_NOISE=0.3
+# Ogre 1.x often renders non-blank Soft-GL frames where ogre2 stays flat.
+export PX4_GZ_SIM_RENDER_ENGINE="${PX4_GZ_SIM_RENDER_ENGINE:-ogre}"
 
 # Full out-and-back (hover + forward + return). Same pass criteria for both
 # cameras via shared E2E_* defaults / .env.example.
