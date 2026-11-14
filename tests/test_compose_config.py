@@ -196,5 +196,6 @@ def test_xvfb_override_replaces_the_empty_display():
     assert env["DISPLAY"] == ":99"
     assert str(env["GZ_USE_XVFB"]) == "1"
     assert str(env["GZ_HEADLESS_RENDERING"]) == "0"
+    assert env["HEADLESS_BACKEND"] == "xvfb"
     assert str(env["LIBGL_ALWAYS_SOFTWARE"]) == "1"
     assert env["GALLIUM_DRIVER"] == "llvmpipe"

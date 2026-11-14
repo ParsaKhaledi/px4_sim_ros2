@@ -457,10 +457,12 @@ jobs:
           VISION_PROFILE: cpu
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
-          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
           COMPOSE_PROJECT_NAME: px4-smoke-rgbd-${{ github.run_id }}
-          GZ_HEADLESS_RENDERING: "1"
-          GZ_USE_XVFB: "0"
+          # Soft-GL EGL blanks cameras; Xvfb gives graded frames on CPU CI.
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "1"
+          DISPLAY: ":99"
           LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"
@@ -481,17 +483,17 @@ jobs:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
           HEADLESS: "1"
           RTABMAPVIZ: "false"
-          DISPLAY: ""
+          DISPLAY: ":99"
           CameraType: stereo
           World: default
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
-          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
           COMPOSE_PROJECT_NAME: px4-smoke-stereo-${{ github.run_id }}
-          GZ_HEADLESS_RENDERING: "1"
-          GZ_USE_XVFB: "0"
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "1"
           LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"

@@ -68,6 +68,13 @@ export PATH="${REPO_GZ}/bin:${PATH}"
 
 if [ "${headless}" = "1" ]; then
   export HEADLESS=1
+  # Compose/CI set GZ_USE_XVFB; map it onto HEADLESS_BACKEND when unset.
+  if [ -z "${HEADLESS_BACKEND:-}" ]; then
+    case "${GZ_USE_XVFB:-0}" in
+      1|true|TRUE|yes|YES) HEADLESS_BACKEND=xvfb ;;
+      *) HEADLESS_BACKEND=egl ;;
+    esac
+  fi
   backend="${HEADLESS_BACKEND:-egl}"
   if [ "${backend}" = "xvfb" ] && command -v Xvfb >/dev/null 2>&1; then
     export HEADLESS_BACKEND=xvfb

@@ -667,15 +667,29 @@ class FlightWatch:
 
     def _wait_until(self, predicate, sim_timeout: float, wall_timeout: float, finish_on_sim: bool = False) -> bool:
         wall_timeout = wall_timeout * self.wall_scale
-        start_sim = self._sim_s()
+        # use_sim_time starts at 0 until /clock arrives, then jumps to the
+        # current Gazebo time. Health gates can leave sim time already past
+        # sim_timeout, so baseline only after a non-zero clock sample.
         start_wall = time.monotonic()
+        start_sim = None
         if self._phase_sim is None:
-            self._phase_sim = start_sim
+            self._phase_sim = 0.0
         while True:
             self._tick()
             if predicate():
                 return True
-            sim_dt = self._sim_s() - start_sim
+            now_sim = self._sim_s()
+            if start_sim is None:
+                if now_sim > 0.0:
+                    start_sim = now_sim
+                    if self._phase_sim == 0.0:
+                        self._phase_sim = start_sim
+                wall_dt = time.monotonic() - start_wall
+                if wall_dt >= wall_timeout:
+                    return False
+                time.sleep(0.05)
+                continue
+            sim_dt = now_sim - start_sim
             wall_dt = time.monotonic() - start_wall
             if wall_dt > 20.0 and sim_dt < 0.5:
                 raise FlightCrash("sim_stalled", dict(self.snapshot), list(self.samples))

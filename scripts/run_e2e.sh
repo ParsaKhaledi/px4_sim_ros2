@@ -46,9 +46,18 @@ export E2E_ATTEMPT_TIMEOUT="${E2E_ATTEMPT_TIMEOUT:-480}"
 export E2E_TOTAL_TIMEOUT="${E2E_TOTAL_TIMEOUT:-720}"
 export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-0}"
 export GZ_USE_XVFB="${GZ_USE_XVFB:-0}"
+_append_compose_file() {
+  local file="$1"
+  case ":${COMPOSE_FILES}:" in
+    *:"${file}":*) ;;
+    *) COMPOSE_FILES="${COMPOSE_FILES}:${file}" ;;
+  esac
+  export COMPOSE_FILES
+}
 if [ "${GZ_USE_XVFB}" = "1" ]; then
   export DISPLAY="${DISPLAY:-:99}"
-  export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml:compose.xvfb.yml}"
+  export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+  _append_compose_file "compose.xvfb.yml"
 else
   export DISPLAY=""
   export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
@@ -401,7 +410,9 @@ if [ "${E2E_CHECK_CAMERAS}" = "1" ] && [ "${GZ_USE_XVFB}" != "1" ]; then
     export GZ_HEADLESS_RENDERING=0
     export GZ_USE_XVFB=1
     export DISPLAY=:99
-    export COMPOSE_FILES="compose.yml:compose.ci.yml:compose.xvfb.yml"
+    # Keep docker-compose-px4.yml (or whatever CI already set); only add xvfb.
+    export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+    _append_compose_file "compose.xvfb.yml"
     attempt=$((attempt + 1))
     restart_start="$(date +%s)"
     "${ROOT}/scripts/compose_stack.sh" recreate

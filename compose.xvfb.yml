@@ -6,5 +6,6 @@ services:
       DISPLAY: ":99"
       GZ_USE_XVFB: "1"
       GZ_HEADLESS_RENDERING: "0"
+      HEADLESS_BACKEND: xvfb
       LIBGL_ALWAYS_SOFTWARE: "1"
       GALLIUM_DRIVER: llvmpipe

@@ -37,7 +37,6 @@ fi
 # --- Explicit camera / model (do not inherit compose defaults) ---
 export HEADLESS=1
 export RTABMAPVIZ=false
-export DISPLAY="${DISPLAY:-}"
 export CameraType="${CAM}"
 export World="${World:-default}"
 export PX4_GZ_MODEL=x500_depth
@@ -45,9 +44,12 @@ export E2E_GZ_MODEL=x500_depth
 export VISION_PROFILE=cpu
 export COMPOSE_PROFILES=slam
 export COMPOSE_SERVICES="PX4 StatePublisher Rtabmap"
-export COMPOSE_FILES="${COMPOSE_FILES:-docker-compose-px4.yml:compose.ci.yml}"
-export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-1}"
-export GZ_USE_XVFB="${GZ_USE_XVFB:-0}"
+# Soft-GL EGL publishes blank camera frames on Actions; start on Xvfb so
+# E2E_CHECK_CAMERAS grades real images without a second full bring-up.
+export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-0}"
+export GZ_USE_XVFB="${GZ_USE_XVFB:-1}"
+export DISPLAY="${DISPLAY:-:99}"
+export COMPOSE_FILES="${COMPOSE_FILES:-docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml}"
 # Camera flight does not grade distance_sensor; skip gpu_lidar on CPU CI.
 export LIDAR_DOWN="${LIDAR_DOWN:-0}"
 export HEALTH_CAMERA_MIN_HZ="${HEALTH_CAMERA_MIN_HZ:-1}"
