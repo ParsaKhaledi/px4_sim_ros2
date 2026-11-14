@@ -87,6 +87,164 @@ def choose_topic(candidates, graph_topics, publisher_counts) -> str | None:
     return best
 
 
+def auto_detect_group(spec: dict) -> str | None:
+    """Stable slot for one auto_detect list. First candidate is the group id."""
+    candidates = spec.get("auto_detect") or []
+    if not candidates:
+        return None
+    return str(candidates[0])
+
+
+def pick_live_auto_detect_target(
+    candidates: list[str],
+    counts: dict,
+    measurements: dict,
+    window_s: float,
+) -> tuple[str | None, str]:
+    """Shared auto_detect selection for the gate and the final health table.
+
+    Prefer a candidate that delivered messages in this window, then publisher
+    presence, then the higher PX4 version suffix. Returns ``(topic, reason)``.
+    """
+    scored: list[tuple] = []
+    for index, name in enumerate(candidates):
+        bucket = measurements.get(name) or {}
+        count = int(bucket.get("count") or 0)
+        publishers = int(counts.get(name, 0) or 0)
+        if publishers <= 0 and count <= 0:
+            continue
+        rate = (float(count) / float(window_s)) if window_s else 0.0
+        key = (count > 0, rate, publishers > 0, topic_version(name), -index)
+        scored.append((key, name, count, publishers, rate))
+    if not scored:
+        return None, "no candidate had publishers or measured messages"
+    scored.sort(reverse=True)
+    _key, best, count, publishers, rate = scored[0]
+    detail_parts = [
+        f"{name}: count={c} publishers={p} rate={r:.2f}Hz"
+        for _k, name, c, p, r in scored
+    ]
+    reason = (
+        f"selected {best} (count={count}, publishers={publishers}, "
+        f"rate={rate:.2f}Hz) from [{', '.join(detail_parts)}]"
+    )
+    return best, reason
+
+
+def topic_auto_detect_groups(config_dir: Path | None = None) -> dict[str, str]:
+    """Map every auto_detect candidate topic to its stable group id."""
+    checks = Path(config_dir) if config_dir else Path(__file__).resolve().parent / "checks"
+    mapping: dict[str, str] = {}
+    for filename in SERVICE_FILES.values():
+        path = checks / filename
+        if not path.is_file():
+            continue
+        try:
+            data = load_yaml(path)
+        except SystemExit:
+            continue
+        for spec in data.get("topics", []):
+            group = auto_detect_group(spec)
+            if not group:
+                continue
+            for name in spec.get("auto_detect") or []:
+                mapping[str(name)] = group
+    return mapping
+
+
+def report_row_key(row: dict, topic_groups: dict[str, str] | None = None) -> tuple:
+    """Collapse auto_detect candidates into one table row (shared with the gate)."""
+    service = row.get("service", "")
+    check = row.get("check", "")
+    target = str(row.get("target", "") or "")
+    group = row.get("auto_detect_group")
+    if not group and topic_groups and target in topic_groups:
+        group = topic_groups[target]
+    slot = group or target
+    return (service, check, slot)
+
+
+def collect_latest_health_rows(
+    log_dir: Path,
+    topic_groups: dict[str, str] | None = None,
+) -> list[dict]:
+    """Latest JSONL row per report slot, preserving first-seen order."""
+    groups = topic_groups if topic_groups is not None else topic_auto_detect_groups()
+    latest: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    if not log_dir.is_dir():
+        return []
+    for path in sorted(log_dir.glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            key = report_row_key(row, groups)
+            if key not in latest:
+                order.append(key)
+            latest[key] = row
+    return [latest[key] for key in order]
+
+
+def format_health_table(rows: list[dict]) -> tuple[str, int]:
+    """Render the health status table. Returns ``(text, failing_count)``."""
+    lines = [
+        f"{'SERVICE':<16} {'CHECK':<14} {'TARGET':<36} {'STATUS':<6} {'RATE':>8}"
+    ]
+    fails = 0
+    for row in rows:
+        rate = row.get("rate_hz", "")
+        rate_s = f"{rate:.1f}" if isinstance(rate, (float, int)) else str(rate)
+        status = str(row.get("status", "") or "")
+        if status == "fail":
+            fails += 1
+        target = str(row.get("target", "") or "")
+        selection = row.get("selection_reason") or ""
+        lines.append(
+            f"{str(row.get('service', '')):<16} "
+            f"{str(row.get('check', '')):<14} "
+            f"{target:<36} "
+            f"{status:<6} {rate_s:>8}"
+        )
+        if selection:
+            lines.append(f"  auto_detect: {selection}")
+        group = row.get("auto_detect_group")
+        if group and group != target:
+            lines.append(f"  auto_detect_group: {group}")
+    lines.append(f"checks={len(rows)} failing={fails}")
+    return "\n".join(lines), fails
+
+
+def print_health_report(log_dir: Path) -> int:
+    """Print the final health table using the same auto_detect grouping as the gate."""
+    if not log_dir.is_dir():
+        print(f"No health log directory at {log_dir}")
+        return 0
+    rows = collect_latest_health_rows(log_dir)
+    if not rows:
+        print(f"No health records in {log_dir}")
+        return 0
+    text, fails = format_health_table(rows)
+    print(text)
+    for row in rows:
+        if row.get("check") != "topic_rate":
+            continue
+        if not (row.get("auto_detect_group") or row.get("selection_reason")):
+            continue
+        print(
+            f"health_report selected topic={row.get('target')} "
+            f"status={row.get('status')} rate_hz={row.get('rate_hz')} "
+            f"reason={row.get('selection_reason') or row.get('auto_detect_group')}"
+        )
+    return 1 if fails else 0
+
+
 def effective_min_rate(spec: dict, env: dict | None = None, clock_hz: float | None = None) -> float:
     """Software rendering cannot hold the 5 Hz camera floor.
 
@@ -437,30 +595,36 @@ class HealthRunner:
                 rclpy.spin_once(node, timeout_sec=0.1)
         return state
 
-    def _pick_auto_detect_target(self, item, measurements, window_s: float) -> None:
-        """Prefer a candidate that actually delivered messages in this window."""
+    def _pick_auto_detect_target(self, item, measurements, window_s: float) -> str:
+        """Prefer a candidate that actually delivered messages in this window.
+
+        Uses :func:`pick_live_auto_detect_target` so the gate and the final
+        health table share one selection path.
+        """
         spec = item["spec"]
-        candidates = spec.get("auto_detect") or [item["target"]]
+        candidates = list(spec.get("auto_detect") or [item["target"]])
         counts = item.get("counts") or {}
-        best = None
-        best_key = None
-        for index, name in enumerate(candidates):
-            bucket = measurements.get(name)
-            count = bucket["count"] if bucket else 0
-            publishers = counts.get(name, 0)
-            if publishers <= 0 and count <= 0:
-                continue
-            rate = (float(count) / float(window_s)) if window_s else 0.0
-            key = (count > 0, rate, publishers > 0, topic_version(name), -index)
-            if best_key is None or key > best_key:
-                best = name
-                best_key = key
+        provisional = item.get("target")
+        best, selection_reason = pick_live_auto_detect_target(
+            candidates, counts, measurements, window_s
+        )
         if best is None:
-            return
+            selection_reason = (
+                f"kept provisional {provisional}; {selection_reason}"
+            )
+            print(
+                f"auto_detect: no live candidate among {candidates}; "
+                f"keeping {provisional}"
+            )
+            item["selection_reason"] = selection_reason
+            return selection_reason
         item["target"] = best
         item["publishers"] = counts.get(best, 0)
         types = (item.get("graph") or {}).get(best) or []
         item["type_name"] = types[0] if types else item.get("type_name")
+        item["selection_reason"] = selection_reason
+        print(f"auto_detect: {selection_reason}")
+        return selection_reason
 
     def _judge_topics(self, resolved, measurements) -> None:
         window_s = float(self.config.get("window_s", 2.0))
@@ -468,8 +632,12 @@ class HealthRunner:
         for item in resolved:
             spec = item["spec"]
             started = time.monotonic()
+            selection_reason = ""
+            group = auto_detect_group(spec)
             if spec.get("auto_detect"):
-                self._pick_auto_detect_target(item, measurements, window_s)
+                selection_reason = self._pick_auto_detect_target(
+                    item, measurements, window_s
+                )
             target = item["target"]
             bucket = measurements.get(target)
             count = bucket["count"] if bucket else 0
@@ -509,6 +677,9 @@ class HealthRunner:
                 last_msg_age_s=age,
                 reason=reason,
                 fields=extra or None,
+                auto_detect_group=group,
+                auto_detect_candidates=list(spec.get("auto_detect") or []) or None,
+                selection_reason=selection_reason or None,
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
 
@@ -617,7 +788,15 @@ class HealthRunner:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ROS 2 service health check")
-    parser.add_argument("--service", required=True, choices=sorted(SERVICE_FILES))
+    parser.add_argument(
+        "--report",
+        nargs="?",
+        const="",
+        default=None,
+        help="Print the final health table for LOG_DIR (default logs/health) and "
+        "exit 1 when any row is failing. Uses the same auto_detect grouping as the gate.",
+    )
+    parser.add_argument("--service", default=None, choices=sorted(SERVICE_FILES))
     parser.add_argument("--config-dir", default=None)
     parser.add_argument("--group", default=None, help="Only run checks tagged with this group")
     parser.add_argument("--log-dir", default=None)
@@ -626,6 +805,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.report is not None:
+        log_dir = Path(args.report) if args.report else (
+            Path(args.log_dir) if args.log_dir else default_log_dir()
+        )
+        return print_health_report(log_dir)
+    if not args.service:
+        print("--service is required unless --report is set", file=sys.stderr)
+        return 2
     config_dir = Path(args.config_dir) if args.config_dir else Path(__file__).resolve().parent / "checks"
     config_path = config_dir / SERVICE_FILES[args.service]
     if not config_path.is_file():

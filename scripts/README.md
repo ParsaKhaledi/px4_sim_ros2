@@ -80,6 +80,10 @@ The reason, container log, health JSONL, rosbag, and ULog are saved under `logs/
 
 ## health_report.sh
 
+Prints the latest JSONL row per check. Auto-detect topic groups share the
+same selection path as `healthcheck.py` (live odometry wins over a silent
+`_v1` alias). Exits `1` when any row is `fail`.
+
 ```bash
 ./scripts/health_report.sh
 ./scripts/health_report.sh logs/health

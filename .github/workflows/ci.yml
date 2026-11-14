@@ -447,10 +447,13 @@ jobs:
       - name: Health summary
         if: always() && !cancelled()
         run: |
-          {
-            echo "### Health report"
-            ./scripts/health_report.sh || true
-          } >> "${GITHUB_STEP_SUMMARY}"
+          set -euo pipefail
+          echo "### Health report" >> "${GITHUB_STEP_SUMMARY}"
+          # Same auto_detect table as the smoke gate. Do not swallow failures:
+          # a green flight step with failing=N in the table is a bug.
+          ./scripts/health_report.sh | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "health_report: checks ok (failing=0)" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Timing summary
         if: always()
