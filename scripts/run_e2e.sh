@@ -57,17 +57,24 @@ fi
 MAX_RETRIES="${E2E_MAX_RETRIES:-2}"
 MAX_ATTEMPTS=$((MAX_RETRIES + 1))
 if [ -n "${E2E_FLIGHT_DIR:-}" ]; then
-  FLIGHTS="${E2E_FLIGHT_DIR}"
+  # CI often passes a repo-relative path (logs/flights/rgbd). Resolve it.
+  case "${E2E_FLIGHT_DIR}" in
+    /*) FLIGHTS="${E2E_FLIGHT_DIR}" ;;
+    *) FLIGHTS="${ROOT}/${E2E_FLIGHT_DIR}" ;;
+  esac
 else
   FLIGHTS="${ROOT}/logs/flights"
 fi
+# Normalize .. and duplicate slashes so the bind-mount prefix check is stable.
+FLIGHTS="$(cd "$(dirname "${FLIGHTS}")" 2>/dev/null && pwd)/$(basename "${FLIGHTS}")" || FLIGHTS="${FLIGHTS}"
 case "${FLIGHTS}" in
-  "${ROOT}/logs/"*) ;;
+  "${ROOT}/logs"|"${ROOT}/logs/"*) ;;
   *)
-    echo "E2E_FLIGHT_DIR must be inside ${ROOT}/logs so the container can write it." >&2
+    echo "E2E_FLIGHT_DIR must be inside ${ROOT}/logs so the container can write it (got ${FLIGHTS})." >&2
     exit 1
     ;;
 esac
+export E2E_FLIGHT_DIR="${FLIGHTS}"
 CONTAINER_FLIGHTS="/home/px4/volume/${FLIGHTS#"${ROOT}/"}"
 REPORT="${FLIGHTS}/trajectory.json"
 RUN_START="$(date +%s)"

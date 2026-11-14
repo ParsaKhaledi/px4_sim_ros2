@@ -222,14 +222,24 @@ def format_health_table(rows: list[dict]) -> tuple[str, int]:
 
 
 def print_health_report(log_dir: Path) -> int:
-    """Print the final health table using the same auto_detect grouping as the gate."""
+    """Print the final health table using the same auto_detect grouping as the gate.
+
+    Exit codes: ``0`` all ok, ``1`` failing rows. When ``HEALTH_REQUIRE_ROWS=1``,
+    a missing directory or empty JSONL also exits ``1`` (CI must not go green
+    with no table after a flight that never wrote logs).
+    """
+    require_rows = str(os.environ.get("HEALTH_REQUIRE_ROWS", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     if not log_dir.is_dir():
         print(f"No health log directory at {log_dir}")
-        return 0
+        return 1 if require_rows else 0
     rows = collect_latest_health_rows(log_dir)
     if not rows:
         print(f"No health records in {log_dir}")
-        return 0
+        return 1 if require_rows else 0
     text, fails = format_health_table(rows)
     print(text)
     for row in rows:

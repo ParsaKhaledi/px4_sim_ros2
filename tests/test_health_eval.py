@@ -138,6 +138,15 @@ def test_health_report_exits_nonzero_when_table_has_fails(tmp_path):
     assert healthcheck.print_health_report(log_dir) == 1
 
 
+def test_health_report_require_rows(tmp_path, monkeypatch):
+    empty = tmp_path / "health"
+    empty.mkdir()
+    monkeypatch.delenv("HEALTH_REQUIRE_ROWS", raising=False)
+    assert healthcheck.print_health_report(empty) == 0
+    monkeypatch.setenv("HEALTH_REQUIRE_ROWS", "1")
+    assert healthcheck.print_health_report(empty) == 1
+
+
 def test_software_camera_rate_override():
     spec = {"group": "camera", "min_rate_hz": 5}
     assert healthcheck.effective_min_rate(spec, {}) == 5

@@ -467,6 +467,7 @@ jobs:
           SMOKE_TEST_TIMEOUT: "420"
           E2E_TAKEOFF_HEIGHT_M: "1.5"
           E2E_HOVER_S: "10"
+          # Relative is fine; ci_rgbd_flight.sh / run_e2e.sh resolve under repo/logs.
           E2E_FLIGHT_DIR: logs/flights/rgbd
         run: ./scripts/ci_rgbd_flight.sh "${PX4_IMAGE}"
 
@@ -484,6 +485,9 @@ jobs:
 
       - name: Health summary
         if: always() && !cancelled()
+        env:
+          # Empty JSONL after a flight step is a failure, not a silent green.
+          HEALTH_REQUIRE_ROWS: "1"
         run: |
           set -euo pipefail
           echo "### Health report (${{ matrix.camera }})" >> "${GITHUB_STEP_SUMMARY}"

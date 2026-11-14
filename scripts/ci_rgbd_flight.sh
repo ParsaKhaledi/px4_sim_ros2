@@ -49,7 +49,18 @@ export E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap"
 export E2E_TAKEOFF_HEIGHT_M="${E2E_TAKEOFF_HEIGHT_M:-1.5}"
 export E2E_HOVER_S="${E2E_HOVER_S:-10}"
 export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-1}"
-export E2E_FLIGHT_DIR="${E2E_FLIGHT_DIR:-${ROOT}/logs/flights/rgbd}"
+# Absolute under the repo so run_e2e's bind-mount check accepts CI's relative
+# `logs/flights/rgbd` value from the workflow env.
+_default_flight_dir="${ROOT}/logs/flights/rgbd"
+if [ -n "${E2E_FLIGHT_DIR:-}" ]; then
+  case "${E2E_FLIGHT_DIR}" in
+    /*) ;;
+    *) E2E_FLIGHT_DIR="${ROOT}/${E2E_FLIGHT_DIR}" ;;
+  esac
+else
+  E2E_FLIGHT_DIR="${_default_flight_dir}"
+fi
+export E2E_FLIGHT_DIR
 export E2E_ATTEMPT_TIMEOUT="${E2E_ATTEMPT_TIMEOUT:-480}"
 export E2E_TOTAL_TIMEOUT="${E2E_TOTAL_TIMEOUT:-900}"
 export E2E_MAX_RETRIES="${E2E_MAX_RETRIES:-2}"
