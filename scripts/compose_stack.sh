@@ -22,6 +22,17 @@ compose_setup
 
 mkdir -p "${ROOT}/logs/health" "${ROOT}/logs/flights"
 chmod 777 "${ROOT}/logs" "${ROOT}/logs/health" "${ROOT}/logs/flights" || true
+# CameraType=rgbd|stereo runs render_oakd.py which rewrites SDF/URDF under the
+# includes/gz bind mount. The container user (px4) is not the GHA checkout owner.
+case "${CameraType:-}" in
+  rgbd|stereo|RGBD|Stereo)
+    chmod -R a+rwX \
+      "${ROOT}/includes/gz/models" \
+      "${ROOT}/includes/gz/x500_tf_publisher" \
+      "${ROOT}/includes/gz/worlds" \
+      "${ROOT}/includes/gz/oakd_s2" 2>/dev/null || true
+    ;;
+esac
 
 note_unhealthy() {
   local timeout="${SMOKE_TEST_TIMEOUT:-900}"

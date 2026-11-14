@@ -23,6 +23,11 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     camera_script = Path("scripts/ci_camera_flight.sh").read_text(encoding="utf-8")
     assert "unset E2E_HOVER_ONLY" in camera_script
     assert "test_out_and_back.py" in camera_script
+    assert "x500_tf_publisher" in camera_script
+    assert "a+rwX" in camera_script
+    stack = Path("scripts/compose_stack.sh").read_text(encoding="utf-8")
+    assert "network_mode" not in stack  # DDS netns lives in compose.ci.yml
+    assert "x500_tf_publisher" in stack
     assert "E2E_HOVER_ONLY=1" not in Path("scripts/ci_rgbd_flight.sh").read_text(
         encoding="utf-8"
     )

@@ -83,6 +83,12 @@ export E2E_MAX_RETRIES="${E2E_MAX_RETRIES:-2}"
 
 mkdir -p "${E2E_FLIGHT_DIR}"
 chmod 777 "${ROOT}/logs" "${ROOT}/logs/health" "${ROOT}/logs/flights" "${E2E_FLIGHT_DIR}" || true
+# render_oakd.py must rewrite URDF/SDF as user px4 on the bind mount.
+chmod -R a+rwX \
+  "${ROOT}/includes/gz/models" \
+  "${ROOT}/includes/gz/x500_tf_publisher" \
+  "${ROOT}/includes/gz/worlds" \
+  "${ROOT}/includes/gz/oakd_s2" 2>/dev/null || true
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
