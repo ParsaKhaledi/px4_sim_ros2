@@ -43,7 +43,8 @@ def test_param_env_is_idempotent_and_selects_mode(tmp_path):
     assert 'export PX4_PARAM_EKF2_GPS_V_NOISE=0.3' in gps
     assert 'export PX4_PARAM_NAV_DLL_ACT=0' in gps
     assert 'export PX4_PARAM_EKF2_EV_CTRL=9' not in gps
-    assert 'EKF2_MAG_TYPE' not in gps
+    # Mag heading required for yaw align when EV yaw is off; overrides sim.params=5.
+    assert 'export PX4_PARAM_EKF2_MAG_TYPE=0' in gps
     assert 'SYS_HAS_MAG' not in gps
     assert 'EKF2_EV_DELAY' not in gps
     assert 'EKF2_RNG_CTRL' not in gps
