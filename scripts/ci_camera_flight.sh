@@ -75,8 +75,7 @@ export PX4_PARAM_EKF2_HGT_REF=1
 export PX4_PARAM_EKF2_GPS_CTRL=7
 export PX4_PARAM_EKF2_GPS_P_NOISE=0.5
 export PX4_PARAM_EKF2_GPS_V_NOISE=0.3
-# Ogre 1.x often renders non-blank Soft-GL frames where ogre2 stays flat.
-export PX4_GZ_SIM_RENDER_ENGINE="${PX4_GZ_SIM_RENDER_ENGINE:-ogre}"
+# Leave PX4_GZ_SIM_RENDER_ENGINE unset (ogre2). Forcing ogre left PX4 unhealthy on CI.
 
 # Full out-and-back (hover + forward + return). Same pass criteria for both
 # cameras via shared E2E_* defaults / .env.example.
