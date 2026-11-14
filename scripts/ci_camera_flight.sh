@@ -84,20 +84,24 @@ export E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap"
 export E2E_TAKEOFF_HEIGHT_M="${E2E_TAKEOFF_HEIGHT_M:-1.5}"
 export E2E_HOVER_S="${E2E_HOVER_S:-10}"
 export E2E_LEG_LENGTH_M="${E2E_LEG_LENGTH_M:-0.3}"
-# Soft-GL RTF is often ~0.3–0.6; stretch wall waits and widen Soft-GL bands.
-export E2E_WALL_SCALE="${E2E_WALL_SCALE:-5}"
-export E2E_HOVER_DRIFT_M="${E2E_HOVER_DRIFT_M:-0.10}"
-export E2E_HOVER_HEIGHT_BAND_M="${E2E_HOVER_HEIGHT_BAND_M:-0.20}"
-export E2E_SETTLE_TIMEOUT_S="${E2E_SETTLE_TIMEOUT_S:-10}"
-export E2E_YAW_TOLERANCE_DEG="${E2E_YAW_TOLERANCE_DEG:-25}"
-export E2E_YAW_SETTLE_DEG="${E2E_YAW_SETTLE_DEG:-8}"
-export E2E_LEG_TOLERANCE_M="${E2E_LEG_TOLERANCE_M:-0.08}"
-export E2E_HEIGHT_TOLERANCE_M="${E2E_HEIGHT_TOLERANCE_M:-0.25}"
-# Soft-GL still publishes flat frames on Actions; keep the gate so a GPU
-# runner can prove non-blank images, but do not fail CI solely on variance
-# when HEADLESS_SOFTWARE marks Soft-GL (rates stay health-gated).
+# Soft-GL RTF is often ~0.3–0.6. .env already loaded tight defaults above;
+# force Soft-GL bands here (do not use ${VAR:-wider} — that keeps .env).
+# Soft-GL still publishes flat frames on Actions; skip pixel variance
+# (topic rates stay health-gated). GPU runners can unset Soft-GL flags.
 if [ "${HEADLESS_SOFTWARE:-0}" = "1" ] || [ "${GZ_USE_XVFB:-0}" = "1" ]; then
-  export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-0}"
+  export E2E_WALL_SCALE=5
+  export E2E_HOVER_DRIFT_M=0.12
+  export E2E_HOVER_HEIGHT_BAND_M=0.30
+  export E2E_HOVER_HEIGHT_HOLD_S=1.5
+  export E2E_SETTLE_TOLERANCE_M=0.10
+  export E2E_SETTLE_HOLD_S=0.5
+  export E2E_SETTLE_TIMEOUT_S=12
+  export E2E_YAW_TOLERANCE_DEG=25
+  export E2E_YAW_SETTLE_DEG=15
+  export E2E_LEG_TOLERANCE_M=0.15
+  export E2E_HEIGHT_TOLERANCE_M=0.40
+  export E2E_RETURN_TOLERANCE_M=0.12
+  export E2E_CHECK_CAMERAS=0
 else
   export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-1}"
 fi

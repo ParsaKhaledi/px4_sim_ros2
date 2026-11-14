@@ -29,6 +29,10 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "PX4_PARAM_EKF2_MAG_TYPE=0" in camera_script
     assert "GZ_USE_XVFB" in camera_script
     assert "unset HEADLESS" in camera_script
+    # Soft-GL must force-assign bands after .env load (not ${VAR:-wider}).
+    assert "E2E_YAW_TOLERANCE_DEG=25" in camera_script
+    assert "E2E_LEG_TOLERANCE_M=0.15" in camera_script
+    assert "E2E_CHECK_CAMERAS=0" in camera_script
     assert "ESTIMATION_MODE: gps" in text
     installer = Path(
         "includes/gz/params/install_px4_control_params.bash"
