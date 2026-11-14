@@ -19,7 +19,6 @@ load_repo_env "${ROOT}"
 # shellcheck disable=SC1091
 source "${ROOT}/scripts/compose_cli.sh"
 
-export HEADLESS=1
 export RTABMAPVIZ=false
 export World="${World:-default}"
 export PX4_GZ_MODEL="${PX4_GZ_MODEL:-x500_depth}"
@@ -55,10 +54,16 @@ _append_compose_file() {
   export COMPOSE_FILES
 }
 if [ "${GZ_USE_XVFB}" = "1" ]; then
+  # Keep HEADLESS empty: PX4 starts gz GUI on Xvfb for non-blank cameras.
+  unset HEADLESS || true
   export DISPLAY="${DISPLAY:-:99}"
+  export HEADLESS_BACKEND="${HEADLESS_BACKEND:-xvfb}"
+  export HEADLESS_SOFTWARE="${HEADLESS_SOFTWARE:-1}"
+  export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
   export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
   _append_compose_file "compose.xvfb.yml"
 else
+  export HEADLESS=1
   export DISPLAY=""
   export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
 fi
@@ -406,10 +411,14 @@ if [ "${E2E_CHECK_CAMERAS}" = "1" ] && [ "${GZ_USE_XVFB}" != "1" ]; then
   if python3 "${ROOT}/tests/e2e/report.py" \
       --needs-render-fallback \
       --attempts-dir "${FLIGHTS}"; then
-    echo "Camera frames were blank or missing under EGL. Restarting with Xvfb."
+    echo "Camera frames were blank or missing under EGL. Restarting with Xvfb GUI."
     export GZ_HEADLESS_RENDERING=0
     export GZ_USE_XVFB=1
+    unset HEADLESS || true
     export DISPLAY=:99
+    export HEADLESS_BACKEND=xvfb
+    export HEADLESS_SOFTWARE=1
+    export QT_QPA_PLATFORM=xcb
     # Keep docker-compose-px4.yml (or whatever CI already set); only add xvfb.
     export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
     _append_compose_file "compose.xvfb.yml"

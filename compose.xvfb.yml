@@ -1,5 +1,6 @@
-# Virtual framebuffer when Gazebo EGL headless rendering publishes blank frames.
-# Stack this after compose.ci.yml so DISPLAY replaces the empty CI value.
+# Virtual framebuffer + gz GUI when Soft-GL EGL publishes blank frames.
+# Stack after compose.ci.yml. PX4's px4-rc.gzsim starts `gz sim -g` only when
+# HEADLESS is empty; gz_start_px4_gz_sim.sh unsets it after starting Xvfb.
 services:
   PX4:
     environment:
@@ -7,5 +8,12 @@ services:
       GZ_USE_XVFB: "1"
       GZ_HEADLESS_RENDERING: "0"
       HEADLESS_BACKEND: xvfb
+      HEADLESS_SOFTWARE: "1"
+      # Empty so a compose merge does not force HEADLESS=1 past Xvfb GUI mode.
+      HEADLESS: ""
+      QT_QPA_PLATFORM: xcb
       LIBGL_ALWAYS_SOFTWARE: "1"
       GALLIUM_DRIVER: llvmpipe
+      MESA_GL_VERSION_OVERRIDE: "3.3"
+      MESA_GLSL_VERSION_OVERRIDE: "330"
+      __GLX_VENDOR_LIBRARY_NAME: mesa

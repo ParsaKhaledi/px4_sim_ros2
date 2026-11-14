@@ -25,9 +25,22 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "test_out_and_back.py" in camera_script
     assert "x500_tf_publisher" in camera_script
     assert "a+rwX" in camera_script
+    assert "ESTIMATION_MODE=gps" in camera_script
+    assert "GZ_USE_XVFB" in camera_script
+    assert "unset HEADLESS" in camera_script
+    assert "ESTIMATION_MODE: gps" in text
+    xvfb = Path("compose.xvfb.yml").read_text(encoding="utf-8")
+    assert "HEADLESS_BACKEND: xvfb" in xvfb
+    assert 'HEADLESS: ""' in xvfb
+    start = Path("includes/gz/startFiles/gz_start_px4_gz_sim.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "unset HEADLESS" in start
+    assert "Xvfb GUI" in start
     stack = Path("scripts/compose_stack.sh").read_text(encoding="utf-8")
     assert "network_mode" not in stack  # DDS netns lives in compose.ci.yml
     assert "x500_tf_publisher" in stack
+    assert "GZ_USE_XVFB" in stack
     assert "E2E_HOVER_ONLY=1" not in Path("scripts/ci_rgbd_flight.sh").read_text(
         encoding="utf-8"
     )

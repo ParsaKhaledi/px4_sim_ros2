@@ -36,7 +36,9 @@ if [ -n "${1:-}" ]; then
 fi
 
 # --- Explicit camera / model (do not inherit compose defaults) ---
-export HEADLESS=1
+# Xvfb GUI path: leave HEADLESS empty so PX4 starts `gz sim -g` on :99.
+# HEADLESS=1 + Xvfb without a GUI leaves camera sensors blank on Soft-GL.
+unset HEADLESS || true
 export RTABMAPVIZ=false
 export CameraType="${CAM}"
 export World="${World:-default}"
@@ -45,11 +47,14 @@ export E2E_GZ_MODEL=x500_depth
 export VISION_PROFILE=cpu
 export COMPOSE_PROFILES=slam
 export COMPOSE_SERVICES="PX4 StatePublisher Rtabmap"
-# Soft-GL EGL publishes blank camera frames on Actions; start on Xvfb so
-# E2E_CHECK_CAMERAS grades real images without a second full bring-up.
+# Soft-GL EGL publishes blank camera frames on Actions; Xvfb + gz GUI grades
+# real images. compose.xvfb.yml stacks after compose.ci.yml.
 export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-0}"
 export GZ_USE_XVFB="${GZ_USE_XVFB:-1}"
+export HEADLESS_BACKEND=xvfb
+export HEADLESS_SOFTWARE=1
 export DISPLAY="${DISPLAY:-:99}"
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
 export COMPOSE_FILES="${COMPOSE_FILES:-docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml}"
 # Camera flight does not grade distance_sensor; skip gpu_lidar on CPU CI.
 export LIDAR_DOWN="${LIDAR_DOWN:-0}"
@@ -58,6 +63,16 @@ export HEALTH_SLAM_MIN_HZ="${HEALTH_SLAM_MIN_HZ:-1}"
 export HEALTH_TIMING="${HEALTH_TIMING:-1}"
 export CI_FLIGHT_TIMING="${CI_FLIGHT_TIMING:-1}"
 export SMOKE_TEST_TIMEOUT="${SMOKE_TEST_TIMEOUT:-420}"
+
+# e2e uses px4_offboard (no px4_control EV bridge). Vision-mode EKF
+# (sim.params GPS_CTRL=0) never gets xy_valid → preflight_timeout. GPS mode
+# overrides via install_px4_control_params + host assert_px4_params.
+export ESTIMATION_MODE=gps
+export PX4_PARAM_EKF2_EV_CTRL=0
+export PX4_PARAM_EKF2_HGT_REF=1
+export PX4_PARAM_EKF2_GPS_CTRL=7
+export PX4_PARAM_EKF2_GPS_P_NOISE=0.5
+export PX4_PARAM_EKF2_GPS_V_NOISE=0.3
 
 # Full out-and-back (hover + forward + return). Same pass criteria for both
 # cameras via shared E2E_* defaults / .env.example.
@@ -100,6 +115,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "- CameraType=${CameraType}"
     echo "- PX4_GZ_MODEL=${PX4_GZ_MODEL}"
     echo "- VISION_PROFILE=${VISION_PROFILE}"
+    echo "- ESTIMATION_MODE=${ESTIMATION_MODE}"
+    echo "- GZ_USE_XVFB=${GZ_USE_XVFB} HEADLESS_BACKEND=${HEADLESS_BACKEND}"
     echo "- COMPOSE_SERVICES=${COMPOSE_SERVICES}"
     echo "- E2E_TAKEOFF_HEIGHT_M=${E2E_TAKEOFF_HEIGHT_M} E2E_HOVER_S=${E2E_HOVER_S}"
     echo "- E2E_LEG_LENGTH_M=${E2E_LEG_LENGTH_M}"
@@ -107,5 +124,5 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   } >> "${GITHUB_STEP_SUMMARY}"
 fi
 
-echo "ci_camera_flight: CameraType=${CameraType} hover+out-and-back (health=${E2E_HEALTH_SERVICES})"
+echo "ci_camera_flight: CameraType=${CameraType} hover+out-and-back (health=${E2E_HEALTH_SERVICES} estimation=${ESTIMATION_MODE} xvfb=${GZ_USE_XVFB})"
 exec "${ROOT}/scripts/run_e2e.sh" "${PX4_IMAGE}"

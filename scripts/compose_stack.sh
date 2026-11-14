@@ -11,12 +11,25 @@ source "${ROOT}/scripts/compose_cli.sh"
 
 ACTION="${1:-up}"
 
-export HEADLESS="${HEADLESS:-1}"
 export RTABMAPVIZ="${RTABMAPVIZ:-false}"
-export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
-export DISPLAY="${DISPLAY:-}"
+# Xvfb camera CI: keep HEADLESS empty and use a real XCB platform so PX4
+# starts gz GUI on the virtual display (blank sensors otherwise).
+case "${GZ_USE_XVFB:-0}" in
+  1|true|TRUE|yes|YES)
+    unset HEADLESS || true
+    export DISPLAY="${DISPLAY:-:99}"
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+    export HEADLESS_BACKEND="${HEADLESS_BACKEND:-xvfb}"
+    export HEADLESS_SOFTWARE="${HEADLESS_SOFTWARE:-1}"
+    ;;
+  *)
+    export HEADLESS="${HEADLESS:-1}"
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
+    export DISPLAY="${DISPLAY:-}"
+    ;;
+esac
 
 compose_setup
 

@@ -448,20 +448,23 @@ jobs:
         timeout-minutes: 50
         env:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
-          HEADLESS: "1"
+          # Empty HEADLESS: Xvfb + gz GUI (HEADLESS=1 leaves cameras blank).
+          HEADLESS: ""
           RTABMAPVIZ: "false"
-          # Soft-GL EGL blanks cameras; Xvfb gives graded frames on CPU CI.
           DISPLAY: ":99"
           CameraType: rgbd
           World: default
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
+          ESTIMATION_MODE: gps
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
           COMPOSE_PROJECT_NAME: px4-smoke-rgbd-${{ github.run_id }}
           GZ_HEADLESS_RENDERING: "0"
           GZ_USE_XVFB: "1"
+          HEADLESS_BACKEND: xvfb
+          HEADLESS_SOFTWARE: "1"
           LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"
@@ -480,19 +483,22 @@ jobs:
         timeout-minutes: 50
         env:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
-          HEADLESS: "1"
+          HEADLESS: ""
           RTABMAPVIZ: "false"
           DISPLAY: ":99"
           CameraType: stereo
           World: default
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
+          ESTIMATION_MODE: gps
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
           COMPOSE_PROJECT_NAME: px4-smoke-stereo-${{ github.run_id }}
           GZ_HEADLESS_RENDERING: "0"
           GZ_USE_XVFB: "1"
+          HEADLESS_BACKEND: xvfb
+          HEADLESS_SOFTWARE: "1"
           LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"
