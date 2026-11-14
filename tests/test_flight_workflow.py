@@ -41,6 +41,8 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "PX4_GZ_SIM_RENDER_ENGINE" in camera_script
     assert "ESTIMATION_MODE: vision" in text
     assert "EKF2_EV_CTRL: \"15\"" in text
+    # Ogre Soft-GL aborts; CI must not force ogre.
+    assert "PX4_GZ_SIM_RENDER_ENGINE: ogre" not in text
     installer = Path(
         "includes/gz/params/install_px4_control_params.bash"
     ).read_text(encoding="utf-8")

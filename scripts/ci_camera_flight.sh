@@ -84,8 +84,9 @@ unset PX4_PARAM_EKF2_GPS_CTRL || true
 unset PX4_PARAM_EKF2_MAG_TYPE || true
 unset PX4_PARAM_SYS_HAS_MAG || true
 unset PX4_PARAM_SYS_HAS_GPS || true
-# Retry Ogre 1 for non-blank Soft-GL frames (prior CI: gz SIGABRT on ogre).
-export PX4_GZ_SIM_RENDER_ENGINE="${PX4_GZ_SIM_RENDER_ENGINE:-ogre}"
+# Ogre Soft-GL aborts gz (SIGABRT) on Actions; keep Gazebo default (ogre2).
+# Run 43637388093 confirmed ogre still unhealthy. Leave empty unless overridden.
+export PX4_GZ_SIM_RENDER_ENGINE="${PX4_GZ_SIM_RENDER_ENGINE:-}"
 
 # Full out-and-back (hover + forward + return). Same pass criteria for both
 # cameras via shared E2E_* defaults / .env.example. No Soft-GL band loosening.

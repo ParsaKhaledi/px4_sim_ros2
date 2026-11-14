@@ -459,7 +459,8 @@ jobs:
           ESTIMATION_MODE: vision
           EKF2_EV_CTRL: "15"
           EKF2_EV_DELAY: "0"
-          PX4_GZ_SIM_RENDER_ENGINE: ogre
+          # Empty = Gazebo default ogre2. Forcing ogre aborts gz on Soft-GL CI.
+          PX4_GZ_SIM_RENDER_ENGINE: ""
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
@@ -496,7 +497,7 @@ jobs:
           ESTIMATION_MODE: vision
           EKF2_EV_CTRL: "15"
           EKF2_EV_DELAY: "0"
-          PX4_GZ_SIM_RENDER_ENGINE: ogre
+          PX4_GZ_SIM_RENDER_ENGINE: ""
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
