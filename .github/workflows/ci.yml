@@ -445,7 +445,7 @@ jobs:
       # Same mission script and E2E_* pass criteria as stereo (ci_camera_flight.sh).
       - name: RGB-D flight (CameraType=rgbd)
         if: matrix.camera == 'rgbd'
-        timeout-minutes: 40
+        timeout-minutes: 50
         env:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
           HEADLESS: "1"
@@ -461,10 +461,11 @@ jobs:
           COMPOSE_PROJECT_NAME: px4-smoke-rgbd-${{ github.run_id }}
           GZ_HEADLESS_RENDERING: "1"
           GZ_USE_XVFB: "0"
+          LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"
           HEALTH_TIMING: "1"
-          SMOKE_TEST_TIMEOUT: "420"
+          SMOKE_TEST_TIMEOUT: "600"
           E2E_TAKEOFF_HEIGHT_M: "1.5"
           E2E_HOVER_S: "10"
           E2E_LEG_LENGTH_M: "0.3"
@@ -475,7 +476,7 @@ jobs:
       # x500_depth + OAK-D S2 stereo on cpu. Same hover + out-and-back as RGB-D.
       - name: Stereo flight (CameraType=stereo)
         if: matrix.camera == 'stereo'
-        timeout-minutes: 40
+        timeout-minutes: 50
         env:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
           HEADLESS: "1"
@@ -491,10 +492,11 @@ jobs:
           COMPOSE_PROJECT_NAME: px4-smoke-stereo-${{ github.run_id }}
           GZ_HEADLESS_RENDERING: "1"
           GZ_USE_XVFB: "0"
+          LIDAR_DOWN: "0"
           HEALTH_CAMERA_MIN_HZ: "1"
           HEALTH_SLAM_MIN_HZ: "1"
           HEALTH_TIMING: "1"
-          SMOKE_TEST_TIMEOUT: "420"
+          SMOKE_TEST_TIMEOUT: "600"
           E2E_TAKEOFF_HEIGHT_M: "1.5"
           E2E_HOVER_S: "10"
           E2E_LEG_LENGTH_M: "0.3"

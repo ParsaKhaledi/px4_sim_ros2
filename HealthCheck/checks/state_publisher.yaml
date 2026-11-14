@@ -3,7 +3,8 @@ log_name: state_publisher
 window_s: 2.0
 discovery_s: 1.0
 nodes:
-  - name: robot_state_publisher
+  # Launch renames the executable (see robot_state_publisher.launch.py).
+  - name: oak_state_publisher
 # Optical frames from includes/gz/x500_tf_publisher/x500_urdf.urdf.
 # RGB-D depth is published in camera_rgb_optical_frame (aligned depth);
 # there is no separate depth_camera_optical_frame link.

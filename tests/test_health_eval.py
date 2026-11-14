@@ -166,6 +166,13 @@ def test_timing_flag_off_by_default():
     assert healthcheck.timing_enabled({"HEALTH_TIMING": "1"})
 
 
+def test_optional_slow_topic_skips_instead_of_fail():
+    status, rate, reason = healthcheck.judge_rate(1, 0, 2.0, 0.2, True, True)
+    assert status == "skip"
+    assert rate == 0.0
+    assert "below" in reason
+
+
 def test_absent_optional_topic_skips():
     status, rate, reason = healthcheck.judge_rate(0, 0, 2.0, 25, True, False)
     assert status == "skip"

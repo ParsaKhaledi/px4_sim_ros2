@@ -1,4 +1,9 @@
 # Headless CI override: no GUI, no host port publishing, no /dev bind.
+#
+# StatePublisher / Rtabmap / NAV2 share PX4's network namespace so CycloneDDS
+# discovers camera and TF topics without extra peer config (README: ROS 2
+# discovery across containers needs that). Compose still starts them as
+# separate services with their own healthchecks.
 services:
   PX4:
     environment:
@@ -21,6 +26,10 @@ services:
       - ./tests:/home/px4/volume/tests:ro
       - ./ros2_ws:/home/px4/volume/ros2_ws:ro
   StatePublisher:
+    network_mode: "service:PX4"
+    # hostname is incompatible with network_mode: service:*
+    hostname: !reset
+    networks: !override []
     environment:
       HEADLESS: "1"
       DISPLAY: ""
@@ -32,6 +41,9 @@ services:
       - ./includes/gz/Params:/home/px4/volume/Params
       - ./logs:/home/px4/volume/logs
   Rtabmap:
+    network_mode: "service:PX4"
+    hostname: !reset
+    networks: !override []
     environment:
       HEADLESS: "1"
       DISPLAY: ""
@@ -44,6 +56,9 @@ services:
       - ./includes/gz/Params:/home/px4/volume/Params
       - ./logs:/home/px4/volume/logs
   NAV2:
+    network_mode: "service:PX4"
+    hostname: !reset
+    networks: !override []
     environment:
       HEADLESS: "1"
       DISPLAY: ""

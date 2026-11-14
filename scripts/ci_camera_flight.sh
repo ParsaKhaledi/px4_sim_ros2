@@ -48,6 +48,8 @@ export COMPOSE_SERVICES="PX4 StatePublisher Rtabmap"
 export COMPOSE_FILES="${COMPOSE_FILES:-docker-compose-px4.yml:compose.ci.yml}"
 export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-1}"
 export GZ_USE_XVFB="${GZ_USE_XVFB:-0}"
+# Camera flight does not grade distance_sensor; skip gpu_lidar on CPU CI.
+export LIDAR_DOWN="${LIDAR_DOWN:-0}"
 export HEALTH_CAMERA_MIN_HZ="${HEALTH_CAMERA_MIN_HZ:-1}"
 export HEALTH_SLAM_MIN_HZ="${HEALTH_SLAM_MIN_HZ:-1}"
 export HEALTH_TIMING="${HEALTH_TIMING:-1}"

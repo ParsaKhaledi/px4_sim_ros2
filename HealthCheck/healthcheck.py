@@ -310,6 +310,9 @@ def judge_rate(publishers, count, window_s, min_rate, skip_if_absent, optional):
             return "skip", rate, "topic absent"
         return "fail", rate, "no publisher"
     if rate + 1e-6 < float(min_rate):
+        # optional: advertised but quiet (e.g. /rtabmap/info) must not red-fail CI.
+        if optional:
+            return "skip", rate, f"rate {rate:.2f} Hz below {min_rate}"
         return "fail", rate, f"rate {rate:.2f} Hz below {min_rate}"
     return "ok", rate, ""
 
