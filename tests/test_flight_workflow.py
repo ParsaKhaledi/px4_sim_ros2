@@ -8,9 +8,10 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Dockerfile_px4_sim_NO_GPU" in text
     assert "Dockerfile_px4_sim_with_GPU" not in text
-    # Permanent matrix: plain x500 smoke + OAK-D RGB-D/stereo hover+out-and-back.
-    assert "matrix:" in text
-    assert "camera: [none, rgbd, stereo]" in text
+    # No-camera smoke always runs; vision jobs stay in the workflow but gated off.
+    assert "flight-vision:" in text
+    assert "ENABLE_VISION_CAMERA_JOBS" in text
+    assert "camera: [rgbd, stereo]" in text
     assert "CameraType: none" in text
     assert "CameraType: rgbd" in text
     assert "CameraType: stereo" in text
