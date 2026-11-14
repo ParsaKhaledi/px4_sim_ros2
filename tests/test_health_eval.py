@@ -244,6 +244,9 @@ def test_check_files_cover_services():
     assert "/camera/rgb/image_raw" in topics
     assert "/camera/rgb/camera_info" in topics
     assert "/camera/depth/camera_info" in topics
+    assert "/camera/stereo/left/image_raw" in topics
+    assert "/camera/stereo/left/camera_info" in topics
+    assert "/camera/stereo/right/camera_info" in topics
     assert any("vehicle_status_v1" in topic for topic in topics)
     assert any("vehicle_local_position_v1" in topic for topic in topics)
     status = next(

@@ -6,7 +6,8 @@ Helpers for launching the stack, checking health, and running the headless tests
 |--------|---------|
 | [up.sh](up.sh) | Start Compose with profiles, camera, world, and spawn pose |
 | [smoke_test.sh](smoke_test.sh) | Headless compose smoke test. Camera rates run first |
-| [ci_rgbd_flight.sh](ci_rgbd_flight.sh) | CI RGB-D path: health gates + hover-only takeoff/land |
+| [ci_camera_flight.sh](ci_camera_flight.sh) | CI RGB-D/stereo: health + hover + out-and-back |
+| [ci_rgbd_flight.sh](ci_rgbd_flight.sh) / [ci_stereo_flight.sh](ci_stereo_flight.sh) | Thin wrappers around `ci_camera_flight.sh` |
 | [run_e2e.sh](run_e2e.sh) | Out-and-back (or hover-only) flight, with crash restart |
 | [record_flight.sh](record_flight.sh) | Rosbag of the grading topics plus the newest PX4 ULog |
 | [health_report.sh](health_report.sh) | Latest JSONL status per service |
@@ -39,24 +40,29 @@ CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 \
 SMOKE_KEEP_UP=1 SMOKE_TEST_TIMEOUT=900 ./scripts/smoke_test.sh px4_sim:ci
 ```
 
-## ci_rgbd_flight.sh
+## ci_camera_flight.sh (rgbd / stereo)
 
-CI entry for `CameraType=rgbd` on a CPU runner (`VISION_PROFILE=cpu`, no GPU). Sets
-`PX4_GZ_MODEL=x500_depth`, starts `PX4 StatePublisher Rtabmap` with the `slam`
-profile, then calls [run_e2e.sh](run_e2e.sh) with:
+Shared CI entry for `CameraType=rgbd` and `CameraType=stereo` on a CPU runner
+(`VISION_PROFILE=cpu`, no GPU). Sets `PX4_GZ_MODEL=x500_depth`, starts
+`PX4 StatePublisher Rtabmap` with the `slam` profile, then calls
+[run_e2e.sh](run_e2e.sh) → [test_out_and_back.py](../tests/e2e/test_out_and_back.py)
+with the **same** mission and `E2E_*` pass criteria for both cameras:
 
-- `E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap"` — rgb/depth/camera_info rates,
-  camera TFs, RTAB-Map odom/info when present; final table must have `failing=0`
-- `E2E_HOVER_ONLY=1` — takeoff → ~10 s hover at `E2E_TAKEOFF_HEIGHT_M` (1.5 m) → land
+- takeoff → hover (`E2E_HOVER_S`, default 10 s at `E2E_TAKEOFF_HEIGHT_M` 1.5 m)
+  → forward (`E2E_LEG_LENGTH_M`) → yaw 180° → return → land
+- `E2E_HOVER_ONLY` is unset (full out-and-back, not hover-only)
+- `E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap"` — camera rates/TF + RTAB-Map;
+  final table must have `failing=0`
 - soft floors `HEALTH_CAMERA_MIN_HZ=1` / `HEALTH_SLAM_MIN_HZ=1` under software GL
-- `HEALTH_TIMING=1` for verbose health phase lines (set to `0` to silence)
 
 ```bash
 ./scripts/ci_rgbd_flight.sh docker.io/alienkh/px4_sim:1.17.0_121
+./scripts/ci_stereo_flight.sh docker.io/alienkh/px4_sim:1.17.0_121
+# or: ./scripts/ci_camera_flight.sh rgbd|stereo [PX4_IMAGE]
 ```
 
-If takeoff cannot finish on CPU CI, the job fails with the last `trajectory.json`
-and health table rather than reporting a green hover.
+The `CameraType=none` smoke job still uses [smoke_test.sh](smoke_test.sh) only
+(no offboard hover/legs).
 
 ## run_e2e.sh and record_flight.sh
 
@@ -64,16 +70,17 @@ and health table rather than reporting a green hover.
 # Fast flight: plain quad, no cameras.
 CameraType=none PX4_GZ_MODEL=x500 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
 
-# Hover-only (CI RGB-D shape) with multi-service health before takeoff.
+# CI camera shape (hover + out-and-back) with multi-service health before takeoff.
 CameraType=rgbd PX4_GZ_MODEL=x500_depth VISION_PROFILE=cpu \
   COMPOSE_PROFILES=slam COMPOSE_SERVICES="PX4 StatePublisher Rtabmap" \
-  GZ_HEADLESS_RENDERING=1 E2E_HOVER_ONLY=1 E2E_TAKEOFF_HEIGHT_M=1.5 \
-  E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap" \
+  GZ_HEADLESS_RENDERING=1 E2E_TAKEOFF_HEIGHT_M=1.5 E2E_HOVER_S=10 \
+  E2E_LEG_LENGTH_M=0.3 E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap" \
   E2E_CHECK_CAMERAS=1 ./scripts/run_e2e.sh
 
-# Full out-and-back on the CPU. Blank frames retry once on Xvfb.
-CameraType=rgbd PX4_GZ_MODEL=x500_depth GZ_HEADLESS_RENDERING=1 \
-  E2E_CHECK_CAMERAS=1 E2E_WALL_SCALE=3 COMPOSE_SERVICES=PX4 ./scripts/run_e2e.sh
+# Same mission for stereo (left/right topics via CameraType).
+CameraType=stereo PX4_GZ_MODEL=x500_depth VISION_PROFILE=cpu \
+  COMPOSE_PROFILES=slam COMPOSE_SERVICES="PX4 StatePublisher Rtabmap" \
+  GZ_HEADLESS_RENDERING=1 E2E_CHECK_CAMERAS=1 ./scripts/run_e2e.sh
 
 # Start on the virtual framebuffer instead of EGL.
 GZ_USE_XVFB=1 CameraType=rgbd PX4_GZ_MODEL=x500_depth \

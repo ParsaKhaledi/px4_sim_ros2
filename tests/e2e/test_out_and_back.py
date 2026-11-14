@@ -125,7 +125,7 @@ def run_drone_mission(drone_cls, thresholds) -> dict:
         else:
             time.sleep(thresholds.hover_s)
         watch.raise_if_crashed()
-        # E2E_HOVER_ONLY=1: RGB-D CI takeoff/hover/land without the out-and-back.
+        # E2E_HOVER_ONLY=1: takeoff/hover/land without the out-and-back legs.
         hover_only = os.environ.get("E2E_HOVER_ONLY", "").strip().lower() in {
             "1",
             "true",

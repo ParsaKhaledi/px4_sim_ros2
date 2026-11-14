@@ -179,7 +179,7 @@ This path lands with the headless sim / ground-truth work (`feature/sim-headless
 
 ## CI and local tests
 
-Pull requests run lint, unit tests (pytest and colcon), one image build, and one headless hover/smoke on that image. The flight job loads the image from the build job and runs `scripts/smoke_test.sh` with `docker-compose-px4.yml` and the headless `compose.ci.yml` override. It uses the plain `x500` (`CameraType=none`). It does not run an offboard controller. Nothing is pushed from a pull request.
+Pull requests run lint, unit tests (pytest and colcon), one image build, and a flight matrix on that image: `CameraType=none` (plain `x500` smoke via `scripts/smoke_test.sh`, no offboard), plus `rgbd` and `stereo` on `x500_depth` (health gates, then hover + fly-forward-and-return via `scripts/ci_camera_flight.sh`). Soft-GL CPU only; nothing is pushed from a pull request.
 
 Copy `.env.example` to `.env` for a local run. `.env` is not committed.
 

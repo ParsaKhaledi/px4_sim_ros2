@@ -73,6 +73,18 @@ topics:
     group: camera
     when_env:
       CameraType: stereo
+  - topic: /camera/stereo/left/camera_info
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
+  - topic: /camera/stereo/right/camera_info
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: stereo
   # 50 Hz of sim time. /clock is the 250 Hz physics step, so the
   # wall rate is about clock_hz * 50/250. The floor is half of that,
   # taken from this window's /clock. 0 Hz, and a rate far below the

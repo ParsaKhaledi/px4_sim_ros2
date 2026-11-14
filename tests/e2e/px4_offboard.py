@@ -180,7 +180,19 @@ class FlightWatch:
         self.wall_scale = scale if scale > 0 else 1.0
         self.check_cameras = os.environ.get("E2E_CHECK_CAMERAS", "0") == "1"
         min_variance = float(os.environ.get("E2E_CAMERA_MIN_VARIANCE") or "1")
-        self.cameras = CameraTracker(min_variance=min_variance) if self.check_cameras else None
+        camera_type = (os.environ.get("CameraType") or "rgbd").strip().lower()
+        if camera_type == "stereo":
+            cam_topics = (
+                "/camera/stereo/left/image_raw",
+                "/camera/stereo/right/image_raw",
+            )
+        else:
+            cam_topics = ("/camera/rgb/image_raw", "/camera/depth/image_raw")
+        self.cameras = (
+            CameraTracker(min_variance=min_variance, topics=cam_topics)
+            if self.check_cameras
+            else None
+        )
         self.rtf_samples = []
         self._rtf_wall = 0.0
 

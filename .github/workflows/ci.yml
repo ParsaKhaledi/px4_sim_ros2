@@ -362,7 +362,7 @@ jobs:
           fi
 
   # Loads the image the build job saved, or pulls the same published tag.
-  # Matrix: CameraType=none (PX4 smoke) and CameraType=rgbd (OAK-D S2 + hover).
+  # Matrix: none (PX4 smoke) + rgbd/stereo (hover + out-and-back on cpu).
   # CameraType is set explicitly on every variant — never rely on compose defaults.
   flight:
     needs: build
@@ -371,7 +371,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        camera: [none, rgbd]
+        camera: [none, rgbd, stereo]
     steps:
       - uses: actions/checkout@v4
 
@@ -441,9 +441,9 @@ jobs:
           SMOKE_TEST_TIMEOUT: "240"
         run: ./scripts/smoke_test.sh "${PX4_IMAGE}"
 
-      # x500_depth + OAK-D S2 RGB-D on cpu profile. Health (rgb/depth/info/TF/
-      # RTAB-Map) then takeoff/hover/land. Soft-GL; no GPU.
-      - name: RGB-D hover flight (CameraType=rgbd)
+      # x500_depth + OAK-D S2 RGB-D on cpu. Health then hover + out-and-back.
+      # Same mission script and E2E_* pass criteria as stereo (ci_camera_flight.sh).
+      - name: RGB-D flight (CameraType=rgbd)
         if: matrix.camera == 'rgbd'
         timeout-minutes: 40
         env:
@@ -467,9 +467,39 @@ jobs:
           SMOKE_TEST_TIMEOUT: "420"
           E2E_TAKEOFF_HEIGHT_M: "1.5"
           E2E_HOVER_S: "10"
-          # Relative is fine; ci_rgbd_flight.sh / run_e2e.sh resolve under repo/logs.
+          E2E_LEG_LENGTH_M: "0.3"
+          # Relative is fine; ci_camera_flight.sh / run_e2e.sh resolve under repo/logs.
           E2E_FLIGHT_DIR: logs/flights/rgbd
         run: ./scripts/ci_rgbd_flight.sh "${PX4_IMAGE}"
+
+      # x500_depth + OAK-D S2 stereo on cpu. Same hover + out-and-back as RGB-D.
+      - name: Stereo flight (CameraType=stereo)
+        if: matrix.camera == 'stereo'
+        timeout-minutes: 40
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: stereo
+          World: default
+          PX4_GZ_MODEL: x500_depth
+          VISION_PROFILE: cpu
+          COMPOSE_PROFILES: slam
+          COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_PROJECT_NAME: px4-smoke-stereo-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "1"
+          GZ_USE_XVFB: "0"
+          HEALTH_CAMERA_MIN_HZ: "1"
+          HEALTH_SLAM_MIN_HZ: "1"
+          HEALTH_TIMING: "1"
+          SMOKE_TEST_TIMEOUT: "420"
+          E2E_TAKEOFF_HEIGHT_M: "1.5"
+          E2E_HOVER_S: "10"
+          E2E_LEG_LENGTH_M: "0.3"
+          E2E_FLIGHT_DIR: logs/flights/stereo
+        run: ./scripts/ci_stereo_flight.sh "${PX4_IMAGE}"
 
       - name: Flight artifacts
         if: always() && !cancelled()

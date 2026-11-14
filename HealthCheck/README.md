@@ -18,6 +18,9 @@ RGB-D (`CameraType=rgbd`) expects `/camera/rgb/image_raw`,
 `/camera/depth/image_raw`, matching `camera_info`, and TF
 `camera_rgb_optical_frame` (depth is RGB-aligned).
 
+Stereo (`CameraType=stereo`) expects `/camera/stereo/left|right/image_raw`,
+matching `camera_info`, and TF `stereo_left|right_camera_optical_frame`.
+
 ## Rate floors
 
 - `HEALTH_CAMERA_MIN_HZ` overrides `group: camera` (soft-GL CI uses `1`)
