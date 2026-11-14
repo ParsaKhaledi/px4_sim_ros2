@@ -34,12 +34,136 @@ def test_auto_detect_prefers_version_when_neither_has_a_publisher():
     assert chosen == "/fmu/out/vehicle_status_v1"
 
 
+def test_auto_detect_after_measure_prefers_live_unversioned_odometry():
+    """XRCE may advertise vehicle_odometry_v1 with no messages."""
+    checker = healthcheck.HealthRunner.__new__(healthcheck.HealthRunner)
+    item = {
+        "spec": {
+            "auto_detect": [
+                "/fmu/out/vehicle_odometry_v1",
+                "/fmu/out/vehicle_odometry",
+            ]
+        },
+        "target": "/fmu/out/vehicle_odometry_v1",
+        "counts": {
+            "/fmu/out/vehicle_odometry_v1": 1,
+            "/fmu/out/vehicle_odometry": 1,
+        },
+        "graph": {
+            "/fmu/out/vehicle_odometry_v1": ["px4_msgs/msg/VehicleOdometry"],
+            "/fmu/out/vehicle_odometry": ["px4_msgs/msg/VehicleOdometry"],
+        },
+        "publishers": 1,
+    }
+    measurements = {
+        "/fmu/out/vehicle_odometry_v1": {"count": 0, "last_mono": None, "last_msg": None},
+        "/fmu/out/vehicle_odometry": {"count": 210, "last_mono": 1.0, "last_msg": None},
+    }
+    reason = checker._pick_auto_detect_target(item, measurements, 2.0)
+    assert item["target"] == "/fmu/out/vehicle_odometry"
+    assert "selected /fmu/out/vehicle_odometry" in reason
+    chosen, shared_reason = healthcheck.pick_live_auto_detect_target(
+        item["spec"]["auto_detect"],
+        item["counts"],
+        measurements,
+        2.0,
+    )
+    assert chosen == "/fmu/out/vehicle_odometry"
+    assert "selected /fmu/out/vehicle_odometry" in shared_reason
+
+
+def test_health_report_collapses_auto_detect_odometry_to_live_topic(tmp_path):
+    """Early v1 fail must not leave failing=1 beside a later live odometry ok."""
+    log_dir = tmp_path / "health"
+    log_dir.mkdir()
+    path = log_dir / "px4.jsonl"
+    rows = [
+        {
+            "service": "PX4",
+            "check": "topic_rate",
+            "target": "/fmu/out/vehicle_odometry_v1",
+            "status": "fail",
+            "rate_hz": 0.0,
+            "ts": "2026-11-13T20:00:00.000Z",
+        },
+        {
+            "service": "PX4",
+            "check": "topic_rate",
+            "target": "/fmu/out/vehicle_odometry",
+            "status": "ok",
+            "rate_hz": 103.0,
+            "auto_detect_group": "/fmu/out/vehicle_odometry_v1",
+            "selection_reason": (
+                "selected /fmu/out/vehicle_odometry (count=206, publishers=1, "
+                "rate=103.00Hz)"
+            ),
+            "ts": "2026-11-13T20:01:00.000Z",
+        },
+        {
+            "service": "PX4",
+            "check": "topic_rate",
+            "target": "/clock",
+            "status": "ok",
+            "rate_hz": 250.0,
+            "ts": "2026-11-13T20:01:00.000Z",
+        },
+    ]
+    for row in rows:
+        healthcheck.append_jsonl(path, row)
+    latest = healthcheck.collect_latest_health_rows(log_dir)
+    targets = [row["target"] for row in latest]
+    assert "/fmu/out/vehicle_odometry" in targets
+    assert "/fmu/out/vehicle_odometry_v1" not in targets
+    text, fails = healthcheck.format_health_table(latest)
+    assert fails == 0
+    assert "checks=2 failing=0" in text
+    assert "/fmu/out/vehicle_odometry" in text
+    assert "selected /fmu/out/vehicle_odometry" in text
+    assert healthcheck.print_health_report(log_dir) == 0
+
+
+def test_health_report_exits_nonzero_when_table_has_fails(tmp_path):
+    log_dir = tmp_path / "health"
+    log_dir.mkdir()
+    healthcheck.append_jsonl(
+        log_dir / "px4.jsonl",
+        {
+            "service": "PX4",
+            "check": "topic_rate",
+            "target": "/ground_truth/odom",
+            "status": "fail",
+            "rate_hz": 0.0,
+        },
+    )
+    assert healthcheck.print_health_report(log_dir) == 1
+
+
+def test_health_report_require_rows(tmp_path, monkeypatch):
+    empty = tmp_path / "health"
+    empty.mkdir()
+    monkeypatch.delenv("HEALTH_REQUIRE_ROWS", raising=False)
+    assert healthcheck.print_health_report(empty) == 0
+    monkeypatch.setenv("HEALTH_REQUIRE_ROWS", "1")
+    assert healthcheck.print_health_report(empty) == 1
+
+
 def test_software_camera_rate_override():
     spec = {"group": "camera", "min_rate_hz": 5}
     assert healthcheck.effective_min_rate(spec, {}) == 5
     assert healthcheck.effective_min_rate(spec, {"HEALTH_CAMERA_MIN_HZ": "1"}) == 1
     core = {"group": "core", "min_rate_hz": 20}
     assert healthcheck.effective_min_rate(core, {"HEALTH_CAMERA_MIN_HZ": "1"}) == 20
+
+
+def test_slam_rate_override():
+    spec = {"group": "slam", "min_rate_hz": 1}
+    assert healthcheck.effective_min_rate(spec, {}) == 1
+    assert healthcheck.effective_min_rate(spec, {"HEALTH_SLAM_MIN_HZ": "0.5"}) == 0.5
+
+
+def test_timing_flag_off_by_default():
+    assert not healthcheck.timing_enabled({})
+    assert healthcheck.timing_enabled({"HEALTH_TIMING": "1"})
 
 
 def test_absent_optional_topic_skips():
@@ -117,6 +241,12 @@ def test_check_files_cover_services():
         topics.append(spec.get("topic") or ",".join(spec.get("auto_detect", [])))
     assert "/clock" in topics
     assert "/ground_truth/odom" in topics
+    assert "/camera/rgb/image_raw" in topics
+    assert "/camera/rgb/camera_info" in topics
+    assert "/camera/depth/camera_info" in topics
+    assert "/camera/stereo/left/image_raw" in topics
+    assert "/camera/stereo/left/camera_info" in topics
+    assert "/camera/stereo/right/camera_info" in topics
     assert any("vehicle_status_v1" in topic for topic in topics)
     assert any("vehicle_local_position_v1" in topic for topic in topics)
     status = next(

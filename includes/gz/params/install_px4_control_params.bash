@@ -37,8 +37,12 @@ _px4_control_number() {
 }
 
 # Force failsafes after the airframe. Keep this in sync with the env exports.
+# When px4_params.py apply already wrote the full sim.params .post, keep it.
 _px4_control_write_failsafe_post() {
   local post_file="$1"
+  if [ -f "$post_file" ] && grep -q 'param set NAV_DLL_ACT' "$post_file"; then
+    return 0
+  fi
   cat > "$post_file" << 'EOF'
 # Written by install_px4_control_params.bash. Sourced after the airframe.
 # NAV_DLL_ACT must be set here: PX4_PARAM_ alone does not stick when the

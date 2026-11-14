@@ -22,7 +22,12 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:-}"
 cleanup() {
   status=$?
   "${ROOT}/scripts/compose_stack.sh" logs || true
-  "${ROOT}/scripts/health_report.sh" || true
+  # Final table uses the same auto_detect path as the gate. A failing row
+  # fails the job even when an earlier healthcheck exit was 0.
+  if ! "${ROOT}/scripts/health_report.sh"; then
+    echo "Health report table has failing checks; failing the smoke job." >&2
+    status=1
+  fi
   if [ "${SMOKE_KEEP_UP:-0}" != "1" ]; then
     "${ROOT}/scripts/compose_stack.sh" down || true
   fi
@@ -44,5 +49,8 @@ echo "Checking the rest of the PX4 graph."
 # shellcheck disable=SC2016
 compose_exec PX4 bash -lc \
   'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4'
+
+echo "Verifying final health table (must match gate auto_detect; failing=0)."
+"${ROOT}/scripts/health_report.sh"
 
 echo "Smoke test passed."

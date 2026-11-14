@@ -1,20 +1,35 @@
 from pathlib import Path
 
 
-def test_ci_is_one_headless_hover():
+def test_ci_runs_none_rgbd_stereo_flight_matrix():
     names = {path.name for path in Path(".github/workflows").glob("*.yml")}
     assert names == {"ci.yml"}
     assert not Path(".github/actions").exists()
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Dockerfile_px4_sim_NO_GPU" in text
     assert "Dockerfile_px4_sim_with_GPU" not in text
-    assert "Headless hover/smoke" in text
-    assert 'CameraType: none' in text
+    # Permanent matrix: plain x500 smoke + OAK-D RGB-D/stereo hover+out-and-back.
+    assert "matrix:" in text
+    assert "camera: [none, rgbd, stereo]" in text
+    assert "CameraType: none" in text
+    assert "CameraType: rgbd" in text
+    assert "CameraType: stereo" in text
     assert "PX4_GZ_MODEL: x500" in text
+    assert "PX4_GZ_MODEL: x500_depth" in text
+    assert "VISION_PROFILE: cpu" in text
     assert "./scripts/smoke_test.sh" in text
-    assert "px4_offboard.py" not in text
+    assert "./scripts/ci_rgbd_flight.sh" in text
+    assert "./scripts/ci_stereo_flight.sh" in text
+    camera_script = Path("scripts/ci_camera_flight.sh").read_text(encoding="utf-8")
+    assert "unset E2E_HOVER_ONLY" in camera_script
+    assert "test_out_and_back.py" in camera_script
+    assert "E2E_HOVER_ONLY=1" not in Path("scripts/ci_rgbd_flight.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "E2E_HOVER_ONLY=1" not in Path("scripts/ci_stereo_flight.sh").read_text(
+        encoding="utf-8"
+    )
     assert "microxrce_offboard.py" not in text
-    assert "run_e2e.sh" not in text
     assert "continue-on-error" not in text
     assert "docker load" in text
     assert 'cache_from="type=gha,scope=${cache_scope},version=2"' in text

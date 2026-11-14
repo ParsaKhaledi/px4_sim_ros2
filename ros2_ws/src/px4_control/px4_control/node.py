@@ -481,7 +481,10 @@ class Px4ControlNode(Node):
                     self._motion.note_cmd_vel(self._cmd_time, v_n, v_e, yaw_rate)
             if self._estimation_mode == 'vision':
                 if self._vision.current(now) is None:
-                    self._motion.note_vision_lost(now, snap)
+                    # Wait for the first RTAB-Map sample. A missing stream at
+                    # startup is not a loss; a stall after tracking is.
+                    if self._vision.ever_received:
+                        self._motion.note_vision_lost(now, snap)
                 else:
                     self._motion.note_vision_regained()
             setpoint = self._motion.update(now, snap)
