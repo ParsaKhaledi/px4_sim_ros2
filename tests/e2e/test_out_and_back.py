@@ -125,22 +125,29 @@ def run_drone_mission(drone_cls, thresholds) -> dict:
         else:
             time.sleep(thresholds.hover_s)
         watch.raise_if_crashed()
-        watch.set_phase("leg1")
-        try:
-            _call(drone, ("move_forward",), thresholds.leg_length_m)
-        except FlightSetupError:
-            _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
-        watch.set_phase("yaw")
-        try:
-            _call(drone, ("turn",), 180.0)
-        except FlightSetupError:
-            _call(drone, ("turn",), degrees=180.0)
-        watch.raise_if_crashed()
-        watch.set_phase("leg2")
-        try:
-            _call(drone, ("move_forward",), thresholds.leg_length_m)
-        except FlightSetupError:
-            _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
+        # E2E_HOVER_ONLY=1: RGB-D CI takeoff/hover/land without the out-and-back.
+        hover_only = os.environ.get("E2E_HOVER_ONLY", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if not hover_only:
+            watch.set_phase("leg1")
+            try:
+                _call(drone, ("move_forward",), thresholds.leg_length_m)
+            except FlightSetupError:
+                _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
+            watch.set_phase("yaw")
+            try:
+                _call(drone, ("turn",), 180.0)
+            except FlightSetupError:
+                _call(drone, ("turn",), degrees=180.0)
+            watch.raise_if_crashed()
+            watch.set_phase("leg2")
+            try:
+                _call(drone, ("move_forward",), thresholds.leg_length_m)
+            except FlightSetupError:
+                _call(drone, ("move_forward",), distance_m=thresholds.leg_length_m)
         watch.set_phase("land")
         _call(drone, ("land",))
         if hasattr(drone, "disarm"):
@@ -153,6 +160,11 @@ def run_drone_mission(drone_cls, thresholds) -> dict:
     graded = watch._result(crashed=False)
     graded["driver"] = "px4_control"
     graded["thresholds"] = _dump(thresholds)
+    graded["hover_only"] = os.environ.get("E2E_HOVER_ONLY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     return graded
 
 

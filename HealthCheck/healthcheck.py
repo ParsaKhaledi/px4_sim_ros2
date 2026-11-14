@@ -245,6 +245,18 @@ def print_health_report(log_dir: Path) -> int:
     return 1 if fails else 0
 
 
+def timing_enabled(env: dict | None = None) -> bool:
+    """Verbose phase timing. Off unless HEALTH_TIMING=1/true/yes."""
+    source = os.environ if env is None else env
+    return str(source.get("HEALTH_TIMING", "")).strip().lower() in {"1", "true", "yes"}
+
+
+def timing_log(message: str, env: dict | None = None) -> None:
+    """Print a timing line when HEALTH_TIMING is on (no-op otherwise)."""
+    if timing_enabled(env):
+        print(f"health_timing: {message}", flush=True)
+
+
 def effective_min_rate(spec: dict, env: dict | None = None, clock_hz: float | None = None) -> float:
     """Software rendering cannot hold the 5 Hz camera floor.
 
@@ -256,10 +268,19 @@ def effective_min_rate(spec: dict, env: dict | None = None, clock_hz: float | No
 
     so a slower world is not held to a fixed wall-clock number. With no
     clock sample the floor stays positive, so 0 Hz still fails.
+
+    Overrides:
+    - ``HEALTH_CAMERA_MIN_HZ`` for ``group: camera``
+    - ``HEALTH_SLAM_MIN_HZ`` for ``group: slam`` (RTAB-Map odom on cpu CI)
     """
     source = os.environ if env is None else env
-    if spec.get("group") == "camera":
+    group = spec.get("group")
+    if group == "camera":
         override = source.get("HEALTH_CAMERA_MIN_HZ")
+        if override not in (None, ""):
+            return float(override)
+    if group == "slam":
+        override = source.get("HEALTH_SLAM_MIN_HZ")
         if override not in (None, ""):
             return float(override)
     model_rate = spec.get("model_rate_hz")
@@ -415,6 +436,7 @@ class HealthRunner:
 
     def run(self) -> int:
         started = time.monotonic()
+        timing_log(f"{self.service} begin group={self.group or '*'}", self.env)
         self._processes()
         needs_ros = any(
             self.selected(spec)
@@ -432,6 +454,11 @@ class HealthRunner:
         oks = [row for row in self.results if row["status"] == "ok"]
         skips = [row for row in self.results if row["status"] == "skip"]
         elapsed_ms = int((time.monotonic() - started) * 1000)
+        timing_log(
+            f"{self.service} end ok={len(oks)} fail={len(fails)} "
+            f"skip={len(skips)} duration_ms={elapsed_ms}",
+            self.env,
+        )
         print(
             f"{self.service} status={'fail' if fails else 'ok'} "
             f"ok={len(oks)} fail={len(fails)} skip={len(skips)} duration_ms={elapsed_ms}"

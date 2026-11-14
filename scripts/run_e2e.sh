@@ -148,6 +148,7 @@ run_attempt() {
     -e E2E_CRASH_DIVERGENCE_M \
     -e E2E_ODOM_TIMEOUT_S \
     -e E2E_CHECK_CAMERAS \
+    -e E2E_HOVER_ONLY \
     -e E2E_WALL_SCALE \
     -e E2E_CAMERA_MIN_VARIANCE \
     -e E2E_GZ_MODEL \
@@ -155,6 +156,11 @@ run_attempt() {
     -e E2E_RESULT_PATH="${result}" \
     -e World \
     -e PX4_GZ_MODEL \
+    -e CameraType \
+    -e VISION_PROFILE \
+    -e HEALTH_CAMERA_MIN_HZ \
+    -e HEALTH_SLAM_MIN_HZ \
+    -e HEALTH_TIMING \
     PX4 \
     bash -lc '
       set -eo pipefail
@@ -337,12 +343,41 @@ PY
   fi
 }
 
+run_preflight_health() {
+  # Optional multi-service health gate (RGB-D CI). E2E_HEALTH_SERVICES is a
+  # space-separated list of healthcheck --service names. Final table must
+  # report failing=0. Set E2E_HEALTH_SERVICES= to skip.
+  local services="${E2E_HEALTH_SERVICES:-}"
+  if [ -z "${services}" ]; then
+    return 0
+  fi
+  local svc
+  echo "Preflight health services: ${services} (CameraType=${CameraType:-unset})"
+  for svc in ${services}; do
+    echo "Health gate: ${svc}"
+    # shellcheck disable=SC2016
+    if [ "${svc}" = "PX4" ]; then
+      compose_exec PX4 bash -lc \
+        'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && \
+         python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4 --group camera && \
+         exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4'
+    else
+      compose_exec PX4 bash -lc \
+        "source /opt/ros/\${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && \
+         exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service ${svc}"
+    fi
+  done
+  echo "Verifying final health table (failing=0)."
+  "${ROOT}/scripts/health_report.sh"
+}
+
 bringup_start="$(date +%s)"
 "${ROOT}/scripts/compose_stack.sh" up
 BRINGUP_S=$(( $(date +%s) - bringup_start ))
 record_boot_order
 "${ROOT}/scripts/assert_px4_params.sh"
 check_distance_sensor
+run_preflight_health
 
 attempt=1
 fly_until_done

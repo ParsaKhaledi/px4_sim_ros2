@@ -35,6 +35,8 @@ topics:
     min_rate_hz: 1
     qos: sensor
     group: core
+  # OAK-D S2 RGB-D (cpu profile ~10 Hz). HEALTH_CAMERA_MIN_HZ lowers the
+  # floor under software GL when the wall rate cannot hold 5 Hz.
   - topic: /camera/rgb/image_raw
     min_rate_hz: 5
     qos: sensor
@@ -42,6 +44,18 @@ topics:
     when_env:
       CameraType: rgbd
   - topic: /camera/depth/image_raw
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/rgb/camera_info
+    min_rate_hz: 5
+    qos: sensor
+    group: camera
+    when_env:
+      CameraType: rgbd
+  - topic: /camera/depth/camera_info
     min_rate_hz: 5
     qos: sensor
     group: camera

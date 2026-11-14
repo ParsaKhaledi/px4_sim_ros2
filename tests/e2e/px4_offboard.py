@@ -18,7 +18,7 @@ import threading
 import time
 
 from crash_monitor import crash_reason, load_crash_thresholds
-from grading import grade_mission, load_thresholds, yaw_from_quat
+from grading import grade_hover, grade_mission, load_thresholds, yaw_from_quat
 from camera_check import CameraTracker, rtf_summary
 from gz_pose import (
     error_stats,
@@ -29,6 +29,11 @@ from gz_pose import (
     setpoint_world,
     tilt_deg,
 )
+
+
+def _env_flag(name: str) -> bool:
+    """True for 1/true/yes (case-insensitive). Used by E2E_HOVER_ONLY."""
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
 
 
 class FlightCrash(Exception):
@@ -213,9 +218,12 @@ class FlightWatch:
             # Height has already held. This wait is the hover clock, not a settle.
             self.set_phase("hover")
             self._wait_sim(self.thresholds.hover_s, max(60.0, self.thresholds.hover_s * 8.0))
-            self._leg("leg1")
-            self._yaw_180()
-            self._leg("leg2")
+            # RGB-D CI flight is takeoff → hover → land only. Legs stay on
+            # the full out-and-back path (E2E_HOVER_ONLY unset/false).
+            if not _env_flag("E2E_HOVER_ONLY"):
+                self._leg("leg1")
+                self._yaw_180()
+                self._leg("leg2")
             self._land()
             self._disarm()
         except FlightCrash:
@@ -807,9 +815,14 @@ class FlightWatch:
         self._wait_until(lambda: self.armed is False, sim_timeout=15.0, wall_timeout=60.0)
 
     def _result(self, crashed: bool) -> dict:
-        graded = grade_mission(self.samples, self.thresholds)
+        # Hover-only CI grades takeoff/hover/land; full missions keep legs/yaw.
+        if _env_flag("E2E_HOVER_ONLY"):
+            graded = grade_hover(self.samples, self.thresholds)
+        else:
+            graded = grade_mission(self.samples, self.thresholds)
         graded["status"] = "passed" if graded["passed"] else "failed"
         graded["driver"] = "px4_offboard"
+        graded["hover_only"] = _env_flag("E2E_HOVER_ONLY")
         graded["samples_count"] = len(self.samples)
         graded["track"] = self.samples
         graded["px4_position_error_m"] = error_stats(self.samples)

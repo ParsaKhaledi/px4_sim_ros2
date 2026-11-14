@@ -146,6 +146,17 @@ def test_software_camera_rate_override():
     assert healthcheck.effective_min_rate(core, {"HEALTH_CAMERA_MIN_HZ": "1"}) == 20
 
 
+def test_slam_rate_override():
+    spec = {"group": "slam", "min_rate_hz": 1}
+    assert healthcheck.effective_min_rate(spec, {}) == 1
+    assert healthcheck.effective_min_rate(spec, {"HEALTH_SLAM_MIN_HZ": "0.5"}) == 0.5
+
+
+def test_timing_flag_off_by_default():
+    assert not healthcheck.timing_enabled({})
+    assert healthcheck.timing_enabled({"HEALTH_TIMING": "1"})
+
+
 def test_absent_optional_topic_skips():
     status, rate, reason = healthcheck.judge_rate(0, 0, 2.0, 25, True, False)
     assert status == "skip"
@@ -221,6 +232,9 @@ def test_check_files_cover_services():
         topics.append(spec.get("topic") or ",".join(spec.get("auto_detect", [])))
     assert "/clock" in topics
     assert "/ground_truth/odom" in topics
+    assert "/camera/rgb/image_raw" in topics
+    assert "/camera/rgb/camera_info" in topics
+    assert "/camera/depth/camera_info" in topics
     assert any("vehicle_status_v1" in topic for topic in topics)
     assert any("vehicle_local_position_v1" in topic for topic in topics)
     status = next(

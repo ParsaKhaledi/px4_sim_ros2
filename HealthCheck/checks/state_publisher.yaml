@@ -4,11 +4,22 @@ window_s: 2.0
 discovery_s: 1.0
 nodes:
   - name: robot_state_publisher
+# Optical frames from includes/gz/x500_tf_publisher/x500_urdf.urdf.
+# RGB-D depth is published in camera_rgb_optical_frame (aligned depth);
+# there is no separate depth_camera_optical_frame link.
 tf_frames:
   - frame: camera_rgb_optical_frame
-  - frame: depth_camera_optical_frame
+    when_env:
+      CameraType: rgbd
+  - frame: camera_link
+    when_env:
+      CameraType: rgbd
   - frame: stereo_left_camera_optical_frame
+    when_env:
+      CameraType: stereo
   - frame: stereo_right_camera_optical_frame
+    when_env:
+      CameraType: stereo
 topics:
   - topic: /tf_static
     min_rate_hz: 0
