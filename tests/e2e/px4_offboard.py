@@ -20,6 +20,7 @@ import time
 from crash_monitor import crash_reason, load_crash_thresholds
 from grading import grade_hover, grade_mission, load_thresholds, yaw_from_quat
 from camera_check import CameraTracker, rtf_summary
+from ev_bridge import EvBridgeStats, fill_vehicle_odometry, load_bridge_types, vision_gt_error_m
 from gz_pose import (
     error_stats,
     gazebo_env,
@@ -34,6 +35,18 @@ from gz_pose import (
 def _env_flag(name: str) -> bool:
     """True for 1/true/yes (case-insensitive). Used by E2E_HOVER_ONLY."""
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+_FLYING_PHASES = frozenset({
+    "start",
+    "arm",
+    "offboard",
+    "takeoff",
+    "hover",
+    "leg1",
+    "yaw",
+    "leg2",
+})
 
 
 class FlightCrash(Exception):
@@ -60,6 +73,10 @@ class FlightCrash(Exception):
         if isinstance(extra, dict):
             data.update(extra)
         return data
+
+
+class VisionLost(Exception):
+    """RTAB-Map tracking lost after the first accepted sample."""
 
 
 class FlightSetupError(Exception):
@@ -195,6 +212,25 @@ class FlightWatch:
         )
         self.rtf_samples = []
         self._rtf_wall = 0.0
+        self.estimation_mode = (os.environ.get("ESTIMATION_MODE") or "gps").strip().lower()
+        self.vision_enabled = self.estimation_mode == "vision"
+        self._vision = None
+        self._odom_sample_cls = None
+        self._lost_covariance = None
+        self._ev_pub = None
+        self._ev_stats = EvBridgeStats()
+        self._estimator_flags = {}
+        self._estimator_log = []
+        self._vision_lost_latched = False
+        self._vision_brake_sim = None
+        self._vision_land_now = False
+        self._gps_fix = None
+        self.ekf2_ev_delay = float(os.environ.get("EKF2_EV_DELAY") or os.environ.get("PX4_PARAM_EKF2_EV_DELAY") or "0")
+        self.ekf2_hgt_ref = float(os.environ.get("PX4_PARAM_EKF2_HGT_REF") or "0")
+        self.ekf2_hgt_ref_reason = (
+            "baro (0): EV_CTRL=15 still fuses vertical EV as aiding; Soft-GL VO "
+            "height is too noisy to be the EKF height reference"
+        )
 
     def set_phase(self, phase: str) -> None:
         with self._lock:
@@ -219,6 +255,7 @@ class FlightWatch:
     def run(self) -> dict:
         """Fly one attempt. Used when px4_control.Drone is not installed."""
 
+        vision_abort = False
         try:
             self._open_ros()
             self._wait_for_estimate()
@@ -238,11 +275,15 @@ class FlightWatch:
                 self._leg("leg2")
             self._land()
             self._disarm()
+        except VisionLost:
+            vision_abort = True
+            print("vision_tracking_lost: brake, hold, then land", flush=True)
+            self._brake_hold_land()
         except FlightCrash:
             raise
         finally:
             self._close_ros()
-        return self._result(crashed=False)
+        return self._result(crashed=False, vision_abort=vision_abort)
 
     @staticmethod
     def _subscribe(node, msg_type, topics, callback, qos) -> None:
@@ -258,12 +299,14 @@ class FlightWatch:
             raise FlightSetupError(f"rclpy is not importable ({exc})") from exc
         try:
             from px4_msgs.msg import (
+                EstimatorStatusFlags,
                 OffboardControlMode,
                 TrajectorySetpoint,
                 VehicleAttitude,
                 VehicleCommand,
                 VehicleLandDetected,
                 VehicleLocalPosition,
+                VehicleOdometry,
                 VehicleStatus,
             )
         except ImportError as exc:
@@ -296,6 +339,7 @@ class FlightWatch:
             "command": VehicleCommand,
             "offboard": OffboardControlMode,
             "setpoint": TrajectorySetpoint,
+            "visual_odometry": VehicleOdometry,
             "armed": getattr(VehicleStatus, "ARMING_STATE_ARMED", 2),
             "offboard_mode": getattr(VehicleStatus, "NAVIGATION_STATE_OFFBOARD", 14),
             "arm_cmd": getattr(VehicleCommand, "VEHICLE_CMD_COMPONENT_ARM_DISARM", 400),
@@ -323,12 +367,55 @@ class FlightWatch:
             "/fmu/out/vehicle_attitude_v1",
             "/fmu/out/vehicle_attitude",
         ), self._on_attitude, qos_sub)
+        self._subscribe(node, EstimatorStatusFlags, (
+            "/fmu/out/estimator_status_flags",
+            "/fmu/out/estimator_status_flags_v0",
+        ), self._on_estimator_flags, qos_sub)
         try:
             from nav_msgs.msg import Odometry
 
             node.create_subscription(Odometry, "/ground_truth/odom", self._on_odom, qos_sub)
         except ImportError:
             pass
+        try:
+            from px4_msgs.msg import SensorGps
+
+            self._subscribe(node, SensorGps, (
+                "/fmu/out/vehicle_gps_position",
+                "/fmu/out/vehicle_gps_position_v0",
+            ), self._on_gps, qos_sub)
+        except ImportError:
+            pass
+        if self.vision_enabled:
+            try:
+                bridge_cls, sample_cls, lost_cov = load_bridge_types()
+            except ImportError as exc:
+                raise FlightSetupError(f"vision EV bridge unavailable ({exc})") from exc
+            self._vision = bridge_cls()
+            self._odom_sample_cls = sample_cls
+            self._lost_covariance = lost_cov
+            from nav_msgs.msg import Odometry as VisionOdometry
+
+            node.create_subscription(
+                VisionOdometry, "/rtabmap/odom", self._on_rtabmap_odom, qos_sub
+            )
+            try:
+                from rtabmap_msgs.msg import OdomInfo
+
+                node.create_subscription(
+                    OdomInfo, "/rtabmap/odom_info", self._on_rtabmap_info, qos_sub
+                )
+            except ImportError:
+                print("warn: rtabmap_msgs.OdomInfo missing; lost comes from odom only", flush=True)
+            self._ev_pub = node.create_publisher(
+                VehicleOdometry, "/fmu/in/vehicle_visual_odometry", qos_pub
+            )
+            print(
+                f"vision EV bridge: /rtabmap/odom → /fmu/in/vehicle_visual_odometry "
+                f"(EKF2_EV_DELAY={self.ekf2_ev_delay:g} HGT_REF={self.ekf2_hgt_ref:g} "
+                f"{self.ekf2_hgt_ref_reason})",
+                flush=True,
+            )
         if self.cameras is not None:
             from sensor_msgs.msg import Image
 
@@ -398,13 +485,49 @@ class FlightWatch:
         )
 
     def sensor_fields(self) -> dict:
-        fields = {"gz_rtf": rtf_summary(self.rtf_samples)}
+        fields = {
+            "gz_rtf": rtf_summary(self.rtf_samples),
+            "estimation_mode": self.estimation_mode,
+            "ekf2_ev_delay_ms": self.ekf2_ev_delay,
+            "ekf2_hgt_ref": self.ekf2_hgt_ref,
+            "ekf2_hgt_ref_reason": self.ekf2_hgt_ref_reason,
+            "rtabmap_odom_rate_hz": self._ev_stats.rate_hz(),
+            "rtabmap_odom_accepted": self._ev_stats.accepted,
+            "estimator_status_flags": self._estimator_fusion_summary(),
+            "gps_fix_type": self._gps_fix,
+        }
         if self.cameras is None:
             return fields
         report = self.cameras.report()
         fields["cameras"] = report
         fields["camera_reason"] = report.get("reason")
         return fields
+
+    def _estimator_fusion_summary(self) -> dict:
+        rows = list(self._estimator_log)
+        if not rows and self._estimator_flags:
+            rows = [dict(self._estimator_flags)]
+        def any_true(key: str) -> bool:
+            return any(bool(row.get(key)) for row in rows)
+
+        # User-facing cs_gps means GNSS horizontal fusion (cs_gnss_pos).
+        cs_gps = any_true("cs_gnss_pos")
+        summary = {
+            "samples": len(rows),
+            "cs_ev_pos": any_true("cs_ev_pos"),
+            "cs_ev_yaw": any_true("cs_ev_yaw"),
+            "cs_ev_vel": any_true("cs_ev_vel"),
+            "cs_ev_hgt": any_true("cs_ev_hgt"),
+            "cs_gps": cs_gps,
+            "cs_gnss_pos": cs_gps,
+            "cs_gnss_vel": any_true("cs_gnss_vel"),
+            "cs_gps_hgt": any_true("cs_gps_hgt"),
+            "latest": dict(self._estimator_flags) if self._estimator_flags else None,
+        }
+        summary["vision_proof_ok"] = bool(
+            summary["cs_ev_pos"] and summary["cs_ev_yaw"] and not summary["cs_gps"]
+        )
+        return summary
 
     def _spin_monitor(self) -> None:
         while not self._stop.is_set():
@@ -481,6 +604,72 @@ class FlightWatch:
             "name": "ground_truth",
         }
 
+    def _on_estimator_flags(self, msg) -> None:
+        flags = {
+            "cs_ev_pos": bool(getattr(msg, "cs_ev_pos", False)),
+            "cs_ev_yaw": bool(getattr(msg, "cs_ev_yaw", False)),
+            "cs_ev_vel": bool(getattr(msg, "cs_ev_vel", False)),
+            "cs_ev_hgt": bool(getattr(msg, "cs_ev_hgt", False)),
+            "cs_gnss_pos": bool(getattr(msg, "cs_gnss_pos", False)),
+            "cs_gnss_vel": bool(getattr(msg, "cs_gnss_vel", False)),
+            "cs_gps_hgt": bool(getattr(msg, "cs_gps_hgt", False)),
+            "cs_yaw_align": bool(getattr(msg, "cs_yaw_align", False)),
+            "t": self._sim_s(),
+            "phase": self.phase,
+        }
+        self._estimator_flags = flags
+        # Keep mid-flight evidence; preflight spam is dropped after a few.
+        if self.phase in _FLYING_PHASES or self.phase in {"vision_brake", "land", "hover"}:
+            self._estimator_log.append(flags)
+            if len(self._estimator_log) > 2000:
+                self._estimator_log = self._estimator_log[-2000:]
+
+    def _on_gps(self, msg) -> None:
+        fix = getattr(msg, "fix_type", None)
+        if fix is not None:
+            self._gps_fix = int(fix)
+
+    def _on_rtabmap_odom(self, msg) -> None:
+        if self._vision is None or self._odom_sample_cls is None or self._ev_pub is None:
+            return
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        pose = msg.pose.pose
+        twist = msg.twist.twist
+        import numpy as np
+
+        sample = self._odom_sample_cls(
+            stamp_sec=stamp,
+            position_enu=np.array([pose.position.x, pose.position.y, pose.position.z]),
+            quat_xyzw=np.array(
+                [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+            ),
+            linear_flu=np.array([twist.linear.x, twist.linear.y, twist.linear.z]),
+            angular_flu=np.array([twist.angular.x, twist.angular.y, twist.angular.z]),
+            pose_covariance=np.array(msg.pose.covariance, dtype=float),
+            twist_covariance=np.array(msg.twist.covariance, dtype=float),
+        )
+        visual = self._vision.push(sample)
+        if visual is None:
+            if self._vision.ever_received:
+                self._ev_stats.note_lost()
+            return
+        self._ev_stats.note_accepted(stamp, sample.position_enu)
+        out = self._types["visual_odometry"]()
+        fill_vehicle_odometry(out, visual)
+        self._ev_pub.publish(out)
+
+    def _on_rtabmap_info(self, msg) -> None:
+        if self._vision is None or self._lost_covariance is None:
+            return
+        import numpy as np
+
+        lost = bool(getattr(msg, "lost", False))
+        cov = np.asarray(getattr(msg, "covariance", []), dtype=float)
+        new_map = (not lost) and self._lost_covariance(cov)
+        self._vision.note_odom_info(lost=lost, new_map=new_map)
+        if lost:
+            self._ev_stats.note_lost()
+
     def _on_setpoint(self, msg) -> None:
         position = list(msg.position)
         if len(position) >= 3 and all(math.isfinite(float(item)) for item in position[:3]):
@@ -495,10 +684,14 @@ class FlightWatch:
 
     def _tick(self) -> None:
         self._refresh_gz()
+        self._check_vision_tracking()
         if self.commanding and self.phase not in {"land", "disarm"}:
             self._publish_setpoint()
             self._publish_offboard()
         if self.commanding and self.phase == "land" and self.land_fallback:
+            self._publish_setpoint()
+            self._publish_offboard()
+        if self.commanding and self.phase == "vision_brake":
             self._publish_setpoint()
             self._publish_offboard()
         if self.commanding:
@@ -506,6 +699,32 @@ class FlightWatch:
         if self._node is not None and self._rclpy is not None:
             self._rclpy.spin_once(self._node, timeout_sec=0.0)
         self._observe()
+
+    def _check_vision_tracking(self) -> None:
+        if not self.vision_enabled or self._vision is None:
+            return
+        if not self._vision.ever_received:
+            return
+        if self.phase not in _FLYING_PHASES and self.phase != "vision_brake":
+            return
+        now = self._sim_s()
+        tracking = self._vision.current(now) is not None and not self._ev_stats.explicit_lost
+        if tracking:
+            return
+        if not self._vision_lost_latched:
+            self._vision_lost_latched = True
+            self._vision_brake_sim = now if now > 0.0 else 0.0
+            self.sp_n = self.px4_n
+            self.sp_e = self.px4_e
+            self.sp_d = self.px4_d
+            self.set_phase("vision_brake")
+            print("phase=vision_brake (rtabmap tracking lost)", flush=True)
+            return
+        if self.phase != "vision_brake":
+            return
+        start = self._vision_brake_sim if self._vision_brake_sim is not None else now
+        if now - start >= 2.0:
+            self._vision_land_now = True
 
     def _refresh_gz(self) -> None:
         # /ground_truth/odom wins when that topic is already publishing.
@@ -657,6 +876,12 @@ class FlightWatch:
             )
         elif setpoint_error is not None:
             row["px4_gt_error_m"] = None
+        vision_err = vision_gt_error_m(self._ev_stats.last_enu, (gz["x"], gz["y"], gz["z"]))
+        row["vision_gt_error_m"] = None if vision_err is None else round(vision_err, 4)
+        if self._estimator_flags:
+            row["cs_ev_pos"] = self._estimator_flags.get("cs_ev_pos")
+            row["cs_ev_yaw"] = self._estimator_flags.get("cs_ev_yaw")
+            row["cs_gps"] = self._estimator_flags.get("cs_gnss_pos")
         self.samples.append(row)
 
     def _wait_sim(self, sim_timeout: float, wall_timeout: float) -> bool:
@@ -676,6 +901,8 @@ class FlightWatch:
             self._phase_sim = 0.0
         while True:
             self._tick()
+            if self._vision_land_now:
+                raise VisionLost("rtabmap tracking lost mid-flight")
             if predicate():
                 return True
             now_sim = self._sim_s()
@@ -703,13 +930,47 @@ class FlightWatch:
 
     def _wait_for_estimate(self) -> None:
         print("phase=preflight", flush=True)
-        ok = self._wait_until(
-            lambda: self.px4_valid and self._gz is not None and (self.preflight_ok or self.seen_status),
-            sim_timeout=40.0,
-            wall_timeout=180.0,
-        )
+        if self.vision_enabled:
+            print("phase=preflight waiting for first RTAB-Map odom (ever_received)", flush=True)
+
+        def ready() -> bool:
+            if not (self.px4_valid and self._gz is not None and (self.preflight_ok or self.seen_status)):
+                return False
+            if self.vision_enabled:
+                return bool(self._vision is not None and self._vision.ever_received)
+            return True
+
+        ok = self._wait_until(ready, sim_timeout=60.0, wall_timeout=240.0)
         if not ok:
-            raise FlightCrash("preflight_timeout", dict(self.snapshot), list(self.samples))
+            reason = "preflight_timeout"
+            if self.vision_enabled and (self._vision is None or not self._vision.ever_received):
+                reason = "vision_odom_timeout"
+            raise FlightCrash(reason, dict(self.snapshot), list(self.samples))
+        if self.vision_enabled:
+            rate = self._ev_stats.rate_hz()
+            print(
+                f"phase=preflight vision ready rate_hz={rate} "
+                f"EKF2_EV_DELAY={self.ekf2_ev_delay:g} HGT_REF={self.ekf2_hgt_ref:g}",
+                flush=True,
+            )
+
+    def _brake_hold_land(self) -> None:
+        """After tracking loss: hold the last setpoint briefly, then land."""
+        self._vision_land_now = False
+        if self.phase != "vision_brake":
+            self.sp_n = self.px4_n
+            self.sp_e = self.px4_e
+            self.sp_d = self.px4_d
+            self.set_phase("vision_brake")
+        try:
+            self._wait_sim(2.0, 30.0)
+        except (FlightCrash, VisionLost):
+            pass
+        try:
+            self._land()
+            self._disarm()
+        except FlightCrash as exc:
+            print(f"vision abort land ended with {exc.reason}", flush=True)
 
     def _arm(self) -> None:
         self.set_phase("arm")
@@ -840,7 +1101,7 @@ class FlightWatch:
         print("phase=disarm", flush=True)
         self._wait_until(lambda: self.armed is False, sim_timeout=15.0, wall_timeout=60.0)
 
-    def _result(self, crashed: bool) -> dict:
+    def _result(self, crashed: bool, vision_abort: bool = False) -> dict:
         # Hover-only CI grades takeoff/hover/land; full missions keep legs/yaw.
         if _env_flag("E2E_HOVER_ONLY"):
             graded = grade_hover(self.samples, self.thresholds)
@@ -852,16 +1113,60 @@ class FlightWatch:
         graded["samples_count"] = len(self.samples)
         graded["track"] = self.samples
         graded["px4_position_error_m"] = error_stats(self.samples)
+        graded["vision_gt_error_m"] = error_stats(
+            [{"px4_gt_error_m": row.get("vision_gt_error_m")} for row in self.samples]
+        )
         graded["crash_reason"] = self.crash
+        if vision_abort:
+            graded["crash_reason"] = graded.get("crash_reason") or "vision_tracking_lost"
         graded.update(self.sensor_fields())
         camera_report = graded.get("cameras") or {}
         if self.cameras is not None and not camera_report.get("passed") and not crashed:
             graded["status"] = "failed"
             graded["passed"] = False
             graded["checks"] = list(graded.get("checks") or []) + list(camera_report.get("checks") or [])
+        if self.vision_enabled and _env_flag("E2E_REQUIRE_VISION_FUSION"):
+            proof = graded.get("estimator_status_flags") or {}
+            ok = bool(proof.get("vision_proof_ok"))
+            detail = (
+                f"cs_ev_pos={proof.get('cs_ev_pos')} "
+                f"cs_ev_yaw={proof.get('cs_ev_yaw')} "
+                f"cs_gps={proof.get('cs_gps')} "
+                f"samples={proof.get('samples')}"
+            )
+            checks = list(graded.get("checks") or [])
+            checks.append(
+                {
+                    "name": "vision_fusion_proof",
+                    "passed": ok,
+                    "value": detail,
+                    "limit": "cs_ev_pos=true cs_ev_yaw=true cs_gps=false",
+                    "detail": (
+                        "estimator_status_flags during flight must show EV pos+yaw "
+                        "fused and GNSS horizontal fusion off"
+                    ),
+                }
+            )
+            graded["checks"] = checks
+            if not ok:
+                graded["passed"] = False
+                graded["status"] = "failed"
+        if vision_abort:
+            graded["passed"] = False
+            graded["status"] = "failed"
+            graded["vision_tracking_lost"] = True
         if crashed:
             graded["status"] = "crashed"
             graded["passed"] = False
+        # Always log the rates / delay / RTF the plan requires.
+        print(
+            f"vision_metrics EKF2_EV_DELAY={self.ekf2_ev_delay:g} "
+            f"rtabmap_hz={self._ev_stats.rate_hz()} "
+            f"rtf={graded.get('gz_rtf')} "
+            f"HGT_REF={self.ekf2_hgt_ref:g} ({self.ekf2_hgt_ref_reason}) "
+            f"flags={graded.get('estimator_status_flags')}",
+            flush=True,
+        )
         return graded
 
 

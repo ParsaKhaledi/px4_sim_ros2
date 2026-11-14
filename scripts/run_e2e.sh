@@ -134,7 +134,16 @@ snapshot_attempt() {
   dest="${FLIGHTS}/attempt-${attempt}"
   mkdir -p "${dest}/health"
   compose_setup
-  "${COMPOSE[@]}" logs --no-color --tail 400 PX4 > "${dest}/container.log" 2>&1 || true
+  "${COMPOSE[@]}" logs --no-color --tail 800 PX4 > "${dest}/container.log" 2>&1 || true
+  # Ogre Soft-GL aborts: keep a focused crash slice for the report.
+  {
+    echo "PX4_GZ_SIM_RENDER_ENGINE=${PX4_GZ_SIM_RENDER_ENGINE:-}"
+    echo "ESTIMATION_MODE=${ESTIMATION_MODE:-}"
+    echo "EKF2_EV_CTRL=${EKF2_EV_CTRL:-}"
+    echo "EKF2_EV_DELAY=${EKF2_EV_DELAY:-}"
+    grep -E 'SIGABRT|Aborted|ogre|RenderEngine|segfault|Segmentation|gz sim' \
+      "${dest}/container.log" | tail -80 || true
+  } > "${dest}/render_engine_diag.txt" 2>&1 || true
   if [ -d "${ROOT}/logs/health" ]; then
     cp -a "${ROOT}/logs/health/." "${dest}/health/" || true
   fi
@@ -177,12 +186,19 @@ run_attempt() {
     -e E2E_WALL_SCALE \
     -e E2E_CAMERA_MIN_VARIANCE \
     -e E2E_GZ_MODEL \
+    -e E2E_REQUIRE_VISION_FUSION \
     -e E2E_ATTEMPT="${attempt}" \
     -e E2E_RESULT_PATH="${result}" \
     -e World \
     -e PX4_GZ_MODEL \
     -e CameraType \
     -e VISION_PROFILE \
+    -e ESTIMATION_MODE \
+    -e EKF2_EV_CTRL \
+    -e EKF2_EV_DELAY \
+    -e PX4_PARAM_EKF2_EV_CTRL \
+    -e PX4_PARAM_EKF2_EV_DELAY \
+    -e PX4_GZ_SIM_RENDER_ENGINE \
     -e HEALTH_CAMERA_MIN_HZ \
     -e HEALTH_SLAM_MIN_HZ \
     -e HEALTH_TIMING \

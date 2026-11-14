@@ -25,19 +25,27 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "test_out_and_back.py" in camera_script
     assert "x500_tf_publisher" in camera_script
     assert "a+rwX" in camera_script
-    assert "ESTIMATION_MODE=gps" in camera_script
-    assert "PX4_PARAM_EKF2_MAG_TYPE=0" in camera_script
+    assert "ESTIMATION_MODE=vision" in camera_script
+    assert "EKF2_EV_CTRL=15" in camera_script
+    assert "EKF2_MAG_TYPE=5" in camera_script or "MAG_TYPE=5" in camera_script
+    assert "export PX4_PARAM_SYS_HAS_MAG=0" not in camera_script
+    assert "ESTIMATION_MODE=gps" not in camera_script
+    assert "export PX4_PARAM_EKF2_MAG_TYPE=0" not in camera_script
     assert "GZ_USE_XVFB" in camera_script
     assert "unset HEADLESS" in camera_script
-    # Soft-GL must force-assign bands after .env load (not ${VAR:-wider}).
-    assert "E2E_YAW_TOLERANCE_DEG=25" in camera_script
-    assert "E2E_LEG_TOLERANCE_M=0.15" in camera_script
-    assert "E2E_CHECK_CAMERAS=0" in camera_script
-    assert "ESTIMATION_MODE: gps" in text
+    assert "E2E_CHECK_CAMERAS" in camera_script
+    assert "E2E_CHECK_CAMERAS=0" not in camera_script
+    # Soft-GL band loosening from the gps bring-up path must stay gone.
+    assert "E2E_YAW_TOLERANCE_DEG=25" not in camera_script
+    assert "E2E_LEG_TOLERANCE_M=0.15" not in camera_script
+    assert "PX4_GZ_SIM_RENDER_ENGINE" in camera_script
+    assert "ESTIMATION_MODE: vision" in text
+    assert "EKF2_EV_CTRL: \"15\"" in text
     installer = Path(
         "includes/gz/params/install_px4_control_params.bash"
     ).read_text(encoding="utf-8")
-    assert "EKF2_MAG_TYPE=0" in installer
+    assert "EKF2_MAG_TYPE=5" in installer
+    assert "EKF2_GPS_CTRL=0" in installer
     xvfb = Path("compose.xvfb.yml").read_text(encoding="utf-8")
     assert "HEADLESS_BACKEND: xvfb" in xvfb
     assert 'HEADLESS: ""' in xvfb
@@ -56,6 +64,13 @@ def test_ci_runs_none_rgbd_stereo_flight_matrix():
     assert "E2E_HOVER_ONLY=1" not in Path("scripts/ci_stereo_flight.sh").read_text(
         encoding="utf-8"
     )
+    offboard = Path("tests/e2e/px4_offboard.py").read_text(encoding="utf-8")
+    assert "vehicle_visual_odometry" in offboard
+    assert "ever_received" in offboard
+    assert "cs_ev_pos" in offboard
+    assert "vision_tracking_lost" in offboard or "VisionLost" in offboard
+    grading = Path("tests/e2e/grading.py").read_text(encoding="utf-8")
+    assert "_fmt_seconds" in grading
     assert "microxrce_offboard.py" not in text
     assert "continue-on-error" not in text
     assert "docker load" in text

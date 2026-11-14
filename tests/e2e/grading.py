@@ -238,9 +238,16 @@ def _grade_leg(checks, name: str, rows, start_pose, thresholds: Thresholds) -> N
             None if settle is None else round(settle, 4),
             thresholds.settle_timeout_s,
             "inside ±"
-            f"{thresholds.settle_tolerance_m:.2f} m for {thresholds.settle_hold_s:.0f} s",
+            f"{thresholds.settle_tolerance_m:.2f} m for {_fmt_seconds(thresholds.settle_hold_s)}",
         )
     )
+
+
+def _fmt_seconds(value: float) -> str:
+    """Format a hold duration without rounding 0.5 s down to \"0 s\"."""
+    if abs(float(value) - round(float(value))) < 1e-9:
+        return f"{float(value):.0f} s"
+    return f"{float(value):.1f} s"
 
 
 def _grade_yaw(checks, rows, start_pose, thresholds: Thresholds) -> None:
@@ -281,7 +288,7 @@ def _grade_yaw(checks, rows, start_pose, thresholds: Thresholds) -> None:
             settle is not None and settle <= thresholds.settle_timeout_s,
             None if settle is None else round(settle, 4),
             thresholds.settle_timeout_s,
-            f"held ±{thresholds.yaw_settle_deg:.0f} deg for {thresholds.settle_hold_s:.0f} s",
+            f"held ±{thresholds.yaw_settle_deg:.0f} deg for {_fmt_seconds(thresholds.settle_hold_s)}",
         )
     )
 

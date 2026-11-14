@@ -19,7 +19,7 @@
 #
 # Vision-mode environment overrides (see docs/px4_control.md):
 #   EKF2_EV_DELAY   milliseconds, 0..300, default 0
-#   EKF2_EV_CTRL    integer bitmask 0..15, default 9 (horizontal position and yaw)
+#   EKF2_EV_CTRL    integer bitmask 0..15, default 9 (hpos+yaw). Camera CI uses 15 (hpos|vpos|vel|yaw).
 
 _px4_control_number() {
   local name="$1"

@@ -456,7 +456,10 @@ jobs:
           World: default
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
-          ESTIMATION_MODE: gps
+          ESTIMATION_MODE: vision
+          EKF2_EV_CTRL: "15"
+          EKF2_EV_DELAY: "0"
+          PX4_GZ_SIM_RENDER_ENGINE: ogre
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
@@ -490,7 +493,10 @@ jobs:
           World: default
           PX4_GZ_MODEL: x500_depth
           VISION_PROFILE: cpu
-          ESTIMATION_MODE: gps
+          ESTIMATION_MODE: vision
+          EKF2_EV_CTRL: "15"
+          EKF2_EV_DELAY: "0"
+          PX4_GZ_SIM_RENDER_ENGINE: ogre
           COMPOSE_PROFILES: slam
           COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml

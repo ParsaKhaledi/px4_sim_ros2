@@ -25,8 +25,11 @@ x-ros-env: &ros-env
   RTABMAPVIZ: ${RTABMAPVIZ:-false}
   GZ_HEADLESS_RENDERING: ${GZ_HEADLESS_RENDERING:-0}
   GZ_USE_XVFB: ${GZ_USE_XVFB:-0}
-  # vision (default, sim.params) or gps. Camera CI e2e uses gps (no EV bridge).
+  # vision (default, sim.params) or gps. Camera CI uses vision + e2e EV bridge.
   ESTIMATION_MODE: ${ESTIMATION_MODE:-vision}
+  # Optional vision EKF overrides (install_px4_control_params.bash). Empty = profile default.
+  EKF2_EV_CTRL: ${EKF2_EV_CTRL:-}
+  EKF2_EV_DELAY: ${EKF2_EV_DELAY:-}
   CameraType: ${CameraType:-rgbd}
   # OAK-D mount. Pitch is degrees, positive lens-down. 17 deg is 0.3 rad.
   CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}

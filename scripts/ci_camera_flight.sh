@@ -9,6 +9,12 @@
 #     E2E_* pass criteria for both cameras; there is no separate stereo-only
 #     flight script on this branch)
 #
+# Estimation: vision-only EKF. GPS plugin and compass stay on the model for
+# ground truth / sensors; fusion is off (EKF2_GPS_CTRL=0, EKF2_MAG_TYPE=5).
+# Yaw and position come from RTAB-Map → /fmu/in/vehicle_visual_odometry with
+# EKF2_EV_CTRL=15 (hpos, vpos, vel, yaw). EKF2_HGT_REF=0 (baro): EV vertical
+# still aids via EV_CTRL bit 1, but Soft-GL VO height is not the EKF datum.
+#
 # Usage: ./scripts/ci_camera_flight.sh <rgbd|stereo> [PX4_IMAGE]
 # Thin wrappers: ci_rgbd_flight.sh / ci_stereo_flight.sh
 # CI path-filter kick: keep this script under scripts/** for PR runs.
@@ -64,47 +70,32 @@ export HEALTH_TIMING="${HEALTH_TIMING:-1}"
 export CI_FLIGHT_TIMING="${CI_FLIGHT_TIMING:-1}"
 export SMOKE_TEST_TIMEOUT="${SMOKE_TEST_TIMEOUT:-420}"
 
-# e2e uses px4_offboard (no px4_control EV bridge). Vision-mode EKF
-# (sim.params GPS_CTRL=0) never gets xy_valid → preflight_timeout. GPS mode
-# overrides via install_px4_control_params + host assert_px4_params.
-export ESTIMATION_MODE=gps
-export PX4_PARAM_EKF2_EV_CTRL=0
-# Override sim.params MAG_TYPE=5 so EKF can yaw-align without EV.
-export PX4_PARAM_EKF2_MAG_TYPE=0
-export PX4_PARAM_EKF2_HGT_REF=1
-export PX4_PARAM_EKF2_GPS_CTRL=7
-export PX4_PARAM_EKF2_GPS_P_NOISE=0.5
-export PX4_PARAM_EKF2_GPS_V_NOISE=0.3
-# Leave PX4_GZ_SIM_RENDER_ENGINE unset (ogre2). Forcing ogre left PX4 unhealthy on CI.
+# Vision EKF: keep every x500 sensor. No SYS_HAS_MAG=0. GPS plugin stays;
+# fusion off only via EKF2_GPS_CTRL=0. Compass present, unfused (MAG_TYPE=5).
+export ESTIMATION_MODE=vision
+export EKF2_EV_CTRL=15
+export EKF2_EV_DELAY="${EKF2_EV_DELAY:-0}"
+export PX4_PARAM_EKF2_EV_CTRL=15
+export PX4_PARAM_EKF2_EV_DELAY="${EKF2_EV_DELAY}"
+# HGT_REF=baro (0). Why: EV_CTRL=15 still fuses vertical EV as aiding, but
+# Soft-GL RTAB-Map height is too noisy to be the EKF height reference.
+unset PX4_PARAM_EKF2_HGT_REF || true
+unset PX4_PARAM_EKF2_GPS_CTRL || true
+unset PX4_PARAM_EKF2_MAG_TYPE || true
+unset PX4_PARAM_SYS_HAS_MAG || true
+unset PX4_PARAM_SYS_HAS_GPS || true
+# Retry Ogre 1 for non-blank Soft-GL frames (prior CI: gz SIGABRT on ogre).
+export PX4_GZ_SIM_RENDER_ENGINE="${PX4_GZ_SIM_RENDER_ENGINE:-ogre}"
 
 # Full out-and-back (hover + forward + return). Same pass criteria for both
-# cameras via shared E2E_* defaults / .env.example.
+# cameras via shared E2E_* defaults / .env.example. No Soft-GL band loosening.
 unset E2E_HOVER_ONLY || true
 export E2E_HEALTH_SERVICES="PX4 StatePublisher Rtabmap"
 export E2E_TAKEOFF_HEIGHT_M="${E2E_TAKEOFF_HEIGHT_M:-1.5}"
 export E2E_HOVER_S="${E2E_HOVER_S:-10}"
 export E2E_LEG_LENGTH_M="${E2E_LEG_LENGTH_M:-0.3}"
-# Soft-GL RTF is often ~0.3–0.6. .env already loaded tight defaults above;
-# force Soft-GL bands here (do not use ${VAR:-wider} — that keeps .env).
-# Soft-GL still publishes flat frames on Actions; skip pixel variance
-# (topic rates stay health-gated). GPU runners can unset Soft-GL flags.
-if [ "${HEADLESS_SOFTWARE:-0}" = "1" ] || [ "${GZ_USE_XVFB:-0}" = "1" ]; then
-  export E2E_WALL_SCALE=5
-  export E2E_HOVER_DRIFT_M=0.12
-  export E2E_HOVER_HEIGHT_BAND_M=0.30
-  export E2E_HOVER_HEIGHT_HOLD_S=1.5
-  export E2E_SETTLE_TOLERANCE_M=0.10
-  export E2E_SETTLE_HOLD_S=0.5
-  export E2E_SETTLE_TIMEOUT_S=12
-  export E2E_YAW_TOLERANCE_DEG=25
-  export E2E_YAW_SETTLE_DEG=15
-  export E2E_LEG_TOLERANCE_M=0.15
-  export E2E_HEIGHT_TOLERANCE_M=0.40
-  export E2E_RETURN_TOLERANCE_M=0.12
-  export E2E_CHECK_CAMERAS=0
-else
-  export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-1}"
-fi
+export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-1}"
+export E2E_REQUIRE_VISION_FUSION=1
 
 _default_flight_dir="${ROOT}/logs/flights/${CAM}"
 if [ -n "${E2E_FLIGHT_DIR:-}" ]; then
@@ -131,20 +122,25 @@ chmod -R a+rwX \
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### ${CAM} CI flight (hover + out-and-back)"
+    echo "### ${CAM} CI flight (hover + out-and-back, vision EV)"
     echo
     echo "- CameraType=${CameraType}"
     echo "- PX4_GZ_MODEL=${PX4_GZ_MODEL}"
     echo "- VISION_PROFILE=${VISION_PROFILE}"
     echo "- ESTIMATION_MODE=${ESTIMATION_MODE}"
+    echo "- EKF2_EV_CTRL=${EKF2_EV_CTRL} (hpos|vpos|vel|yaw)"
+    echo "- EKF2_HGT_REF=0 (baro): EV vertical aids; Soft-GL VO height not the datum"
+    echo "- EKF2_GPS_CTRL=0 EKF2_MAG_TYPE=5 (sensors stay; fusion off)"
+    echo "- EKF2_EV_DELAY=${EKF2_EV_DELAY}"
+    echo "- PX4_GZ_SIM_RENDER_ENGINE=${PX4_GZ_SIM_RENDER_ENGINE}"
     echo "- GZ_USE_XVFB=${GZ_USE_XVFB} HEADLESS_BACKEND=${HEADLESS_BACKEND}"
     echo "- COMPOSE_SERVICES=${COMPOSE_SERVICES}"
     echo "- E2E_TAKEOFF_HEIGHT_M=${E2E_TAKEOFF_HEIGHT_M} E2E_HOVER_S=${E2E_HOVER_S}"
     echo "- E2E_LEG_LENGTH_M=${E2E_LEG_LENGTH_M}"
-    echo "- E2E_CHECK_CAMERAS=${E2E_CHECK_CAMERAS} (Soft-GL skips pixel variance; health still rates)"
+    echo "- E2E_CHECK_CAMERAS=${E2E_CHECK_CAMERAS}"
     echo "- script=scripts/run_e2e.sh → tests/e2e/test_out_and_back.py"
   } >> "${GITHUB_STEP_SUMMARY}"
 fi
 
-echo "ci_camera_flight: CameraType=${CameraType} hover+out-and-back (health=${E2E_HEALTH_SERVICES} estimation=${ESTIMATION_MODE} xvfb=${GZ_USE_XVFB} cameras=${E2E_CHECK_CAMERAS})"
+echo "ci_camera_flight: CameraType=${CameraType} hover+out-and-back (estimation=${ESTIMATION_MODE} ev_ctrl=${EKF2_EV_CTRL} hgt_ref=baro render=${PX4_GZ_SIM_RENDER_ENGINE:-default} xvfb=${GZ_USE_XVFB} cameras=${E2E_CHECK_CAMERAS})"
 exec "${ROOT}/scripts/run_e2e.sh" "${PX4_IMAGE}"

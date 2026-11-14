@@ -67,7 +67,8 @@ def expected_sim_params(
             'EKF2_MAG_TYPE': 5.0,
             # Firmware default. The compass stays present; fusion is EKF2_MAG_TYPE.
             'SYS_HAS_MAG': 1.0,
-            # Baro. Vision height is not fused (EKF2_EV_CTRL bit 1 stays clear).
+            # Baro height reference. EV_CTRL may still fuse vertical EV as aiding
+            # (bit 1) without making vision the EKF height datum.
             'EKF2_HGT_REF': 0.0,
             'EKF2_EV_DELAY': float(ev_delay),
             'EKF2_EV_NOISE_MD': 0.0,
