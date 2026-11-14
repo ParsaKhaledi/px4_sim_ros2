@@ -11,6 +11,7 @@
 #
 # Usage: ./scripts/ci_camera_flight.sh <rgbd|stereo> [PX4_IMAGE]
 # Thin wrappers: ci_rgbd_flight.sh / ci_stereo_flight.sh
+# CI path-filter kick: keep this script under scripts/** for PR runs.
 #
 # Timing: logs/timing.txt always. HEALTH_TIMING=0 / CI_FLIGHT_TIMING=0 silence
 # verbose phase lines.
