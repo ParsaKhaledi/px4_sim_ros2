@@ -65,8 +65,12 @@ if [ -n "${E2E_FLIGHT_DIR:-}" ]; then
 else
   FLIGHTS="${ROOT}/logs/flights"
 fi
-# Normalize .. and duplicate slashes so the bind-mount prefix check is stable.
-FLIGHTS="$(cd "$(dirname "${FLIGHTS}")" 2>/dev/null && pwd)/$(basename "${FLIGHTS}")" || FLIGHTS="${FLIGHTS}"
+# Normalize when the parent dir already exists (resolve .. / duplicate slashes).
+_flights_parent="$(dirname "${FLIGHTS}")"
+_flights_base="$(basename "${FLIGHTS}")"
+if [ -d "${_flights_parent}" ]; then
+  FLIGHTS="$(cd "${_flights_parent}" && pwd)/${_flights_base}"
+fi
 case "${FLIGHTS}" in
   "${ROOT}/logs"|"${ROOT}/logs/"*) ;;
   *)
