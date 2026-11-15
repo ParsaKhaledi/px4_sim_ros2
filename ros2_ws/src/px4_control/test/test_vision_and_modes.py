@@ -228,6 +228,22 @@ def _null_sample(stamp):
     )
 
 
+def test_vision_ever_received_waits_for_first_sample():
+    bridge = VisionOdometryBridge()
+    assert bridge.ever_received is False
+    assert bridge.current(0.0) is None
+    # An early null/lost frame must not arm the brake-and-land path.
+    assert bridge.push(_null_sample(0.5)) is None
+    assert bridge.ever_received is False
+    bridge.mark_lost()
+    assert bridge.ever_received is False
+    assert bridge.push(_sample(1.0, (1.0, 2.0, 3.0))) is not None
+    assert bridge.ever_received is True
+    bridge.mark_lost()
+    assert bridge.ever_received is True
+    assert bridge.current(1.1) is None
+
+
 def test_null_pose_is_dropped_and_not_forwarded():
     bridge = VisionOdometryBridge(max_variance=1.0e6)
     assert bridge.push(_sample(1.0, (1.0, 2.0, 3.0))) is not None

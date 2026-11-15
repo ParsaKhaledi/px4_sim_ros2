@@ -5,7 +5,9 @@ set -eo pipefail
 # HEADLESS=1    no gz GUI and no X display. Cameras still render via EGL
 #               (--headless-rendering). GUI mode is the default.
 # HEADLESS_BACKEND=xvfb
-#               use Xvfb instead of EGL when the binary is installed.
+#               start Xvfb and *unset* HEADLESS so PX4 launches `gz sim -g`
+#               on the virtual display. Server-only + Xvfb without a GUI
+#               does not render camera sensors (blank Soft-GL frames).
 # HEADLESS_SOFTWARE=1
 #               force Mesa software GL (llvmpipe). Useful on a VM with no GPU.
 # PX4_GZ_MODEL_POSE
@@ -66,27 +68,47 @@ if [ -z "${REAL_GZ:-}" ]; then
 fi
 export PATH="${REPO_GZ}/bin:${PATH}"
 
-if [ "${headless}" = "1" ]; then
-  export HEADLESS=1
-  backend="${HEADLESS_BACKEND:-egl}"
-  if [ "${backend}" = "xvfb" ] && command -v Xvfb >/dev/null 2>&1; then
-    export HEADLESS_BACKEND=xvfb
-    export DISPLAY="${HEADLESS_DISPLAY:-:99}"
-    display_num="${DISPLAY#:}"
-    if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
-      Xvfb "${DISPLAY}" -screen 0 1280x1024x24 -ac +extension GLX +render -noreset \
-        >/tmp/xvfb-gz.log 2>&1 &
-      sleep 0.3
-    fi
-    echo "Gazebo headless backend: Xvfb on ${DISPLAY}"
-  else
-    if [ "${backend}" = "xvfb" ]; then
-      echo "Xvfb is not installed; using EGL --headless-rendering"
-    fi
-    export HEADLESS_BACKEND=egl
-    unset DISPLAY
-    echo "Gazebo headless backend: EGL --headless-rendering (no GUI)"
+# Compose/CI may set GZ_USE_XVFB without HEADLESS_BACKEND.
+if [ -z "${HEADLESS_BACKEND:-}" ]; then
+  case "${GZ_USE_XVFB:-0}" in
+    1|true|TRUE|yes|YES) HEADLESS_BACKEND=xvfb ;;
+    *) HEADLESS_BACKEND=egl ;;
+  esac
+fi
+backend="${HEADLESS_BACKEND:-egl}"
+
+start_xvfb() {
+  export HEADLESS_BACKEND=xvfb
+  export DISPLAY="${HEADLESS_DISPLAY:-:99}"
+  display_num="${DISPLAY#:}"
+  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+    Xvfb "${DISPLAY}" -screen 0 1280x1024x24 -ac +extension GLX +render -noreset \
+      >/tmp/xvfb-gz.log 2>&1 &
+    sleep 0.5
   fi
+  if [ ! -S "/tmp/.X11-unix/X${display_num}" ]; then
+    echo "ERROR: Xvfb failed to create ${DISPLAY} (see /tmp/xvfb-gz.log)" >&2
+    return 1
+  fi
+  # Soft-GL on the virtual display; required on CPU CI without /dev/dri.
+  export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+  export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
+  export HEADLESS_SOFTWARE="${HEADLESS_SOFTWARE:-1}"
+  # px4-rc.gzsim starts `gz sim -g` only when HEADLESS is unset/empty.
+  unset HEADLESS
+  echo "Gazebo Xvfb GUI on ${DISPLAY} (software GL; HEADLESS unset for gz -g)"
+}
+
+if [ "${backend}" = "xvfb" ] && command -v Xvfb >/dev/null 2>&1; then
+  start_xvfb || exit 1
+elif [ "${headless}" = "1" ]; then
+  if [ "${backend}" = "xvfb" ]; then
+    echo "Xvfb is not installed; using EGL --headless-rendering"
+  fi
+  export HEADLESS=1
+  export HEADLESS_BACKEND=egl
+  unset DISPLAY
+  echo "Gazebo headless backend: EGL --headless-rendering (no GUI)"
   if [ "${HEADLESS_SOFTWARE:-0}" = "1" ]; then
     export LIBGL_ALWAYS_SOFTWARE=1
     echo "Gazebo headless: software rendering enabled"

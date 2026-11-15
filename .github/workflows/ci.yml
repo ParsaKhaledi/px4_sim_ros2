@@ -12,8 +12,11 @@ on:
       - "HealthCheck/**"
       - "ros2_ws/**"
       - "tests/**"
-      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
-      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/startFiles/**"
+      - "includes/gz/scripts/**"
+      - "includes/gz/params/**"
+      - "includes/gz/models/**"
+      - "includes/gz/Params/**"
       - "includes/gz/gz_modifications.bash"
       - "includes/gz/tune_gz_cameras.py"
       - "includes/gz/patch_dds_topics.py"
@@ -24,7 +27,7 @@ on:
       - ".hadolint.yaml"
       - ".yamllint.yml"
   push:
-    branches: [main, dev/px4-upgrade, "feature/**"]
+    branches: [main, dev, "feature/**"]
     tags: ["v*"]
     paths:
       - "dockerFile/**"
@@ -36,8 +39,11 @@ on:
       - "HealthCheck/**"
       - "ros2_ws/**"
       - "tests/**"
-      - "includes/gz/startFiles/gz_start_px4_gz_sim.sh"
-      - "includes/gz/startFiles/gz_start_rtabmap.sh"
+      - "includes/gz/startFiles/**"
+      - "includes/gz/scripts/**"
+      - "includes/gz/params/**"
+      - "includes/gz/models/**"
+      - "includes/gz/Params/**"
       - "includes/gz/gz_modifications.bash"
       - "includes/gz/tune_gz_cameras.py"
       - "includes/gz/patch_dds_topics.py"
@@ -356,11 +362,13 @@ jobs:
           fi
 
   # Loads the image the build job saved, or pulls the same published tag.
-  # One headless hover/smoke. No second flight and no offboard controller.
+  # CameraType is set explicitly — never rely on compose defaults.
+  # No-camera PX4 smoke always runs here. Vision (rgbd/stereo) lives in
+  # flight-vision below and is gated off on GitHub-hosted runners.
   flight:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -408,7 +416,8 @@ jobs:
       - name: Image contents
         run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
 
-      - name: Headless hover/smoke
+      # Plain x500, no camera. Health table + param gate only (no offboard).
+      - name: Headless smoke (CameraType=none)
         timeout-minutes: 15
         env:
           PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
@@ -418,10 +427,11 @@ jobs:
           CameraType: none
           World: default
           PX4_GZ_MODEL: x500
+          VISION_PROFILE: cpu
           COMPOSE_PROFILES: ""
           COMPOSE_SERVICES: PX4
           COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
-          COMPOSE_PROJECT_NAME: px4-smoke-${{ github.run_id }}
+          COMPOSE_PROJECT_NAME: px4-smoke-none-${{ github.run_id }}
           GZ_HEADLESS_RENDERING: "0"
           GZ_USE_XVFB: "0"
           SMOKE_TEST_TIMEOUT: "240"
@@ -431,30 +441,217 @@ jobs:
         if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: flight-${{ github.sha }}
+          name: flight-none-${{ github.sha }}
           if-no-files-found: ignore
           path: |
             logs/health/**
             logs/flights/**
             logs/smoke-containers.log
+            logs/timing.txt
 
       - name: Health summary
         if: always() && !cancelled()
+        env:
+          # Empty JSONL after a flight step is a failure, not a silent green.
+          HEALTH_REQUIRE_ROWS: "1"
         run: |
-          {
-            echo "### Health report"
-            ./scripts/health_report.sh || true
-          } >> "${GITHUB_STEP_SUMMARY}"
+          set -euo pipefail
+          echo "### Health report (none)" >> "${GITHUB_STEP_SUMMARY}"
+          # Same auto_detect table as the smoke/rgbd gate. Do not swallow failures.
+          ./scripts/health_report.sh | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "health_report: checks ok (failing=0)" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Timing summary
         if: always()
         run: |
-          if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
-            {
-              echo "### Timing"
-              echo
-              echo '```'
+          {
+            echo "### Timing (none)"
+            echo
+            echo '```'
+            if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
               cat "${RUNNER_TEMP}/image_timing.txt"
-              echo '```'
-            } >> "${GITHUB_STEP_SUMMARY}"
+            fi
+            if [ -f logs/timing.txt ]; then
+              cat logs/timing.txt
+            fi
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # Vision camera flights (RGB-D + stereo). Kept in the workflow but gated off.
+  # Disabled because GitHub-hosted runners render blank frames (variance 0.0) so
+  # vision odometry never arrives; re-enable later on a self-hosted GPU runner on
+  # Parsa's laptop by setting repo variable ENABLE_VISION_CAMERA_JOBS=true.
+  # Scripts, ev_bridge.py, and vision-only EKF params stay in the tree.
+  flight-vision:
+    if: ${{ vars.ENABLE_VISION_CAMERA_JOBS == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        camera: [rgbd, stereo]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use .env.example when .env is absent
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
           fi
+
+      - name: Download image
+        if: needs.build.outputs.image_mode == 'built'
+        uses: actions/download-artifact@v4
+        with:
+          name: px4-image-${{ github.sha }}
+          path: ${{ runner.temp }}/px4-image
+
+      - name: Load image
+        if: needs.build.outputs.image_mode == 'built'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          start="$(date +%s)"
+          zstd -d "${RUNNER_TEMP}/px4-image/px4-image.tar.zst" -c | docker load
+          echo "load $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          docker image inspect "${{ needs.build.outputs.image_ref }}" >/dev/null
+          echo "Loaded ${{ needs.build.outputs.image_ref }} without building."
+
+      - name: Pull published image
+        if: needs.build.outputs.image_mode == 'pulled'
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          start="$(date +%s)"
+          docker pull "${PX4_IMAGE}"
+          docker tag "${PX4_IMAGE}" "${{ needs.build.outputs.image_ref }}"
+          echo "pull $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "Pulled ${PX4_IMAGE} without building."
+
+      - name: Image contents
+        run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
+
+      # x500_depth + OAK-D S2 RGB-D on cpu. Health then hover + out-and-back.
+      # Same mission script and E2E_* pass criteria as stereo (ci_camera_flight.sh).
+      - name: RGB-D flight (CameraType=rgbd)
+        if: matrix.camera == 'rgbd'
+        timeout-minutes: 50
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          # Empty HEADLESS: Xvfb + gz GUI (HEADLESS=1 leaves cameras blank).
+          HEADLESS: ""
+          RTABMAPVIZ: "false"
+          DISPLAY: ":99"
+          CameraType: rgbd
+          World: default
+          PX4_GZ_MODEL: x500_depth
+          VISION_PROFILE: cpu
+          ESTIMATION_MODE: vision
+          EKF2_EV_CTRL: "15"
+          EKF2_EV_DELAY: "0"
+          # Empty = Gazebo default ogre2. Forcing ogre aborts gz on Soft-GL CI.
+          PX4_GZ_SIM_RENDER_ENGINE: ""
+          COMPOSE_PROFILES: slam
+          COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
+          COMPOSE_PROJECT_NAME: px4-smoke-rgbd-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "1"
+          HEADLESS_BACKEND: xvfb
+          HEADLESS_SOFTWARE: "1"
+          LIDAR_DOWN: "0"
+          HEALTH_CAMERA_MIN_HZ: "1"
+          HEALTH_SLAM_MIN_HZ: "1"
+          HEALTH_TIMING: "1"
+          SMOKE_TEST_TIMEOUT: "600"
+          E2E_TAKEOFF_HEIGHT_M: "1.5"
+          E2E_HOVER_S: "10"
+          E2E_LEG_LENGTH_M: "0.3"
+          # Relative is fine; ci_camera_flight.sh / run_e2e.sh resolve under repo/logs.
+          E2E_FLIGHT_DIR: logs/flights/rgbd
+        run: ./scripts/ci_rgbd_flight.sh "${PX4_IMAGE}"
+
+      # x500_depth + OAK-D S2 stereo on cpu. Same hover + out-and-back as RGB-D.
+      - name: Stereo flight (CameraType=stereo)
+        if: matrix.camera == 'stereo'
+        timeout-minutes: 50
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          HEADLESS: ""
+          RTABMAPVIZ: "false"
+          DISPLAY: ":99"
+          CameraType: stereo
+          World: default
+          PX4_GZ_MODEL: x500_depth
+          VISION_PROFILE: cpu
+          ESTIMATION_MODE: vision
+          EKF2_EV_CTRL: "15"
+          EKF2_EV_DELAY: "0"
+          PX4_GZ_SIM_RENDER_ENGINE: ""
+          COMPOSE_PROFILES: slam
+          COMPOSE_SERVICES: PX4 StatePublisher Rtabmap
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml:compose.xvfb.yml
+          COMPOSE_PROJECT_NAME: px4-smoke-stereo-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "1"
+          HEADLESS_BACKEND: xvfb
+          HEADLESS_SOFTWARE: "1"
+          LIDAR_DOWN: "0"
+          HEALTH_CAMERA_MIN_HZ: "1"
+          HEALTH_SLAM_MIN_HZ: "1"
+          HEALTH_TIMING: "1"
+          SMOKE_TEST_TIMEOUT: "600"
+          E2E_TAKEOFF_HEIGHT_M: "1.5"
+          E2E_HOVER_S: "10"
+          E2E_LEG_LENGTH_M: "0.3"
+          E2E_FLIGHT_DIR: logs/flights/stereo
+        run: ./scripts/ci_stereo_flight.sh "${PX4_IMAGE}"
+
+      - name: Flight artifacts
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flight-${{ matrix.camera }}-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            logs/health/**
+            logs/flights/**
+            logs/smoke-containers.log
+            logs/timing.txt
+
+      - name: Health summary
+        if: always() && !cancelled()
+        env:
+          # Empty JSONL after a flight step is a failure, not a silent green.
+          HEALTH_REQUIRE_ROWS: "1"
+        run: |
+          set -euo pipefail
+          echo "### Health report (${{ matrix.camera }})" >> "${GITHUB_STEP_SUMMARY}"
+          # Same auto_detect table as the smoke/rgbd gate. Do not swallow failures.
+          ./scripts/health_report.sh | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "health_report: checks ok (failing=0)" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Timing summary
+        if: always()
+        run: |
+          {
+            echo "### Timing (${{ matrix.camera }})"
+            echo
+            echo '```'
+            if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
+              cat "${RUNNER_TEMP}/image_timing.txt"
+            fi
+            if [ -f logs/timing.txt ]; then
+              cat logs/timing.txt
+            fi
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

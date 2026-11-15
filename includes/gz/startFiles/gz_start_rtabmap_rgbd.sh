@@ -24,11 +24,26 @@ rtabmap_profile_args rgbd || {
      echo "refusing to launch RTAB-Map without a profile" >&2
      exit 1
 }
-ros2 launch rtabmap_launch rtabmap.launch.py   \
-     cfg:="${RTAB_CFG}" \
-     args:="${RTAB_ARGS}" \
-     odom_args:="${RTAB_ODOM}" \
-     rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info \
-     imu_topic:=/imu  frame_id:=base_link  approx_sync:=true  wait_imu_to_init:=true  \
-     map_frame_id:=map vo_frame_id:=odom \
-     use_sim_time:=${USE_SIM_TIME} qos:=2 rtabmap_viz:=${RTABMAPVIZ} rviz:=false subscribe_rgbd:=false
+# ros2 launch rejects odom_args:= when RTAB_ODOM is empty.
+rgbd_launch=(
+     cfg:="${RTAB_CFG}"
+     args:="${RTAB_ARGS}"
+     rgb_topic:=/camera/rgb/image_raw
+     depth_topic:=/camera/depth/image_raw
+     camera_info_topic:=/camera/rgb/camera_info
+     imu_topic:=/imu
+     frame_id:=base_link
+     approx_sync:=true
+     wait_imu_to_init:=true
+     map_frame_id:=map
+     vo_frame_id:=odom
+     use_sim_time:="${USE_SIM_TIME}"
+     qos:=2
+     rtabmap_viz:="${RTABMAPVIZ}"
+     rviz:=false
+     subscribe_rgbd:=false
+)
+if [ -n "${RTAB_ODOM}" ]; then
+     rgbd_launch+=(odom_args:="${RTAB_ODOM}")
+fi
+ros2 launch rtabmap_launch rtabmap.launch.py "${rgbd_launch[@]}"

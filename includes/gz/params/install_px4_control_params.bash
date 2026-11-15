@@ -19,7 +19,7 @@
 #
 # Vision-mode environment overrides (see docs/px4_control.md):
 #   EKF2_EV_DELAY   milliseconds, 0..300, default 0
-#   EKF2_EV_CTRL    integer bitmask 0..15, default 9 (horizontal position and yaw)
+#   EKF2_EV_CTRL    integer bitmask 0..15, default 9 (hpos+yaw). Camera CI uses 15 (hpos|vpos|vel|yaw).
 
 _px4_control_number() {
   local name="$1"
@@ -37,8 +37,12 @@ _px4_control_number() {
 }
 
 # Force failsafes after the airframe. Keep this in sync with the env exports.
+# When px4_params.py apply already wrote the full sim.params .post, keep it.
 _px4_control_write_failsafe_post() {
   local post_file="$1"
+  if [ -f "$post_file" ] && grep -q 'param set NAV_DLL_ACT' "$post_file"; then
+    return 0
+  fi
   cat > "$post_file" << 'EOF'
 # Written by install_px4_control_params.bash. Sourced after the airframe.
 # NAV_DLL_ACT must be set here: PX4_PARAM_ alone does not stick when the
@@ -100,7 +104,10 @@ install_px4_control_params() {
     echo "export PX4_PARAM_NAV_DLL_ACT=0"
     echo "export PX4_PARAM_UXRCE_DDS_SYNCT=0"
     if [ "$mode" = "gps" ]; then
+      # Mag heading is required for yaw align when EV yaw is off. sim.params
+      # defaults MAG_TYPE=5 (none) for vision; override it here for GPS mode.
       echo "export PX4_PARAM_EKF2_EV_CTRL=0"
+      echo "export PX4_PARAM_EKF2_MAG_TYPE=0"
       echo "export PX4_PARAM_EKF2_HGT_REF=1"
       echo "export PX4_PARAM_EKF2_GPS_CTRL=7"
       echo "export PX4_PARAM_EKF2_GPS_P_NOISE=0.5"

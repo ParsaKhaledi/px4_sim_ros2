@@ -31,18 +31,30 @@ if [ "$CamerType" = Stereo ] || [ "$CamerType" = stereo ]; then
           echo "refusing to launch RTAB-Map without a profile" >&2
           exit 1
      }
-     ros2 launch rtabmap_launch rtabmap.launch.py \
-          cfg:="${RTAB_CFG}" \
-          args:="${RTAB_ARGS}" \
-          odom_args:="${RTAB_ODOM}" \
-          stereo:=true  \
-          left_image_topic:=/camera/stereo/left/image_raw    left_camera_info_topic:=/camera/stereo/left/camera_info    \
-          right_image_topic:=/camera/stereo/right/image_raw  right_camera_info_topic:=/camera/stereo/right/camera_info_baseline   \
-          imu_topic:=/imu  frame_id:=base_link  \
-          map_frame_id:=map vo_frame_id:=odom \
-          approx_sync:=false  wait_imu_to_init:=true  \
-          use_sim_time:=${USE_SIM_TIME} \
-          qos:=2  rtabmap_viz:=${RTABMAPVIZ}  rviz:=false
+     # ros2 launch rejects odom_args:= when RTAB_ODOM is empty (cpu stereo).
+     stereo_launch=(
+          cfg:="${RTAB_CFG}"
+          args:="${RTAB_ARGS}"
+          stereo:=true
+          left_image_topic:=/camera/stereo/left/image_raw
+          left_camera_info_topic:=/camera/stereo/left/camera_info
+          right_image_topic:=/camera/stereo/right/image_raw
+          right_camera_info_topic:=/camera/stereo/right/camera_info_baseline
+          imu_topic:=/imu
+          frame_id:=base_link
+          map_frame_id:=map
+          vo_frame_id:=odom
+          approx_sync:=false
+          wait_imu_to_init:=true
+          use_sim_time:="${USE_SIM_TIME}"
+          qos:=2
+          rtabmap_viz:="${RTABMAPVIZ}"
+          rviz:=false
+     )
+     if [ -n "${RTAB_ODOM}" ]; then
+          stereo_launch+=(odom_args:="${RTAB_ODOM}")
+     fi
+     ros2 launch rtabmap_launch rtabmap.launch.py "${stereo_launch[@]}"
 elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
      echo "Run Rtabmap with $CamerType camera"
      # Color and depth are two sensors, so this branch stays on approx sync.
@@ -53,14 +65,28 @@ elif [ "$CamerType" = rgbd ] || [ "$CamerType" = RGBD ] ; then
           echo "refusing to launch RTAB-Map without a profile" >&2
           exit 1
      }
-     ros2 launch rtabmap_launch rtabmap.launch.py   \
-          cfg:="${RTAB_CFG}" \
-          args:="${RTAB_ARGS}" \
-          odom_args:="${RTAB_ODOM}" \
-          rgb_topic:=/camera/rgb/image_raw   depth_topic:=/camera/depth/image_raw    camera_info_topic:=/camera/rgb/camera_info  \
-          imu_topic:=/imu  frame_id:=base_link  approx_sync:=true  wait_imu_to_init:=true  \
-          map_frame_id:=map vo_frame_id:=odom \
-          use_sim_time:=${USE_SIM_TIME}  qos:=2    rtabmap_viz:=${RTABMAPVIZ}     rviz:=false   subscribe_rgbd:=false
+     rgbd_launch=(
+          cfg:="${RTAB_CFG}"
+          args:="${RTAB_ARGS}"
+          rgb_topic:=/camera/rgb/image_raw
+          depth_topic:=/camera/depth/image_raw
+          camera_info_topic:=/camera/rgb/camera_info
+          imu_topic:=/imu
+          frame_id:=base_link
+          approx_sync:=true
+          wait_imu_to_init:=true
+          map_frame_id:=map
+          vo_frame_id:=odom
+          use_sim_time:="${USE_SIM_TIME}"
+          qos:=2
+          rtabmap_viz:="${RTABMAPVIZ}"
+          rviz:=false
+          subscribe_rgbd:=false
+     )
+     if [ -n "${RTAB_ODOM}" ]; then
+          rgbd_launch+=(odom_args:="${RTAB_ODOM}")
+     fi
+     ros2 launch rtabmap_launch rtabmap.launch.py "${rgbd_launch[@]}"
 else
     echo "Invalid CameraType"
     exit 1

@@ -55,7 +55,7 @@ def expected_sim_params(
             'EKF2_GPS_CTRL': 7.0,
             'EKF2_GPS_P_NOISE': 0.5,
             'EKF2_GPS_V_NOISE': 0.3,
-            # Firmware default. Automatic. The gps profile does not export it.
+            # Automatic mag heading. Exported so sim.params MAG_TYPE=5 cannot stick.
             'EKF2_MAG_TYPE': 0.0,
             # Firmware default. Neither profile exports it.
             'SYS_HAS_MAG': 1.0,
@@ -67,7 +67,8 @@ def expected_sim_params(
             'EKF2_MAG_TYPE': 5.0,
             # Firmware default. The compass stays present; fusion is EKF2_MAG_TYPE.
             'SYS_HAS_MAG': 1.0,
-            # Baro. Vision height is not fused (EKF2_EV_CTRL bit 1 stays clear).
+            # Baro height reference. EV_CTRL may still fuse vertical EV as aiding
+            # (bit 1) without making vision the EKF height datum.
             'EKF2_HGT_REF': 0.0,
             'EKF2_EV_DELAY': float(ev_delay),
             'EKF2_EV_NOISE_MD': 0.0,

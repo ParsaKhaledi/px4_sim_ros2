@@ -83,6 +83,9 @@ def test_ci_override_is_headless():
                 targets.append(volume.get("source", ""))
                 targets.append(volume.get("target", ""))
         assert not any(item in ("/dev", "/dev/", "/tmp/.X11-unix") or str(item).endswith("/dev") for item in targets)
+    # Sidecars share PX4's netns so CycloneDDS sees camera/TF topics in CI.
+    for name in ("StatePublisher", "Rtabmap", "NAV2"):
+        assert rendered["services"][name].get("network_mode") == "service:PX4"
     px4_env = rendered["services"]["PX4"]["environment"]
     assert str(px4_env["PX4_PARAM_FILES"]) == "sim.params"
     px4_volumes = " ".join(
@@ -193,5 +196,6 @@ def test_xvfb_override_replaces_the_empty_display():
     assert env["DISPLAY"] == ":99"
     assert str(env["GZ_USE_XVFB"]) == "1"
     assert str(env["GZ_HEADLESS_RENDERING"]) == "0"
+    assert env["HEADLESS_BACKEND"] == "xvfb"
     assert str(env["LIBGL_ALWAYS_SOFTWARE"]) == "1"
     assert env["GALLIUM_DRIVER"] == "llvmpipe"

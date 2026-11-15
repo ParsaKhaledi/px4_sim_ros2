@@ -3,13 +3,24 @@ log_name: rtabmap
 window_s: 2.0
 discovery_s: 2.0
 nodes:
+  # Required when the slam profile is up. optional stays true so a PX4-only
+  # smoke (CameraType=none) can still load this file without failing.
   - name: rtabmap
     optional: true
 topics:
+  # Cpu profile odom is often ~1–7 Hz under software GL. HEALTH_SLAM_MIN_HZ
+  # (see healthcheck.effective_min_rate) overrides this floor in CI.
   - topic: /rtabmap/odom
-    min_rate_hz: 5
+    min_rate_hz: 1
     qos: sensor
     group: slam
+    skip_if_absent: true
+  - topic: /rtabmap/info
+    min_rate_hz: 0.2
+    qos: sensor
+    group: slam
+    optional: true
+    skip_if_absent: true
   - topic: /camera/rgb/image_raw
     min_rate_hz: 5
     qos: sensor

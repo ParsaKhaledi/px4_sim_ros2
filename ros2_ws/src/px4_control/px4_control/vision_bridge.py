@@ -122,10 +122,22 @@ class VisionOdometryBridge:
         self._last: VisualOdom | None = None
         self._last_rx: float | None = None
         self._lost = False
+        self._accepted_once = False
 
     @property
     def tracking(self) -> bool:
         return self._last is not None and not self._lost
+
+    @property
+    def ever_received(self) -> bool:
+        """True after at least one accepted vision sample.
+
+        ``current()`` is ``None`` both before the first frame and after a
+        stall. Callers that brake-and-land on loss must wait for the first
+        accepted sample so startup (or an early null/lost frame) before
+        RTAB-Map locks does not abort takeoff.
+        """
+        return self._accepted_once
 
     def mark_lost(self) -> None:
         """Stop publishing. The last pose is not restamped later."""
@@ -194,6 +206,7 @@ class VisionOdometryBridge:
             yaw_ned=attitude.yaw,
         )
         self._lost = False
+        self._accepted_once = True
         self._last_rx = float(sample.stamp_sec)
         self._last = visual
         return visual

@@ -201,12 +201,25 @@ def patch_file(path: Path, environ: dict[str, str] | None = None) -> bool:
 
 
 def main() -> int:
-    """Insert or remove the downward lidar on each present x500_depth model."""
+    """Insert or remove the downward lidar on each present x500_depth model.
+
+    Skip the git-tracked overlay under ``includes/gz/models``. SITL must only
+    rewrite the PX4 tree copy; otherwise a volume mount dirties the repo.
+    """
+    from patch_x500_ground_truth import repo_x500_depth_sdf
+
+    repo = repo_x500_depth_sdf().resolve()
     found = False
     for path in candidate_models():
-        if path.is_file():
-            patch_file(path)
-            found = True
+        if not path.is_file():
+            continue
+        try:
+            if path.resolve() == repo:
+                continue
+        except OSError:
+            pass
+        patch_file(path)
+        found = True
     if not found:
         print(
             "x500_depth model.sdf not found; downward lidar was not applied. "

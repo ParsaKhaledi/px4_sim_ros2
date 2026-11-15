@@ -20,9 +20,16 @@ x-ros-env: &ros-env
   ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
   RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
   HEADLESS: ${HEADLESS:-0}
+  HEADLESS_BACKEND: ${HEADLESS_BACKEND:-}
+  HEADLESS_SOFTWARE: ${HEADLESS_SOFTWARE:-0}
   RTABMAPVIZ: ${RTABMAPVIZ:-false}
   GZ_HEADLESS_RENDERING: ${GZ_HEADLESS_RENDERING:-0}
   GZ_USE_XVFB: ${GZ_USE_XVFB:-0}
+  # vision (default, sim.params) or gps. Camera CI uses vision + e2e EV bridge.
+  ESTIMATION_MODE: ${ESTIMATION_MODE:-vision}
+  # Optional vision EKF overrides (install_px4_control_params.bash). Empty = profile default.
+  EKF2_EV_CTRL: ${EKF2_EV_CTRL:-}
+  EKF2_EV_DELAY: ${EKF2_EV_DELAY:-}
   CameraType: ${CameraType:-rgbd}
   # OAK-D mount. Pitch is degrees, positive lens-down. 17 deg is 0.3 rad.
   CAM_PITCH_DEG: ${CAM_PITCH_DEG:-17}
@@ -46,6 +53,8 @@ x-ros-env: &ros-env
   GZ_CAMERA_HEIGHT: ${GZ_CAMERA_HEIGHT:-}
   HEALTH_CAMERA_MIN_HZ: ${HEALTH_CAMERA_MIN_HZ:-}
   PX4_PARAM_FILES: ${PX4_PARAM_FILES:-sim.params}
+  # Empty = Gazebo default (ogre2). Camera CI may set ogre for Soft-GL.
+  PX4_GZ_SIM_RENDER_ENGINE: ${PX4_GZ_SIM_RENDER_ENGINE:-}
   World: ${World:-default}
   IMU_SOURCE: ${IMU_SOURCE:-oak}
   USE_SIM_TIME: ${USE_SIM_TIME:-true}

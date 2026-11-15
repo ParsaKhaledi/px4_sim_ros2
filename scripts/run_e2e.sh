@@ -19,7 +19,6 @@ load_repo_env "${ROOT}"
 # shellcheck disable=SC1091
 source "${ROOT}/scripts/compose_cli.sh"
 
-export HEADLESS=1
 export RTABMAPVIZ=false
 export World="${World:-default}"
 export PX4_GZ_MODEL="${PX4_GZ_MODEL:-x500_depth}"
@@ -46,10 +45,25 @@ export E2E_ATTEMPT_TIMEOUT="${E2E_ATTEMPT_TIMEOUT:-480}"
 export E2E_TOTAL_TIMEOUT="${E2E_TOTAL_TIMEOUT:-720}"
 export GZ_HEADLESS_RENDERING="${GZ_HEADLESS_RENDERING:-0}"
 export GZ_USE_XVFB="${GZ_USE_XVFB:-0}"
+_append_compose_file() {
+  local file="$1"
+  case ":${COMPOSE_FILES}:" in
+    *:"${file}":*) ;;
+    *) COMPOSE_FILES="${COMPOSE_FILES}:${file}" ;;
+  esac
+  export COMPOSE_FILES
+}
 if [ "${GZ_USE_XVFB}" = "1" ]; then
+  # Keep HEADLESS empty: PX4 starts gz GUI on Xvfb for non-blank cameras.
+  unset HEADLESS || true
   export DISPLAY="${DISPLAY:-:99}"
-  export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml:compose.xvfb.yml}"
+  export HEADLESS_BACKEND="${HEADLESS_BACKEND:-xvfb}"
+  export HEADLESS_SOFTWARE="${HEADLESS_SOFTWARE:-1}"
+  export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+  export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+  _append_compose_file "compose.xvfb.yml"
 else
+  export HEADLESS=1
   export DISPLAY=""
   export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
 fi
@@ -57,17 +71,28 @@ fi
 MAX_RETRIES="${E2E_MAX_RETRIES:-2}"
 MAX_ATTEMPTS=$((MAX_RETRIES + 1))
 if [ -n "${E2E_FLIGHT_DIR:-}" ]; then
-  FLIGHTS="${E2E_FLIGHT_DIR}"
+  # CI often passes a repo-relative path (logs/flights/rgbd). Resolve it.
+  case "${E2E_FLIGHT_DIR}" in
+    /*) FLIGHTS="${E2E_FLIGHT_DIR}" ;;
+    *) FLIGHTS="${ROOT}/${E2E_FLIGHT_DIR}" ;;
+  esac
 else
   FLIGHTS="${ROOT}/logs/flights"
 fi
+# Normalize when the parent dir already exists (resolve .. / duplicate slashes).
+_flights_parent="$(dirname "${FLIGHTS}")"
+_flights_base="$(basename "${FLIGHTS}")"
+if [ -d "${_flights_parent}" ]; then
+  FLIGHTS="$(cd "${_flights_parent}" && pwd)/${_flights_base}"
+fi
 case "${FLIGHTS}" in
-  "${ROOT}/logs/"*) ;;
+  "${ROOT}/logs"|"${ROOT}/logs/"*) ;;
   *)
-    echo "E2E_FLIGHT_DIR must be inside ${ROOT}/logs so the container can write it." >&2
+    echo "E2E_FLIGHT_DIR must be inside ${ROOT}/logs so the container can write it (got ${FLIGHTS})." >&2
     exit 1
     ;;
 esac
+export E2E_FLIGHT_DIR="${FLIGHTS}"
 CONTAINER_FLIGHTS="/home/px4/volume/${FLIGHTS#"${ROOT}/"}"
 REPORT="${FLIGHTS}/trajectory.json"
 RUN_START="$(date +%s)"
@@ -109,7 +134,16 @@ snapshot_attempt() {
   dest="${FLIGHTS}/attempt-${attempt}"
   mkdir -p "${dest}/health"
   compose_setup
-  "${COMPOSE[@]}" logs --no-color --tail 400 PX4 > "${dest}/container.log" 2>&1 || true
+  "${COMPOSE[@]}" logs --no-color --tail 800 PX4 > "${dest}/container.log" 2>&1 || true
+  # Ogre Soft-GL aborts: keep a focused crash slice for the report.
+  {
+    echo "PX4_GZ_SIM_RENDER_ENGINE=${PX4_GZ_SIM_RENDER_ENGINE:-}"
+    echo "ESTIMATION_MODE=${ESTIMATION_MODE:-}"
+    echo "EKF2_EV_CTRL=${EKF2_EV_CTRL:-}"
+    echo "EKF2_EV_DELAY=${EKF2_EV_DELAY:-}"
+    grep -E 'SIGABRT|Aborted|ogre|RenderEngine|segfault|Segmentation|gz sim' \
+      "${dest}/container.log" | tail -80 || true
+  } > "${dest}/render_engine_diag.txt" 2>&1 || true
   if [ -d "${ROOT}/logs/health" ]; then
     cp -a "${ROOT}/logs/health/." "${dest}/health/" || true
   fi
@@ -148,13 +182,26 @@ run_attempt() {
     -e E2E_CRASH_DIVERGENCE_M \
     -e E2E_ODOM_TIMEOUT_S \
     -e E2E_CHECK_CAMERAS \
+    -e E2E_HOVER_ONLY \
     -e E2E_WALL_SCALE \
     -e E2E_CAMERA_MIN_VARIANCE \
     -e E2E_GZ_MODEL \
+    -e E2E_REQUIRE_VISION_FUSION \
     -e E2E_ATTEMPT="${attempt}" \
     -e E2E_RESULT_PATH="${result}" \
     -e World \
     -e PX4_GZ_MODEL \
+    -e CameraType \
+    -e VISION_PROFILE \
+    -e ESTIMATION_MODE \
+    -e EKF2_EV_CTRL \
+    -e EKF2_EV_DELAY \
+    -e PX4_PARAM_EKF2_EV_CTRL \
+    -e PX4_PARAM_EKF2_EV_DELAY \
+    -e PX4_GZ_SIM_RENDER_ENGINE \
+    -e HEALTH_CAMERA_MIN_HZ \
+    -e HEALTH_SLAM_MIN_HZ \
+    -e HEALTH_TIMING \
     PX4 \
     bash -lc '
       set -eo pipefail
@@ -337,12 +384,41 @@ PY
   fi
 }
 
+run_preflight_health() {
+  # Optional multi-service health gate (RGB-D CI). E2E_HEALTH_SERVICES is a
+  # space-separated list of healthcheck --service names. Final table must
+  # report failing=0. Set E2E_HEALTH_SERVICES= to skip.
+  local services="${E2E_HEALTH_SERVICES:-}"
+  if [ -z "${services}" ]; then
+    return 0
+  fi
+  local svc
+  echo "Preflight health services: ${services} (CameraType=${CameraType:-unset})"
+  for svc in ${services}; do
+    echo "Health gate: ${svc}"
+    # shellcheck disable=SC2016
+    if [ "${svc}" = "PX4" ]; then
+      compose_exec PX4 bash -lc \
+        'source /opt/ros/${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && \
+         python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4 --group camera && \
+         exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service PX4'
+    else
+      compose_exec PX4 bash -lc \
+        "source /opt/ros/\${ROS_DISTRO}/setup.bash && source /home/px4/ws_px4/install/setup.bash && \
+         exec python3 /home/px4/volume/HealthCheck/healthcheck.py --service ${svc}"
+    fi
+  done
+  echo "Verifying final health table (failing=0)."
+  "${ROOT}/scripts/health_report.sh"
+}
+
 bringup_start="$(date +%s)"
 "${ROOT}/scripts/compose_stack.sh" up
 BRINGUP_S=$(( $(date +%s) - bringup_start ))
 record_boot_order
 "${ROOT}/scripts/assert_px4_params.sh"
 check_distance_sensor
+run_preflight_health
 
 attempt=1
 fly_until_done
@@ -351,11 +427,17 @@ if [ "${E2E_CHECK_CAMERAS}" = "1" ] && [ "${GZ_USE_XVFB}" != "1" ]; then
   if python3 "${ROOT}/tests/e2e/report.py" \
       --needs-render-fallback \
       --attempts-dir "${FLIGHTS}"; then
-    echo "Camera frames were blank or missing under EGL. Restarting with Xvfb."
+    echo "Camera frames were blank or missing under EGL. Restarting with Xvfb GUI."
     export GZ_HEADLESS_RENDERING=0
     export GZ_USE_XVFB=1
+    unset HEADLESS || true
     export DISPLAY=:99
-    export COMPOSE_FILES="compose.yml:compose.ci.yml:compose.xvfb.yml"
+    export HEADLESS_BACKEND=xvfb
+    export HEADLESS_SOFTWARE=1
+    export QT_QPA_PLATFORM=xcb
+    # Keep docker-compose-px4.yml (or whatever CI already set); only add xvfb.
+    export COMPOSE_FILES="${COMPOSE_FILES:-compose.yml:compose.ci.yml}"
+    _append_compose_file "compose.xvfb.yml"
     attempt=$((attempt + 1))
     restart_start="$(date +%s)"
     "${ROOT}/scripts/compose_stack.sh" recreate
