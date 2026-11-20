@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y shellcheck yamllint python3-pytest python3-yaml
+          sudo apt-get install -y shellcheck yamllint python3-pytest python3-yaml python3-numpy
           sudo curl -fsSL -o /usr/local/bin/hadolint \
             https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
           sudo chmod +x /usr/local/bin/hadolint
