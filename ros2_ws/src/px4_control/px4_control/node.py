@@ -201,6 +201,14 @@ class Px4ControlNode(Node):
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
 
         cmd_qos = QoSProfile(depth=10)
+        # RTAB-Map is launched with qos:=2, which is sensor data: best effort,
+        # volatile, keep-last. A default reliable subscriber does not connect.
+        vision_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
         self.create_subscription(
             TwistStamped,
             str(self.get_parameter('cmd_vel_topic').value),
@@ -212,7 +220,7 @@ class Px4ControlNode(Node):
             Odometry,
             str(self.get_parameter('vision_odom_topic').value),
             self._on_vision,
-            cmd_qos,
+            vision_qos,
             callback_group=self._cb,
         )
         self._try_odom_info()
@@ -323,7 +331,14 @@ class Px4ControlNode(Node):
             self.get_logger().info('rtabmap_msgs is not installed; vision loss uses the odometry stream itself')
             return
         topic = str(self.get_parameter('vision_odom_info_topic').value)
-        self.create_subscription(OdomInfo, topic, self._on_odom_info, 10, callback_group=self._cb)
+        # Same qos:=2 sensor profile as /rtabmap/odom.
+        info_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        self.create_subscription(OdomInfo, topic, self._on_odom_info, info_qos, callback_group=self._cb)
 
     def _now_s(self) -> float:
         """Node clock. Sim time when ``use_sim_time`` follows ``/clock``. Control dt uses this."""
