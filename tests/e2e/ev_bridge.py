@@ -78,10 +78,19 @@ class EvBridgeStats:
         return (len(recent) - 1) / span
 
 
-def fill_vehicle_odometry(msg, visual) -> None:
-    """Copy a ``VisualOdom`` sample onto a ``VehicleOdometry`` message."""
-    msg.timestamp = max(0, int(round(float(visual.stamp_sec) * 1e6)))
-    msg.timestamp_sample = msg.timestamp
+def fill_vehicle_odometry(msg, visual, *, publish_sec: float, offset_us: int = 0) -> None:
+    """Copy a ``VisualOdom`` sample onto a ``VehicleOdometry`` message.
+
+    ``timestamp_sample`` is the odometry header converted with the uXRCE-DDS
+    timesync offset. ``timestamp`` is ``publish_sec`` on that same clock.
+    The previous copy set both fields from the header, so the difference
+    was 0 instead of the publish delay.
+    """
+    from px4_control.vision_bridge import visual_timestamps
+
+    sent, sample_us = visual_timestamps(visual.stamp_sec, publish_sec, offset_us)
+    msg.timestamp = sent
+    msg.timestamp_sample = sample_us
     msg.pose_frame = type(msg).POSE_FRAME_NED
     msg.velocity_frame = type(msg).VELOCITY_FRAME_BODY_FRD
     for index in range(3):

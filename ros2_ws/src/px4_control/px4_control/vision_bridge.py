@@ -20,13 +20,22 @@ import numpy as np
 from px4_control.frames import (
     R_FRD_FROM_FLU,
     R_NED_FROM_ENU,
+    CameraMount,
     attitude_from_enu_quat,
+    body_from_mounted_pose,
+    camera_mount_from_env,
     covariance_block,
     diagonal_variances,
     enu_to_ned,
     flu_to_frd,
     rotate_covariance,
 )
+
+# PX4 rejects an external-vision sample whose age is outside the estimator
+# horizon. The flight check uses the same ceiling: timestamp - timestamp_sample
+# is the publish delay and must stay inside this window.
+MAX_VO_DELAY_US = 100_000
+_CAMERA_LINK = "camera_link"
 
 # RTAB-Map's lost-estimate convention: a diagonal of 9999 means the pose is
 # not a measurement. The same value on a non-lost info message is how a reset
@@ -46,6 +55,9 @@ class OdomSample:
     pose_covariance: np.ndarray
     twist_covariance: np.ndarray
     tracking_lost: bool = False
+    # Empty or base_link: the pose is already the body. camera_link: the pose
+    # is the housing, and the bridge applies the static mount.
+    child_frame_id: str = "base_link"
 
 
 @dataclass(frozen=True)
@@ -87,6 +99,83 @@ def lost_covariance(covariance: np.ndarray) -> bool:
     return bool(np.any(np.isfinite(diag) & (diag >= LOST_VARIANCE)))
 
 
+class TimeSyncOffset:
+    """PX4 clock minus the ROS clock, in microseconds.
+
+    ``TimesyncStatus.estimated_offset`` is the value ``Timesync::sync_stamp``
+    adds to a companion stamp (``px4_us = ros_us + offset``). A raw copy of
+    ``header.stamp`` leaves ``timestamp_sample`` on the agent clock.
+
+    Until a timesync message arrives, the offset is measured from a PX4
+    message timestamp and the ROS clock at receipt. That fallback is still
+    an offset. It is not a copy of the vision header.
+    """
+
+    def __init__(self) -> None:
+        self.offset_us = 0
+        self.source = "none"
+
+    def note_timesync(self, estimated_offset_us: int) -> None:
+        self.offset_us = int(estimated_offset_us)
+        self.source = "timesync"
+
+    def note_px4_stamp(self, px4_us: int, ros_sec: float) -> None:
+        if self.source == "timesync":
+            return
+        ros_us = int(round(float(ros_sec) * 1e6))
+        self.offset_us = int(px4_us) - ros_us
+        self.source = "px4_stamp"
+
+
+def px4_time_us(ros_sec: float, offset_us: int) -> int:
+    """Companion-clock seconds to PX4 microseconds.
+
+    ``offset_us`` is ``TimesyncStatus.estimated_offset``.
+    """
+    return int(round(float(ros_sec) * 1e6)) + int(offset_us)
+
+
+def visual_timestamps(capture_sec: float, publish_sec: float, offset_us: int) -> tuple[int, int]:
+    """``(timestamp, timestamp_sample)`` for ``VehicleOdometry``.
+
+    ``timestamp`` is the publish instant on the PX4 clock. ``timestamp_sample``
+    is the odometry header (the capture instant) shifted by the same
+    uXRCE-DDS offset. Their difference is the publish delay and does not
+    depend on the offset. Copying the header into both fields makes the
+    difference 0, which hides the delay and skips the clock conversion.
+    """
+    return (
+        px4_time_us(publish_sec, offset_us),
+        px4_time_us(capture_sec, offset_us),
+    )
+
+
+def vo_stamp_faults(
+    timestamp_us: int,
+    timestamp_sample_us: int,
+    *,
+    expected_delay_us: int | None = None,
+    tolerance_us: int = 25_000,
+) -> list[str]:
+    """Reasons ``timestamp - timestamp_sample`` is not a usable vision delay.
+
+    The gap is never allowed to be negative or above 100 ms. When the fake
+    source injected a known delay, the gap also has to match it.
+    """
+    gap = int(timestamp_us) - int(timestamp_sample_us)
+    faults: list[str] = []
+    if gap < 0:
+        faults.append(f"timestamp - timestamp_sample is {gap} us (negative)")
+    if gap > MAX_VO_DELAY_US:
+        faults.append(f"timestamp - timestamp_sample is {gap} us (above 100 ms)")
+    if expected_delay_us is not None and abs(gap - int(expected_delay_us)) > int(tolerance_us):
+        faults.append(
+            f"timestamp - timestamp_sample is {gap} us, expected {int(expected_delay_us)} us"
+            f" ± {int(tolerance_us)} us"
+        )
+    return faults
+
+
 def _is_null_pose(position: np.ndarray, quat: np.ndarray) -> bool:
     """RTAB-Map's published null transform, not a real pose at the origin.
 
@@ -110,10 +199,12 @@ class VisionOdometryBridge:
         timeout_s: float = 0.3,
         reset_jump_m: float = 0.75,
         max_variance: float = 25.0,
+        camera_mount: CameraMount | None = None,
     ) -> None:
         if timeout_s <= 0.0:
             raise ValueError('timeout_s must be positive')
         self.timeout_s = float(timeout_s)
+        self.camera_mount = camera_mount if camera_mount is not None else camera_mount_from_env()
         # Pose jumps are not a reset. The argument remains so existing callers
         # and the ROS parameter still load.
         self.reset_jump_m = float(reset_jump_m)
@@ -167,7 +258,18 @@ class VisionOdometryBridge:
             return None
         if not _finite_vector(sample.position_enu, 3) or not _finite_vector(sample.quat_xyzw, 4):
             return None
-        attitude = attitude_from_enu_quat(sample.quat_xyzw)
+        position_enu = np.asarray(sample.position_enu, dtype=float)
+        quat_xyzw = np.asarray(sample.quat_xyzw, dtype=float)
+        linear_flu = np.asarray(sample.linear_flu, dtype=float)
+        angular_flu = np.asarray(sample.angular_flu, dtype=float)
+        child = str(sample.child_frame_id or "base_link")
+        # camera_link is the housing. Any other child, including an unknown
+        # one, is left as published so a wrong frame id is not silently corrected.
+        if child == _CAMERA_LINK:
+            position_enu, quat_xyzw, linear_flu, angular_flu = body_from_mounted_pose(
+                position_enu, quat_xyzw, linear_flu, angular_flu, self.camera_mount,
+            )
+        attitude = attitude_from_enu_quat(quat_xyzw)
         if attitude is None:
             return None
         pose_cov = np.asarray(sample.pose_covariance, dtype=float).reshape(6, 6)
@@ -182,9 +284,9 @@ class VisionOdometryBridge:
         ):
             return None
 
-        position_ned = enu_to_ned(sample.position_enu)
-        velocity_frd = flu_to_frd(sample.linear_flu)
-        angular_frd = flu_to_frd(sample.angular_flu)
+        position_ned = enu_to_ned(position_enu)
+        velocity_frd = flu_to_frd(linear_flu)
+        angular_frd = flu_to_frd(angular_flu)
         position_cov_ned = rotate_covariance(position_cov_enu, R_NED_FROM_ENU)
         # Pose orientation covariance is in the parent ENU frame. PX4 wants the
         # body-FRD diagonal: R_frd_enu = R_ned_frd.T @ R_ned_enu.

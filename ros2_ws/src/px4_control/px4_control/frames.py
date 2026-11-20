@@ -294,6 +294,140 @@ class NedAttitude:
     rotation: np.ndarray
 
 
+def rpy_to_rot(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """URDF/SDF rotation ``Rz(yaw) Ry(pitch) Rx(roll)``."""
+    cr, sr = math.cos(roll), math.sin(roll)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cy, sy = math.cos(yaw), math.sin(yaw)
+    rx = np.array([[1.0, 0.0, 0.0], [0.0, cr, -sr], [0.0, sr, cr]], dtype=float)
+    ry = np.array([[cp, 0.0, sp], [0.0, 1.0, 0.0], [-sp, 0.0, cp]], dtype=float)
+    rz = np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+    return rz @ ry @ rx
+
+
+@dataclass(frozen=True)
+class CameraMount:
+    """``camera_link`` in ``base_link``, FLU metres and radians.
+
+    Defaults match ``includes/gz/oakd_s2`` (``CAM_X/Y/Z``, 17 deg pitch down).
+    Positive pitch is ``Ry(+pitch)``, which points the glass down.
+    """
+
+    x: float = 0.12
+    y: float = 0.03
+    z: float = 0.242
+    roll: float = 0.0
+    pitch: float = math.radians(17.0)
+    yaw: float = 0.0
+
+    @property
+    def translation(self) -> np.ndarray:
+        return np.array([self.x, self.y, self.z], dtype=float)
+
+    @property
+    def rotation(self) -> np.ndarray:
+        return rpy_to_rot(self.roll, self.pitch, self.yaw)
+
+
+def camera_mount_from_env(env: dict | None = None) -> CameraMount:
+    """Mount from ``CAM_X``, ``CAM_Y``, ``CAM_Z``, and ``CAM_PITCH_DEG``."""
+    import os
+
+    source = os.environ if env is None else env
+
+    def number(name: str, default: float) -> float:
+        raw = source.get(name)
+        if raw is None or str(raw).strip() == "":
+            return default
+        return float(raw)
+
+    base = CameraMount()
+    return CameraMount(
+        x=number("CAM_X", base.x),
+        y=number("CAM_Y", base.y),
+        z=number("CAM_Z", base.z),
+        roll=0.0,
+        pitch=math.radians(number("CAM_PITCH_DEG", math.degrees(base.pitch))),
+        yaw=0.0,
+    )
+
+
+def camera_from_body_pose(
+    position_enu: np.ndarray,
+    quat_xyzw: np.ndarray,
+    linear_flu: np.ndarray,
+    angular_flu: np.ndarray,
+    mount: CameraMount | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Body pose in a parent frame to the camera-link pose in that frame.
+
+    The twist is the camera origin, expressed in camera-link axes. A fixed
+    mount makes the camera origin move as ``v + ω × r``.
+    """
+    bracket = mount or CameraMount()
+    rot_body = quat_xyzw_to_rot(quat_xyzw)
+    rot_mount = bracket.rotation
+    lever = bracket.translation
+    rot_cam = rot_body @ rot_mount
+    position_cam = np.asarray(position_enu, dtype=float).reshape(3) + rot_body @ lever
+    omega_body = np.asarray(angular_flu, dtype=float).reshape(3)
+    linear_body = np.asarray(linear_flu, dtype=float).reshape(3)
+    linear_cam = rot_mount.T @ (linear_body + np.cross(omega_body, lever))
+    omega_cam = rot_mount.T @ omega_body
+    return position_cam, rot_to_quat_xyzw(rot_cam), linear_cam, omega_cam
+
+
+def body_from_mounted_pose(
+    position_enu: np.ndarray,
+    quat_xyzw: np.ndarray,
+    linear_flu: np.ndarray,
+    angular_flu: np.ndarray,
+    mount: CameraMount | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Camera-link pose in a parent frame back to the body pose.
+
+    Inverse of :func:`camera_from_body_pose`. The bridge applies this when
+    ``/rtabmap/odom`` ``child_frame_id`` is ``camera_link`` so EKF2 sees the
+    body, not the housing.
+    """
+    bracket = mount or CameraMount()
+    rot_mount = bracket.rotation
+    lever = bracket.translation
+    rot_cam = quat_xyzw_to_rot(quat_xyzw)
+    rot_body = rot_cam @ rot_mount.T
+    position_body = np.asarray(position_enu, dtype=float).reshape(3) - rot_body @ lever
+    omega_body = rot_mount @ np.asarray(angular_flu, dtype=float).reshape(3)
+    linear_body = rot_mount @ np.asarray(linear_flu, dtype=float).reshape(3) - np.cross(omega_body, lever)
+    return position_body, rot_to_quat_xyzw(rot_body), linear_body, omega_body
+
+
+def odom_pose_from_world(
+    position_enu: np.ndarray,
+    quat_xyzw: np.ndarray,
+    spawn_position_enu: np.ndarray,
+    spawn_quat_xyzw: np.ndarray,
+    *,
+    world_axes: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Ground-truth world pose into the odom frame, origin at the spawn.
+
+    ``world_axes`` keeps East-North-Up and only subtracts the spawn
+    position, so the yaw stays the absolute ENU yaw. That is the frame
+    :func:`enu_to_ned` and :func:`enu_yaw_to_ned` expect.
+
+    ``world_axes`` false is RTAB-Map ``RGBD/StartAtOrigin``: the first pose
+    is identity, and the odom axes lie on the body at spawn. Identity then
+    means "facing East" to the bridge, which is wrong by the spawn yaw.
+    """
+    position = np.asarray(position_enu, dtype=float).reshape(3)
+    spawn = np.asarray(spawn_position_enu, dtype=float).reshape(3)
+    if world_axes:
+        return position - spawn, np.asarray(quat_xyzw, dtype=float).reshape(4).copy()
+    rot_spawn = quat_xyzw_to_rot(spawn_quat_xyzw)
+    relative = rot_spawn.T @ quat_xyzw_to_rot(quat_xyzw)
+    return rot_spawn.T @ (position - spawn), rot_to_quat_xyzw(relative)
+
+
 def attitude_from_enu_quat(quat_xyzw: np.ndarray) -> NedAttitude | None:
     """Build a NED/FRD attitude, or ``None`` when the quaternion is unusable."""
     quat = np.asarray(quat_xyzw, dtype=float).reshape(4)

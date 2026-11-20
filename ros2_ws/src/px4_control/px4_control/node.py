@@ -2,7 +2,9 @@
 
 OffboardControlMode and TrajectorySetpoint are published together on a fixed
 timer. The mode switch waits until that stream has been alive at >= 2 Hz for
-a second. Vision samples keep the SLAM stamp and are dropped on tracking loss.
+a second. Vision samples keep the SLAM capture time. timestamp_sample is
+that stamp on the PX4 clock, and timestamp is the publish instant. Tracking
+loss drops the sample.
 """
 
 from __future__ import annotations
@@ -55,7 +57,12 @@ from px4_control.motion import Limits, MotionExecutive, Phase, Snapshot
 from px4_control.params_loader import estimation_mode_from_env, normalize_estimation_mode, yaw_rate_from_env
 from px4_control.px4_params import READBACK_PARAMS, expected_sim_params, readback_mismatch
 from px4_control.topics import load_px4_topics, subscription_names
-from px4_control.vision_bridge import OdomSample, VisionOdometryBridge
+from px4_control.vision_bridge import (
+    OdomSample,
+    TimeSyncOffset,
+    VisionOdometryBridge,
+    visual_timestamps,
+)
 from px4_control_interfaces.action import GoTo, Hold, Land, Takeoff
 from px4_control_interfaces.msg import VehicleState
 from px4_control_interfaces.srv import Arm, SetMode
@@ -68,6 +75,7 @@ from px4_msgs.msg import (
     VehicleCommand,
     VehicleCommandAck,
     VehicleLandDetected,
+    TimesyncStatus,
     VehicleOdometry,
     VehicleStatus,
 )
@@ -136,6 +144,7 @@ class Px4ControlNode(Node):
         self._last_ack = None
         self._px4_us = None
         self._px4_ros_s = None
+        self._time_offset = TimeSyncOffset()
         self._cmd = None
         self._cmd_time = None
         self._live_topics: dict[str, str] = {}
@@ -183,6 +192,12 @@ class Px4ControlNode(Node):
         self._subscribe_px4(VehicleLandDetected, self._topics['vehicle_land_detected'], self._on_land, qos)
         self._subscribe_px4(DistanceSensor, self._topics['distance_sensor'], self._on_distance, qos)
         self._subscribe_px4(VehicleCommandAck, self._topics['vehicle_command_ack'], self._on_ack, qos)
+        self._subscribe_px4(
+            TimesyncStatus,
+            self._topics.get('timesync_status', '/fmu/out/timesync_status'),
+            self._on_timesync,
+            qos,
+        )
         threading.Thread(target=self._read_back_params, name='px4_param_readback', daemon=True).start()
 
         cmd_qos = QoSProfile(depth=10)
@@ -327,6 +342,12 @@ class Px4ControlNode(Node):
     def _note_px4_time(self, timestamp_us: int) -> None:
         self._px4_us = int(timestamp_us)
         self._px4_ros_s = self._now_s()
+        self._time_offset.note_px4_stamp(int(timestamp_us), self._px4_ros_s)
+
+    def _on_timesync(self, msg: TimesyncStatus) -> None:
+        # estimated_offset is PX4 hrt minus the companion clock. sync_stamp
+        # adds it to a remote stamp. Do not copy header.stamp through raw.
+        self._time_offset.note_timesync(int(msg.estimated_offset))
 
     def _on_status(self, msg: VehicleStatus) -> None:
         with self._lock:
@@ -413,6 +434,7 @@ class Px4ControlNode(Node):
             angular_flu=np.array([twist.angular.x, twist.angular.y, twist.angular.z]),
             pose_covariance=np.array(msg.pose.covariance, dtype=float),
             twist_covariance=np.array(msg.twist.covariance, dtype=float),
+            child_frame_id=str(msg.child_frame_id or 'base_link'),
         )
         visual = self._vision.push(sample)
         if visual is None:
@@ -439,11 +461,15 @@ class Px4ControlNode(Node):
 
     def _publish_visual(self, visual) -> None:
         msg = VehicleOdometry()
-        # RTAB-Map's header is sim time. UXRCE_DDS_SYNCT 0 keeps PX4 on that
-        # same clock, so the header is the timestamp. Do not overwrite it
-        # with the node clock or the wall clock.
-        msg.timestamp = max(0, int(round(float(visual.stamp_sec) * 1e6)))
-        msg.timestamp_sample = msg.timestamp
+        # header.stamp stays the capture time. timestamp is this publish
+        # instant and timestamp_sample is that capture shifted onto the PX4
+        # clock by the uXRCE-DDS timesync offset. Copying the header into
+        # both fields made timestamp - timestamp_sample zero.
+        sent, sample_us = visual_timestamps(
+            visual.stamp_sec, self._now_s(), self._time_offset.offset_us,
+        )
+        msg.timestamp = sent
+        msg.timestamp_sample = sample_us
         msg.pose_frame = VehicleOdometry.POSE_FRAME_NED
         msg.velocity_frame = VehicleOdometry.VELOCITY_FRAME_BODY_FRD
         _fill3(msg.position, visual.position_ned)
