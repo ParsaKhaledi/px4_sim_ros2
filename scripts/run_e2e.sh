@@ -247,6 +247,8 @@ start_fake_rtabmap() {
   export CAM_PITCH_DEG="${CAM_PITCH_DEG:-17}"
   compose_setup
   echo "Starting fake_rtabmap (fault=${FAKE_VISION_FAULT}, delay=${FAKE_VISION_DELAY_MS} ms)."
+  # ROS_DISTRO is expanded inside the container, same as the mission command.
+  # shellcheck disable=SC2016
   "${COMPOSE[@]}" exec -d -T \
     -e FAKE_VISION_DELAY_MS \
     -e FAKE_VISION_RATE_HZ \
