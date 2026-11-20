@@ -138,10 +138,10 @@ def _settle_time(rows, t0: float, error_at, tolerance: float, hold_s: float, tim
 
 
 def _leg_axis(yaw_deg: float):
-    """Unit step in Gazebo ENU. Heading 0 points north (+y)."""
+    """Unit step in Gazebo ENU. Yaw 0 points east (+x), yaw 90 points north (+y)."""
 
     heading = math.radians(yaw_deg)
-    return math.sin(heading), math.cos(heading)
+    return math.cos(heading), math.sin(heading)
 
 
 def _along(row, start_xy, axis) -> float:
@@ -248,6 +248,72 @@ def _fmt_seconds(value: float) -> str:
     if abs(float(value) - round(float(value))) < 1e-9:
         return f"{float(value):.0f} s"
     return f"{float(value):.1f} s"
+
+
+def yaw_turn_report(samples) -> dict:
+    """Spawn yaw, takeoff yaw, and the turn relative to takeoff.
+
+    The final error is the wrap-safe distance of that change from 180 deg.
+    Absolute heading is recorded so a log can be read, and it is not the
+    quantity the final_yaw check compares to the limit. A +180 deg change
+    and a -180 deg change are the same heading.
+    """
+
+    start = _phase(samples, "start")
+    takeoff = _phase(samples, "takeoff")
+    yaw_rows = _phase(samples, "yaw")
+    spawn = float(start[0]["yaw"]) if start else None
+    if takeoff:
+        takeoff_yaw = float(takeoff[-1]["yaw"])
+    elif start:
+        takeoff_yaw = float(start[-1]["yaw"])
+    else:
+        takeoff_yaw = None
+    final = float(yaw_rows[-1]["yaw"]) if yaw_rows else None
+    change = None
+    peak = None
+    error = None
+    if takeoff_yaw is not None and yaw_rows:
+        series = _unwrap([takeoff_yaw] + [float(row["yaw"]) for row in yaw_rows])
+        deltas = [value - series[0] for value in series[1:]]
+        change = deltas[-1]
+        peak = min(deltas)
+        error = abs(wrap_deg(change - 180.0))
+
+    def _round(value):
+        return None if value is None else round(float(value), 4)
+
+    return {
+        "spawn_yaw_deg": _round(spawn),
+        "takeoff_yaw_deg": _round(takeoff_yaw),
+        "final_yaw_deg": _round(final),
+        "yaw_change_deg": _round(change),
+        "peak_change_deg": _round(peak),
+        "yaw_error_deg": _round(error),
+        "reference": "yaw change from takeoff versus a 180 deg turn, wrap-safe",
+    }
+
+
+def _grade_final_yaw(checks, samples, thresholds: Thresholds) -> dict:
+    report = yaw_turn_report(samples)
+    error = report["yaw_error_deg"]
+    limit = thresholds.yaw_tolerance_deg
+    checks.append(
+        _check(
+            "final_yaw",
+            error is not None and error <= limit,
+            error,
+            limit,
+            (
+                f"spawn {report['spawn_yaw_deg']} deg, "
+                f"takeoff {report['takeoff_yaw_deg']} deg, "
+                f"change {report['yaw_change_deg']} deg, "
+                f"error vs 180 deg {report['yaw_error_deg']} deg "
+                "(change from takeoff, not absolute heading)"
+            ),
+        )
+    )
+    return report
 
 
 def _grade_yaw(checks, rows, start_pose, thresholds: Thresholds) -> None:
@@ -496,8 +562,10 @@ def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
             _check("return_to_start", False, None, thresholds.return_tolerance_m, "no land samples")
         )
 
+    yaw_report = _grade_final_yaw(checks, samples, thresholds)
     return {
         "passed": all(item["passed"] for item in checks),
         "checks": checks,
         "thresholds": asdict(thresholds),
+        "yaw": yaw_report,
     }

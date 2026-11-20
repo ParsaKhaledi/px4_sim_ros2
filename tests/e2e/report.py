@@ -46,6 +46,7 @@ def build_report(attempts: list[dict]) -> dict:
         "cameras": last.get("cameras"),
         "camera_reason": last.get("camera_reason"),
         "thresholds": last.get("thresholds"),
+        "yaw": last.get("yaw"),
         "attempts": attempts,
         "crash_resets": crash_reset_count(attempts),
         "crash_reasons": reasons,

@@ -25,6 +25,7 @@ from grading import (
     load_thresholds,
     yaw_from_quat,
     yaw_passed_command_direction,
+    yaw_turn_report,
 )
 from camera_check import CameraTracker, rtf_summary
 from ev_bridge import EvBridgeStats, fill_vehicle_odometry, load_bridge_types, vision_gt_error_m
@@ -1286,6 +1287,7 @@ class FlightWatch:
             graded = grade_mission(self.samples, self.thresholds)
         graded["status"] = "passed" if graded["passed"] else "failed"
         graded["driver"] = "px4_offboard"
+        graded["yaw"] = yaw_turn_report(self.samples)
         graded["hover_only"] = _env_flag("E2E_HOVER_ONLY")
         graded["samples_count"] = len(self.samples)
         graded["track"] = self.samples
