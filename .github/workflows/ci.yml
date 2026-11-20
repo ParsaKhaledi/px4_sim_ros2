@@ -27,7 +27,7 @@ on:
       - ".hadolint.yaml"
       - ".yamllint.yml"
   push:
-    branches: [main, dev, "feature/**"]
+    branches: [main, dev, "feature/**", "test/frames-fake-vision"]
     tags: ["v*"]
     paths:
       - "dockerFile/**"
@@ -645,6 +645,308 @@ jobs:
         run: |
           {
             echo "### Timing (${{ matrix.camera }})"
+            echo
+            echo '```'
+            if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
+              cat "${RUNNER_TEMP}/image_timing.txt"
+            fi
+            if [ -f logs/timing.txt ]; then
+              cat logs/timing.txt
+            fi
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # No simulator. Failure fails the workflow: this job is not skipped and
+  # does not continue on error.
+  frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-pytest python3-numpy python3-yaml
+
+      - name: pytest tests/frames
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}/ros2_ws/src/px4_control${PYTHONPATH:+:$PYTHONPATH}"
+          python3 -m pytest tests/frames -q
+
+      # ament_python runs these through pytest (setup.cfg). Same interpreter,
+      # no colcon build and no simulator.
+      - name: pytest px4_control frame and vision tests
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}/ros2_ws/src/px4_control${PYTHONPATH:+:$PYTHONPATH}"
+          python3 -m pytest \
+            ros2_ws/src/px4_control/test/test_frames.py \
+            ros2_ws/src/px4_control/test/test_vision_and_modes.py \
+            -q
+
+  # Headless fake RTAB-Map flight. Reuses the image from build.
+  # Five independent repeats: height bias and overshoot may be flaky.
+  # Leg / return / yaw bands are the only overrides. Hover drift, overshoot,
+  # and settle stay at the .env.example defaults.
+  fake-vision-clean:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5]
+    env:
+      E2E_LEG_TOLERANCE_M: "0.08"
+      E2E_RETURN_TOLERANCE_M: "0.12"
+      E2E_YAW_TOLERANCE_DEG: "10"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use .env.example when .env is absent
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      - name: Download image
+        if: needs.build.outputs.image_mode == 'built'
+        uses: actions/download-artifact@v4
+        with:
+          name: px4-image-${{ github.sha }}
+          path: ${{ runner.temp }}/px4-image
+
+      - name: Load image
+        if: needs.build.outputs.image_mode == 'built'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          start="$(date +%s)"
+          zstd -d "${RUNNER_TEMP}/px4-image/px4-image.tar.zst" -c | docker load
+          echo "load $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          docker image inspect "${{ needs.build.outputs.image_ref }}" >/dev/null
+          echo "Loaded ${{ needs.build.outputs.image_ref }} without building."
+
+      - name: Pull published image
+        if: needs.build.outputs.image_mode == 'pulled'
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          start="$(date +%s)"
+          docker pull "${PX4_IMAGE}"
+          docker tag "${PX4_IMAGE}" "${{ needs.build.outputs.image_ref }}"
+          echo "pull $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "Pulled ${PX4_IMAGE} without building."
+
+      - name: Image contents
+        run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
+
+      - name: Fake vision clean
+        timeout-minutes: 40
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: none
+          World: default
+          PX4_GZ_MODEL: x500
+          VISION_PROFILE: cpu
+          COMPOSE_PROFILES: ""
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_PROJECT_NAME: px4-fake-vision-clean-${{ matrix.run }}-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "0"
+        run: ./scripts/ci_fake_vision.sh clean "${PX4_IMAGE}"
+
+      - name: Flight artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fake-vision-clean-${{ github.sha }}-${{ matrix.run }}
+          if-no-files-found: ignore
+          path: |
+            logs/health/**
+            logs/flights/**
+            logs/smoke-containers.log
+            logs/timing.txt
+            logs/px4_boot_order.txt
+            logs/px4-boot-tail.log
+
+      - name: Grader and health summary
+        if: always()
+        run: |
+          set +e
+          python3 - << 'PY'
+          import json
+          from pathlib import Path
+          path = Path("logs/flights/fake_vision/clean/grade.json")
+          print(f"grade_json={path} exists={path.is_file()}")
+          if path.is_file():
+              data = json.loads(path.read_text(encoding="utf-8"))
+              print(f"status={data.get('status')} passed={data.get('passed')}")
+              checks = list(data.get("checks") or [])
+              attempts = data.get("attempts") or []
+              if attempts and isinstance(attempts[-1], dict):
+                  seen = {item.get("name") for item in checks}
+                  for item in attempts[-1].get("checks") or []:
+                      if item.get("name") not in seen:
+                          checks.append(item)
+                  print(f"vo_timestamp_gap_us_tail={attempts[-1].get('vo_timestamp_gap_us')}")
+              for item in checks:
+                  print(
+                      f"GRADER name={item.get('name')} passed={item.get('passed')} "
+                      f"measured={item.get('measured')} limit={item.get('limit')} "
+                      f"detail={item.get('detail')}"
+                  )
+          PY
+          ./scripts/health_report.sh
+          exit 0
+
+      - name: Timing summary
+        if: always()
+        run: |
+          {
+            echo "### Timing (fake-vision-clean ${{ matrix.run }})"
+            echo
+            echo '```'
+            if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
+              cat "${RUNNER_TEMP}/image_timing.txt"
+            fi
+            if [ -f logs/timing.txt ]; then
+              cat logs/timing.txt
+            fi
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # One dropout flight. Graded on brake, hold, and land by the script.
+  fake-vision-dropout:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use .env.example when .env is absent
+        run: |
+          set -euo pipefail
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      - name: Download image
+        if: needs.build.outputs.image_mode == 'built'
+        uses: actions/download-artifact@v4
+        with:
+          name: px4-image-${{ github.sha }}
+          path: ${{ runner.temp }}/px4-image
+
+      - name: Load image
+        if: needs.build.outputs.image_mode == 'built'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          start="$(date +%s)"
+          zstd -d "${RUNNER_TEMP}/px4-image/px4-image.tar.zst" -c | docker load
+          echo "load $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          docker image inspect "${{ needs.build.outputs.image_ref }}" >/dev/null
+          echo "Loaded ${{ needs.build.outputs.image_ref }} without building."
+
+      - name: Pull published image
+        if: needs.build.outputs.image_mode == 'pulled'
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          start="$(date +%s)"
+          docker pull "${PX4_IMAGE}"
+          docker tag "${PX4_IMAGE}" "${{ needs.build.outputs.image_ref }}"
+          echo "pull $(( $(date +%s) - start ))" > "${RUNNER_TEMP}/image_timing.txt"
+          echo "Pulled ${PX4_IMAGE} without building."
+
+      - name: Image contents
+        run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
+
+      - name: Fake vision dropout
+        timeout-minutes: 40
+        env:
+          PX4_IMAGE: ${{ needs.build.outputs.image_ref }}
+          HEADLESS: "1"
+          RTABMAPVIZ: "false"
+          DISPLAY: ""
+          CameraType: none
+          World: default
+          PX4_GZ_MODEL: x500
+          VISION_PROFILE: cpu
+          COMPOSE_PROFILES: ""
+          COMPOSE_FILES: docker-compose-px4.yml:compose.ci.yml
+          COMPOSE_PROJECT_NAME: px4-fake-vision-dropout-${{ github.run_id }}
+          GZ_HEADLESS_RENDERING: "0"
+          GZ_USE_XVFB: "0"
+        run: ./scripts/ci_fake_vision.sh dropout "${PX4_IMAGE}"
+
+      - name: Flight artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fake-vision-dropout-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            logs/health/**
+            logs/flights/**
+            logs/smoke-containers.log
+            logs/timing.txt
+            logs/px4_boot_order.txt
+            logs/px4-boot-tail.log
+
+      - name: Grader and health summary
+        if: always()
+        run: |
+          set +e
+          python3 - << 'PY'
+          import json
+          from pathlib import Path
+          path = Path("logs/flights/fake_vision/dropout/grade.json")
+          print(f"grade_json={path} exists={path.is_file()}")
+          if path.is_file():
+              data = json.loads(path.read_text(encoding="utf-8"))
+              print(f"status={data.get('status')} passed={data.get('passed')}")
+              checks = list(data.get("checks") or [])
+              attempts = data.get("attempts") or []
+              if attempts and isinstance(attempts[-1], dict):
+                  seen = {item.get("name") for item in checks}
+                  for item in attempts[-1].get("checks") or []:
+                      if item.get("name") not in seen:
+                          checks.append(item)
+                  print(f"vo_timestamp_gap_us_tail={attempts[-1].get('vo_timestamp_gap_us')}")
+              for item in checks:
+                  print(
+                      f"GRADER name={item.get('name')} passed={item.get('passed')} "
+                      f"measured={item.get('measured')} limit={item.get('limit')} "
+                      f"detail={item.get('detail')}"
+                  )
+          PY
+          ./scripts/health_report.sh
+          exit 0
+
+      - name: Timing summary
+        if: always()
+        run: |
+          {
+            echo "### Timing (fake-vision-dropout)"
             echo
             echo '```'
             if [ -f "${RUNNER_TEMP}/image_timing.txt" ]; then
