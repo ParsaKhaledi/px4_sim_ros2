@@ -237,14 +237,9 @@ start_fake_rtabmap() {
   export FAKE_VISION_NOISE_YAW_DEG="${FAKE_VISION_NOISE_YAW_DEG:-0}"
   export FAKE_VISION_DRIFT_MPS="${FAKE_VISION_DRIFT_MPS:-0}"
   export FAKE_VISION_FAULT="${FAKE_VISION_FAULT:-none}"
-  export FAKE_VISION_EXPRESS_CAMERA="${FAKE_VISION_EXPRESS_CAMERA:-0}"
   export FAKE_VISION_WORLD_AXES="${FAKE_VISION_WORLD_AXES:-1}"
   export FAKE_VISION_DROPOUT_YAW_DEG="${FAKE_VISION_DROPOUT_YAW_DEG:-70}"
   export USE_SIM_TIME="${USE_SIM_TIME:-true}"
-  export CAM_X="${CAM_X:-0.12}"
-  export CAM_Y="${CAM_Y:-0.03}"
-  export CAM_Z="${CAM_Z:-0.242}"
-  export CAM_PITCH_DEG="${CAM_PITCH_DEG:-17}"
   compose_setup
   echo "Starting fake_rtabmap (fault=${FAKE_VISION_FAULT}, delay=${FAKE_VISION_DELAY_MS} ms)."
   # ROS_DISTRO is expanded inside the container, same as the mission command.
@@ -256,14 +251,9 @@ start_fake_rtabmap() {
     -e FAKE_VISION_NOISE_YAW_DEG \
     -e FAKE_VISION_DRIFT_MPS \
     -e FAKE_VISION_FAULT \
-    -e FAKE_VISION_EXPRESS_CAMERA \
     -e FAKE_VISION_WORLD_AXES \
     -e FAKE_VISION_DROPOUT_YAW_DEG \
     -e USE_SIM_TIME \
-    -e CAM_X \
-    -e CAM_Y \
-    -e CAM_Z \
-    -e CAM_PITCH_DEG \
     PX4 \
     bash -lc '
       set +u

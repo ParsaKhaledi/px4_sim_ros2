@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import pytest
 
@@ -178,7 +180,7 @@ def test_sim_preflight_failure_is_returned_verbatim():
     assert sim_preflight_decision(True, True, True, 'ok') is None
 
 
-def _sample(stamp, position, lost=False, covariance=0.01):
+def _sample(stamp, position, lost=False, covariance=0.01, frame_id="odom", child_frame_id="base_link"):
     pose = np.zeros(36)
     twist = np.zeros(36)
     for index in (0, 7, 14, 21, 28, 35):
@@ -193,6 +195,8 @@ def _sample(stamp, position, lost=False, covariance=0.01):
         pose_covariance=pose,
         twist_covariance=twist,
         tracking_lost=lost,
+        frame_id=frame_id,
+        child_frame_id=child_frame_id,
     )
 
 
@@ -314,3 +318,23 @@ def test_vision_does_not_restamp_a_stale_pose():
 def test_negative_vision_variance_is_tracking_loss():
     bridge = VisionOdometryBridge()
     assert bridge.push(_sample(1.0, (0.0, 0.0, 1.0), covariance=-0.1)) is None
+
+
+def test_wrong_frame_is_not_a_vision_sample(caplog):
+    bridge = VisionOdometryBridge()
+    with caplog.at_level(logging.WARNING, logger="px4_control.vision_bridge"):
+        rejected = bridge.push(_sample(1.0, (1.0, 2.0, 3.0), frame_id="map", child_frame_id="camera_link"))
+    assert rejected is None
+    assert bridge.ever_received is False
+    assert bridge.current(1.0) is None
+    assert "frame_id='map'" in bridge.last_reject
+    assert "child_frame_id='camera_link'" in bridge.last_reject
+    assert any("rejected odometry" in message for message in caplog.messages)
+    # An empty id is not treated as the default body frame.
+    assert bridge.push(_sample(1.05, (1.0, 2.0, 3.0), frame_id="", child_frame_id="")) is None
+    assert bridge.ever_received is False
+    assert bridge.push(_sample(1.1, (1.0, 2.0, 3.0))) is not None
+    assert bridge.ever_received is True
+    assert bridge.push(_sample(1.2, (1.0, 2.0, 3.0), child_frame_id="camera_link")) is None
+    assert bridge.ever_received is True
+    assert bridge.current(1.2) is not None

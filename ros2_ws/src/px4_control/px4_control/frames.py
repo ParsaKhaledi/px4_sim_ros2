@@ -386,9 +386,9 @@ def body_from_mounted_pose(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Camera-link pose in a parent frame back to the body pose.
 
-    Inverse of :func:`camera_from_body_pose`. The bridge applies this when
-    ``/rtabmap/odom`` ``child_frame_id`` is ``camera_link`` so EKF2 sees the
-    body, not the housing.
+    Inverse of :func:`camera_from_body_pose`. The vision bridge does not apply
+    this: RTAB-Map publishes ``odom`` -> ``base_link``, and a ``camera_link``
+    child is rejected.
     """
     bracket = mount or CameraMount()
     rot_mount = bracket.rotation

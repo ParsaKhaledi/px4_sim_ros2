@@ -9,9 +9,7 @@ import numpy as np
 import pytest
 
 from px4_control.frames import (
-    CameraMount,
     attitude_from_enu_quat,
-    body_from_mounted_pose,
     quat_xyzw_to_rot,
     rot_to_quat_xyzw,
     rpy_to_rot,
@@ -98,6 +96,8 @@ def test_rate_delay_noise_and_drift():
         last = _drain(drifted, _gt(stamp, (0.0, 0.0, 0.2)))
     assert last is not None
     assert last[0].position_enu[0] == pytest.approx(0.096, abs=1e-6)
+    # Drift is +East only. z is unchanged even when drift_mps is not zero.
+    assert last[0].position_enu[2] == pytest.approx(0.0, abs=1e-9)
 
     noisy = FakeRtabmap(noise_m=0.05, seed=3)
     clean = FakeRtabmap(noise_m=0.0, seed=3)
@@ -106,48 +106,6 @@ def test_rate_delay_noise_and_drift():
     second_noisy = _drain(noisy, _gt(1.08, (0.0, 0.0, 1.0)))[0].position_enu
     second_clean = _drain(clean, _gt(1.08, (0.0, 0.0, 1.0)))[0].position_enu
     assert not np.allclose(second_noisy, second_clean, atol=1e-4)
-
-
-def test_camera_child_round_trips_in_the_bridge():
-    mount = CameraMount()
-    source = FakeRtabmap(express_camera=True, mount=mount)
-    body = FakeRtabmap(express_camera=False, mount=mount)
-    yaw = 0.4
-    sample = _gt(2.0, (0.5, -0.2, 1.0), yaw)
-    housed = _drain(source, sample)[0]
-    plain = _drain(body, sample)[0]
-    assert housed.child_frame_id == "camera_link"
-    assert plain.child_frame_id == "base_link"
-    back_p, back_q, _, _ = body_from_mounted_pose(
-        housed.position_enu, housed.quat_xyzw, housed.linear_flu, housed.angular_flu, mount,
-    )
-    assert back_p == pytest.approx(plain.position_enu, abs=1e-8)
-    assert quat_xyzw_to_rot(back_q) == pytest.approx(quat_xyzw_to_rot(plain.quat_xyzw), abs=1e-8)
-    from_camera = VisionOdometryBridge(camera_mount=mount)
-    from_body = VisionOdometryBridge(camera_mount=mount)
-    visual_camera = from_camera.push(OdomSample(
-        stamp_sec=housed.capture_sec,
-        position_enu=housed.position_enu,
-        quat_xyzw=housed.quat_xyzw,
-        linear_flu=housed.linear_flu,
-        angular_flu=housed.angular_flu,
-        pose_covariance=housed.pose_covariance,
-        twist_covariance=housed.twist_covariance,
-        child_frame_id="camera_link",
-    ))
-    visual_body = from_body.push(OdomSample(
-        stamp_sec=plain.capture_sec,
-        position_enu=plain.position_enu,
-        quat_xyzw=plain.quat_xyzw,
-        linear_flu=plain.linear_flu,
-        angular_flu=plain.angular_flu,
-        pose_covariance=plain.pose_covariance,
-        twist_covariance=plain.twist_covariance,
-        child_frame_id="base_link",
-    ))
-    assert visual_camera is not None and visual_body is not None
-    assert visual_camera.position_ned == pytest.approx(visual_body.position_ned, abs=1e-8)
-    assert visual_camera.yaw_ned == pytest.approx(visual_body.yaw_ned, abs=1e-8)
 
 
 def test_faults_dropout_late_jump_and_lost():

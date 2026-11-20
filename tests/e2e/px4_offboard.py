@@ -719,10 +719,15 @@ class FlightWatch:
             angular_flu=np.array([twist.angular.x, twist.angular.y, twist.angular.z]),
             pose_covariance=np.array(msg.pose.covariance, dtype=float),
             twist_covariance=np.array(msg.twist.covariance, dtype=float),
-            child_frame_id=str(getattr(msg, "child_frame_id", "") or "base_link"),
+            frame_id=str(getattr(getattr(msg, "header", None), "frame_id", "") or ""),
+            child_frame_id=str(getattr(msg, "child_frame_id", "") or ""),
         )
         visual = self._vision.push(sample)
         if visual is None:
+            if self._vision.last_reject:
+                # Wrong frame. Not a tracking loss, and not a sample that arms.
+                print(self._vision.last_reject, flush=True)
+                return
             if self._vision.ever_received:
                 self._ev_stats.note_lost()
             return

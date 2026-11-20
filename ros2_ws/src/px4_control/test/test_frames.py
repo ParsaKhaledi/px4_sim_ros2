@@ -8,18 +8,24 @@ import pytest
 from px4_control.frames import (
     R_FRD_FROM_FLU,
     R_NED_FROM_ENU,
+    CameraMount,
     attitude_from_enu_quat,
+    body_from_mounted_pose,
     body_horizontal_to_ned,
     body_offset_to_enu,
+    camera_from_body_pose,
     command_age,
     diagonal_variances,
     enu_to_ned,
     enu_yaw_to_ned,
     flu_to_frd,
     ned_to_enu,
+    quat_wxyz_to_rot,
     quat_xyzw_to_rot,
     rotate_covariance,
     rot_to_quat_wxyz,
+    rot_to_quat_xyzw,
+    rpy_to_rot,
     yaw_ned_from_enu_quat,
 )
 
@@ -47,6 +53,8 @@ def test_covariance_rotation_stays_positive():
         [0.0, 0.0, 4.0],
     ])
     rotated = rotate_covariance(sigma, R_NED_FROM_ENU)
+    assert rotated == pytest.approx(R_NED_FROM_ENU @ sigma @ R_NED_FROM_ENU.T)
+    assert not np.allclose(rotated, sigma)
     assert diagonal_variances(rotated) == pytest.approx(np.array([3.0, 2.0, 4.0]))
     assert np.all(np.linalg.eigvalsh(rotated) >= -1e-9)
     bad = R_FRD_FROM_FLU @ np.array([2.0, 3.0, 4.0])
@@ -119,3 +127,38 @@ def test_command_age_is_a_plain_subtraction():
 
 def test_zero_quaternion_is_unusable():
     assert attitude_from_enu_quat(np.zeros(4)) is None
+
+
+def test_tilted_attitude_matrix_matches_quaternion():
+    rng = np.random.default_rng(7)
+    for _ in range(30):
+        axis = rng.normal(size=3)
+        axis = axis / np.linalg.norm(axis)
+        angle = float(rng.uniform(-math.pi, math.pi))
+        skew = np.array([
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ])
+        rotation = np.eye(3) + math.sin(angle) * skew + (1.0 - math.cos(angle)) * (skew @ skew)
+        attitude = attitude_from_enu_quat(rot_to_quat_xyzw(rotation))
+        assert attitude is not None
+        assert quat_wxyz_to_rot(attitude.quaternion_wxyz) == pytest.approx(attitude.rotation, abs=1e-6)
+        assert quat_xyzw_to_rot(rot_to_quat_xyzw(attitude.rotation)) == pytest.approx(
+            attitude.rotation, abs=1e-6
+        )
+
+
+def test_camera_mount_round_trip():
+    # The bridge does not apply this. RTAB-Map already publishes the body.
+    mount = CameraMount()
+    position = np.array([0.4, -0.2, 1.5])
+    quat = rot_to_quat_xyzw(rpy_to_rot(0.2, -0.3, 0.7))
+    linear = np.array([0.3, -0.1, 0.05])
+    angular = np.array([0.02, -0.04, 0.2])
+    cam_p, cam_q, cam_v, cam_w = camera_from_body_pose(position, quat, linear, angular, mount)
+    back_p, back_q, back_v, back_w = body_from_mounted_pose(cam_p, cam_q, cam_v, cam_w, mount)
+    assert back_p == pytest.approx(position, abs=1e-9)
+    assert quat_xyzw_to_rot(back_q) == pytest.approx(quat_xyzw_to_rot(quat), abs=1e-9)
+    assert back_v == pytest.approx(linear, abs=1e-9)
+    assert back_w == pytest.approx(angular, abs=1e-9)

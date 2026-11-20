@@ -434,10 +434,14 @@ class Px4ControlNode(Node):
             angular_flu=np.array([twist.angular.x, twist.angular.y, twist.angular.z]),
             pose_covariance=np.array(msg.pose.covariance, dtype=float),
             twist_covariance=np.array(msg.twist.covariance, dtype=float),
-            child_frame_id=str(msg.child_frame_id or 'base_link'),
+            frame_id=str(msg.header.frame_id or ''),
+            child_frame_id=str(msg.child_frame_id or ''),
         )
         visual = self._vision.push(sample)
         if visual is None:
+            if self._vision.last_reject:
+                self.get_logger().warning(self._vision.last_reject)
+                return
             if not self._warned_vision_loss:
                 self.get_logger().warning('vision tracking lost; external vision publishing stopped')
                 self._warned_vision_loss = True

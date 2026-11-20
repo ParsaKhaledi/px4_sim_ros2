@@ -13,6 +13,7 @@ reset. A slow but valid frame keeps the previous counter.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
@@ -20,10 +21,7 @@ import numpy as np
 from px4_control.frames import (
     R_FRD_FROM_FLU,
     R_NED_FROM_ENU,
-    CameraMount,
     attitude_from_enu_quat,
-    body_from_mounted_pose,
-    camera_mount_from_env,
     covariance_block,
     diagonal_variances,
     enu_to_ned,
@@ -31,11 +29,17 @@ from px4_control.frames import (
     rotate_covariance,
 )
 
+_log = logging.getLogger("px4_control.vision_bridge")
+
+# RTAB-Map is launched with vo_frame_id:=odom and frame_id:=base_link.
+# The camera mount is already applied inside RTAB-Map, so the pose is the body.
+ODOM_FRAME = "odom"
+BODY_FRAME = "base_link"
+
 # PX4 rejects an external-vision sample whose age is outside the estimator
 # horizon. The flight check uses the same ceiling: timestamp - timestamp_sample
 # is the publish delay and must stay inside this window.
 MAX_VO_DELAY_US = 100_000
-_CAMERA_LINK = "camera_link"
 
 # RTAB-Map's lost-estimate convention: a diagonal of 9999 means the pose is
 # not a measurement. The same value on a non-lost info message is how a reset
@@ -55,9 +59,10 @@ class OdomSample:
     pose_covariance: np.ndarray
     twist_covariance: np.ndarray
     tracking_lost: bool = False
-    # Empty or base_link: the pose is already the body. camera_link: the pose
-    # is the housing, and the bridge applies the static mount.
-    child_frame_id: str = "base_link"
+    # header.frame_id and child_frame_id. Anything other than odom -> base_link
+    # is rejected and does not count as a vision sample.
+    frame_id: str = ODOM_FRAME
+    child_frame_id: str = BODY_FRAME
 
 
 @dataclass(frozen=True)
@@ -199,12 +204,11 @@ class VisionOdometryBridge:
         timeout_s: float = 0.3,
         reset_jump_m: float = 0.75,
         max_variance: float = 25.0,
-        camera_mount: CameraMount | None = None,
     ) -> None:
         if timeout_s <= 0.0:
             raise ValueError('timeout_s must be positive')
         self.timeout_s = float(timeout_s)
-        self.camera_mount = camera_mount if camera_mount is not None else camera_mount_from_env()
+        self.last_reject = ""
         # Pose jumps are not a reset. The argument remains so existing callers
         # and the ROS parameter still load.
         self.reset_jump_m = float(reset_jump_m)
@@ -247,7 +251,23 @@ class VisionOdometryBridge:
             self.mark_lost()
 
     def push(self, sample: OdomSample) -> VisualOdom | None:
-        """Ingest one odometry message. Returns a sample only while tracking."""
+        """Ingest one odometry message. Returns a sample only while tracking.
+
+        A header that is not ``odom`` or a child that is not ``base_link`` is
+        logged and dropped. It does not mark tracking lost and it does not
+        count as the first vision sample, so arming stays blocked until a
+        body pose in the odom frame arrives.
+        """
+        self.last_reject = ""
+        frame = str(sample.frame_id or "").strip()
+        child = str(sample.child_frame_id or "").strip()
+        if frame != ODOM_FRAME or child != BODY_FRAME:
+            self.last_reject = (
+                f"rejected odometry frame_id={frame!r} child_frame_id={child!r}; "
+                f"expected {ODOM_FRAME} -> {BODY_FRAME}"
+            )
+            _log.warning(self.last_reject)
+            return None
         if sample.tracking_lost or _is_null_pose(sample.position_enu, sample.quat_xyzw):
             self.mark_lost()
             return None
@@ -262,13 +282,6 @@ class VisionOdometryBridge:
         quat_xyzw = np.asarray(sample.quat_xyzw, dtype=float)
         linear_flu = np.asarray(sample.linear_flu, dtype=float)
         angular_flu = np.asarray(sample.angular_flu, dtype=float)
-        child = str(sample.child_frame_id or "base_link")
-        # camera_link is the housing. Any other child, including an unknown
-        # one, is left as published so a wrong frame id is not silently corrected.
-        if child == _CAMERA_LINK:
-            position_enu, quat_xyzw, linear_flu, angular_flu = body_from_mounted_pose(
-                position_enu, quat_xyzw, linear_flu, angular_flu, self.camera_mount,
-            )
         attitude = attitude_from_enu_quat(quat_xyzw)
         if attitude is None:
             return None

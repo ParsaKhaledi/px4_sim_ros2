@@ -23,9 +23,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from px4_control.frames import (
-    CameraMount,
-    camera_from_body_pose,
-    camera_mount_from_env,
     odom_pose_from_world,
     quat_xyzw_to_rot,
     yaw_ned_from_enu_quat,
@@ -34,7 +31,6 @@ from px4_control.vision_bridge import LOST_VARIANCE
 
 ODOM_FRAME = "odom"
 BODY_FRAME = "base_link"
-CAMERA_FRAME = "camera_link"
 
 
 def _yaw_enu(quat_xyzw: np.ndarray) -> float:
@@ -124,12 +120,10 @@ class FakeRtabmap:
         noise_yaw_rad: float = 0.0,
         drift_mps: float = 0.0,
         fault: str = "none",
-        express_camera: bool = False,
         world_axes: bool = True,
         dropout_yaw_deg: float = 70.0,
         late_extra_s: float = 0.08,
         jump_m: float = 2.0,
-        mount: CameraMount | None = None,
         seed: int = 1,
     ) -> None:
         if not 10.0 <= float(rate_hz) <= 15.0:
@@ -142,12 +136,10 @@ class FakeRtabmap:
         self.noise_yaw_rad = float(noise_yaw_rad)
         self.drift_mps = float(drift_mps)
         self.fault = str(fault or "none")
-        self.express_camera = bool(express_camera)
         self.world_axes = bool(world_axes)
         self.dropout_yaw_deg = float(dropout_yaw_deg)
         self.late_extra_s = float(late_extra_s)
         self.jump_m = float(jump_m)
-        self.mount = mount if mount is not None else camera_mount_from_env({})
         self._rng = np.random.default_rng(seed)
         self._spawn_position: np.ndarray | None = None
         self._spawn_quat: np.ndarray | None = None
@@ -223,17 +215,14 @@ class FakeRtabmap:
             self._jumped = True
         linear, angular = self._twist(position, quat, float(sample.stamp_sec), sample)
         self._last_body = (position.copy(), quat.copy(), float(sample.stamp_sec))
-        if self.express_camera:
-            position, quat, linear, angular = camera_from_body_pose(
-                position, quat, linear, angular, self.mount,
-            )
         return position, quat, linear, angular
 
     def _drift_step(self, dt: float) -> np.ndarray:
         if self.drift_mps == 0.0:
             return np.zeros(3, dtype=float)
         # Constant slow bias, not a new random walk each sample, so a test
-        # can predict it. Direction is +East in the odom frame.
+        # can predict it. Direction is +East in the odom frame. z is never
+        # part of the drift, including when drift_mps is non-zero.
         return np.array([self.drift_mps * dt, 0.0, 0.0], dtype=float)
 
     def _twist(self, position, quat, stamp: float, sample: GroundTruth):
@@ -260,7 +249,6 @@ class FakeRtabmap:
             quat = np.zeros(4, dtype=float)
             linear = np.zeros(3, dtype=float)
             angular = np.zeros(3, dtype=float)
-        child = CAMERA_FRAME if self.express_camera and not lost else BODY_FRAME
         return RtabOdom(
             capture_sec=capture,
             publish_sec=float(now_sec),
@@ -271,7 +259,7 @@ class FakeRtabmap:
             pose_covariance=_covariance(0.01, lost),
             twist_covariance=_covariance(0.05, lost),
             frame_id=ODOM_FRAME,
-            child_frame_id=child,
+            child_frame_id=BODY_FRAME,
             lost=lost,
         )
 
@@ -314,10 +302,8 @@ def main() -> None:
         noise_yaw_rad=math.radians(_env_float("FAKE_VISION_NOISE_YAW_DEG", 0.0)),
         drift_mps=_env_float("FAKE_VISION_DRIFT_MPS", 0.0),
         fault=os.environ.get("FAKE_VISION_FAULT", "none") or "none",
-        express_camera=os.environ.get("FAKE_VISION_EXPRESS_CAMERA", "0") in {"1", "true", "yes"},
         world_axes=os.environ.get("FAKE_VISION_WORLD_AXES", "1") not in {"0", "false", "no"},
         dropout_yaw_deg=_env_float("FAKE_VISION_DROPOUT_YAW_DEG", 70.0),
-        mount=camera_mount_from_env(),
     )
 
     class _Node(Node):
@@ -383,10 +369,9 @@ def main() -> None:
             msg.twist.twist.angular.z = float(item.angular_flu[2])
             msg.twist.covariance = [float(value) for value in item.twist_covariance]
             self._pub.publish(msg)
-            # TF is always odom -> base_link for the body. A camera-frame
-            # odometry message must not add a second parent of camera_link;
-            # the URDF already parents that link to base_link.
-            if item.child_frame_id != BODY_FRAME or item.lost:
+            # Body TF only. RTAB-Map's frame_id is base_link; the URDF already
+            # parents camera_link, so this node does not publish that child.
+            if item.lost:
                 return
             transform = TransformStamped()
             transform.header = msg.header

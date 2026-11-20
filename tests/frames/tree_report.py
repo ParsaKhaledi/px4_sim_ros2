@@ -152,6 +152,7 @@ def check_tree(root: Path | None = None) -> TreeReport:
 
     _sensor_poses(repo, by_child, report)
     _frame_ids(repo, report)
+    _check_camera_mount(repo, by_child, report)
     _findings(repo, by_child, report)
     return report
 
@@ -204,6 +205,34 @@ def _frame_ids(repo: Path, report: TreeReport) -> None:
         report.errors.append("stereo image is missing the right optical frame")
 
 
+def _check_camera_mount(repo: Path, by_child: dict, report: TreeReport) -> None:
+    """URDF camera_joint against geometry.Mount(), the pose Gazebo gets at runtime.
+
+    ``render_oakd.py --patch-x500`` writes Mount() into the PX4 copy of
+    x500_depth. The committed model.sdf is the unpatched overlay (pitch 0)
+    and is not the mount the flight uses.
+    """
+    from geometry import Mount
+    from render_oakd import patch_x500_depth_xml
+
+    mount = Mount()
+    joint = by_child.get("camera_link")
+    if joint is None:
+        report.errors.append("URDF has no camera_link joint")
+        return
+    expected = (mount.x, mount.y, mount.z, 0.0, mount.pitch_rad, 0.0)
+    pose = joint["pose"]
+    if not all(math.isclose(got, want, abs_tol=1e-4) for got, want in zip(pose, expected)):
+        report.errors.append(f"URDF camera_joint {tuple(round(v, 6) for v in pose)} != Mount() {expected}")
+    committed = (repo / "includes/gz/models/x500_depth/model.sdf").read_text(encoding="utf-8")
+    patched = patch_x500_depth_xml(committed, mount)
+    needle = mount.pose_text()
+    if patched.count(needle) < 2:
+        report.errors.append(
+            "render_oakd.py --patch-x500 did not write Mount() onto the include and CameraJoint"
+        )
+
+
 def _findings(repo: Path, by_child: dict, report: TreeReport) -> None:
     yaml = (repo / "ros2_ws/src/px4_control/config/px4_control.yaml").read_text(encoding="utf-8")
     # base_link is the URDF root. The 0.24 m figure is a comment, not a joint.
@@ -218,22 +247,6 @@ def _findings(repo: Path, by_child: dict, report: TreeReport) -> None:
             ),
         })
 
-    camera = by_child.get("camera_link")
-    model = (repo / "includes/gz/models/x500_depth/model.sdf").read_text(encoding="utf-8")
-    sdf_pitch = _sdf_mount_pitch(model)
-    if camera is not None and sdf_pitch is not None:
-        urdf_pitch = camera["pose"][4]
-        if abs(urdf_pitch - sdf_pitch) > math.radians(1.0):
-            report.findings.append({
-                "id": "sdf_mount_pitch",
-                "detail": (
-                    f"Committed x500_depth model.sdf mount pitch is {sdf_pitch:.4f} rad. "
-                    f"URDF camera_joint pitch is {urdf_pitch:.4f} rad. "
-                    "gz_modifications.bash rewrites the PX4 copy at container start; "
-                    "the committed overlay does not include the 17 deg pitch."
-                ),
-            })
-
     profile = (repo / "includes/gz/startFiles/rtabmap_profiles/cpu.ini").read_text(encoding="utf-8")
     if re.search(r"RGBD[/\\]StartAtOrigin=true", profile):
         report.findings.append({
@@ -247,15 +260,3 @@ def _findings(repo: Path, by_child: dict, report: TreeReport) -> None:
             ),
         })
 
-
-def _sdf_mount_pitch(text: str) -> float | None:
-    match = re.search(
-        r'<pose relative_to="base_link">\s*([^<]+)</pose>',
-        text,
-    )
-    if match is None:
-        return None
-    numbers = [float(item) for item in match.group(1).split()]
-    if len(numbers) < 5:
-        return None
-    return numbers[4]
