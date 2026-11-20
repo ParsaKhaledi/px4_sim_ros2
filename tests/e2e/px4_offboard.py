@@ -1061,15 +1061,16 @@ class FlightWatch:
             self.set_phase("vision_brake")
         try:
             self._wait_sim(2.0, 30.0)
-        except (FlightCrash, VisionLost):
+        except VisionLost:
             pass
         # The hold raises VisionLost once the brake timer elapses. Landing
-        # has to run after that, not abort on the same flag.
+        # has to run after that. A crash during the hold or the landing
+        # still fails the run.
         self._vision_land_now = False
         try:
             self._land()
             self._disarm()
-        except (FlightCrash, VisionLost) as exc:
+        except VisionLost as exc:
             print(f"vision abort land ended with {exc}", flush=True)
 
     def _arm(self) -> None:
