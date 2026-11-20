@@ -2,8 +2,12 @@
 
 Samples are dicts with keys x, y, z, yaw (degrees, ENU), t (sim seconds)
 and phase. Phases used here: start, takeoff, hover, leg1, yaw, leg2, land.
-The last start sample is the ground origin, so a pose taken while the
-model is still being spawned does not set the hover height.
+Height is base_link above the on-ground pre-arm sample. ``z`` on the track
+is the Gazebo model origin (``/ground_truth/odom``; ``base_link_gt`` is not
+a link), and ``x500_base`` places base_link 0.24 m above that origin. The
+offset is added to both the sample and the pre-arm pose, so a level climb
+is unchanged. The land phase ends while the vehicle is still descending;
+the landing height is the settled pose (the disarm sample when there is one).
 
 grade_hover scores the headless hover. grade_mission also scores the
 out-and-back legs. The flight level uses grade_hover.
@@ -137,6 +141,114 @@ def _settle_time(rows, t0: float, error_at, tolerance: float, hold_s: float, tim
     return None
 
 
+# x500_base model pose is ``0 0 0.24``. base_link, the baro, the IMU and the
+# GPS sit on that link with no further pose. /ground_truth/odom asks for
+# base_link_gt, which the SDF does not define, so the recorded z is the
+# model origin.
+BASE_LINK_ABOVE_MODEL_ORIGIN_M = 0.24
+_PREARM_PHASES = {"preflight", "start", "offboard"}
+
+
+def _prearm_sample(samples):
+    """Last on-ground sample before arm. Spawn motion is not this pose."""
+
+    rows = [row for row in samples if row.get("phase") in _PREARM_PHASES]
+    if rows:
+        return rows[-1]
+    start = _phase(samples, "start")
+    return start[-1] if start else None
+
+
+def _base_link_z(row) -> float:
+    """Model-origin z lifted to base_link. Level flight: +0.24 m."""
+
+    return float(row["z"]) + BASE_LINK_ABOVE_MODEL_ORIGIN_M
+
+
+def _above_prearm(row, prearm) -> float:
+    """base_link height relative to this track's own pre-arm base_link."""
+
+    return _base_link_z(row) - _base_link_z(prearm)
+
+
+def _ekf_above_prearm(row, prearm):
+    """EKF local down, zeroed on this track's pre-arm EKF sample.
+
+    ``px4_d`` is NED down of the EKF position. Its origin is the baro
+    reference at init (EKF2_HGT_REF=0), so the raw value is not a height
+    above the ground. Up is the negation of the change from pre-arm.
+    """
+
+    if row is None or prearm is None:
+        return None
+    if row.get("px4_d") is None or prearm.get("px4_d") is None:
+        return None
+    return -(float(row["px4_d"]) - float(prearm["px4_d"]))
+
+
+def _settled_landing(samples):
+    """Pose after the vehicle has reached the ground, not the land-phase gate."""
+
+    disarm = _phase(samples, "disarm")
+    if disarm:
+        return disarm[-1]
+    land = _phase(samples, "land")
+    return land[-1] if land else None
+
+
+def flight_height_reference(samples) -> dict | None:
+    """Every height as base_link above that source's pre-arm value."""
+
+    prearm = _prearm_sample(samples)
+    if prearm is None:
+        return None
+    hover = _phase(samples, "hover")
+    land = _phase(samples, "land")
+    settled = _settled_landing(samples)
+    hover_row = hover[-1] if hover else None
+    land_row = land[-1] if land else None
+
+    def gt(row):
+        if row is None:
+            return None
+        return round(_above_prearm(row, prearm), 4)
+
+    def ekf(row):
+        value = _ekf_above_prearm(row, prearm)
+        return None if value is None else round(value, 4)
+
+    return {
+        "frame": "base_link",
+        "zero": "each source's own on-ground pre-arm value",
+        "base_link_above_model_origin_m": BASE_LINK_ABOVE_MODEL_ORIGIN_M,
+        "prearm_phase": prearm.get("phase"),
+        "ground_truth": {
+            "point": (
+                "Gazebo model origin from /ground_truth/odom. "
+                "robot_base_frame base_link_gt is not a link in the x500 SDF, "
+                "so the pose is the model origin, 0.24 m below base_link."
+            ),
+            "prearm_model_origin_z_m": round(float(prearm["z"]), 4),
+            "prearm_base_link_z_m": round(_base_link_z(prearm), 4),
+            "hover_above_prearm_m": gt(hover_row),
+            "landing_phase_exit_above_prearm_m": gt(land_row),
+            "landing_settled_above_prearm_m": gt(settled),
+        },
+        "ekf": {
+            "point": (
+                "vehicle_local_position.z, NED down. The IMU and baro are on "
+                "base_link with no extra pose, so this is the EKF's base_link "
+                "estimate. The origin is the baro height at initialization, "
+                "not the model origin; a resting value near -0.24 m only means "
+                "that run's origin landed near the model origin."
+            ),
+            "prearm_down_m": None if prearm.get("px4_d") is None else round(float(prearm["px4_d"]), 4),
+            "hover_above_prearm_m": ekf(hover_row),
+            "landing_settled_above_prearm_m": ekf(settled),
+        },
+    }
+
+
 def _leg_axis(yaw_deg: float):
     """Unit step in Gazebo ENU. Yaw 0 points east (+x), yaw 90 points north (+y)."""
 
@@ -148,25 +260,26 @@ def _along(row, start_xy, axis) -> float:
     return (row["x"] - start_xy[0]) * axis[0] + (row["y"] - start_xy[1]) * axis[1]
 
 
-def _grade_hover_clock(checks, takeoff, hover, origin_z: float, thresholds: Thresholds) -> None:
-    """The 10 s hover starts only after height has held the band."""
+def _grade_hover_clock(checks, takeoff, hover, prearm, thresholds: Thresholds) -> None:
+    """The 10 s hover starts only after base_link height has held the band."""
 
-    target_z = origin_z + thresholds.takeoff_height_m
+    target = thresholds.takeoff_height_m
     band = thresholds.hover_height_band_m
     hold = thresholds.hover_height_hold_s
     ready = False
     detail = "height was not held before the hover clock"
-    if _timed(takeoff) and _timed(hover):
+    if prearm is not None and _timed(takeoff) and _timed(hover):
         hover_t0 = float(hover[0]["t"])
         window = [row for row in takeoff if float(row["t"]) >= hover_t0 - hold - 1e-9]
         if window:
             span = float(window[-1]["t"]) - float(window[0]["t"])
-            in_band = all(abs(row["z"] - target_z) <= band for row in window)
+            errors = [abs(_above_prearm(row, prearm) - target) for row in window]
+            in_band = all(error <= band for error in errors)
             covers = span + 0.25 >= hold and float(window[-1]["t"]) >= hover_t0 - 0.25
             ready = in_band and covers
-            detail = f"held {span:.2f} s before hover"
+            detail = f"held {span:.2f} s before hover, max error {max(errors):.4f} m"
             if not in_band:
-                detail = "height left the band before the hover clock"
+                detail = f"height left the band before the hover clock, max error {max(errors):.4f} m"
     checks.append(_check("hover_ready", ready, round(hold if ready else 0.0, 4), hold, detail))
 
     duration = 0.0
@@ -427,17 +540,19 @@ def _grade_hover_checks(samples, thresholds: Thresholds) -> list:
         return checks
 
     origin = (start[-1]["x"], start[-1]["y"], start[-1]["z"])
+    prearm = _prearm_sample(samples)
     hover_pose = hover[-1]
-    height_error = abs(hover_pose["z"] - origin[2] - thresholds.takeoff_height_m)
+    height_error = abs(_above_prearm(hover_pose, prearm) - thresholds.takeoff_height_m)
     checks.append(
         _check(
             "height",
             height_error <= thresholds.height_tolerance_m,
             round(height_error, 4),
             thresholds.height_tolerance_m,
+            "base_link above its pre-arm height",
         )
     )
-    _grade_hover_clock(checks, takeoff, hover, origin[2], thresholds)
+    _grade_hover_clock(checks, takeoff, hover, prearm, thresholds)
 
     drift = max(horizontal((row["x"], row["y"]), (hover[0]["x"], hover[0]["y"])) for row in hover)
     checks.append(
@@ -466,7 +581,9 @@ def grade_hover(samples, thresholds: Thresholds | None = None) -> dict:
             )
         ]
         return _result(checks, thresholds)
-    return _result(_grade_hover_checks(samples, thresholds), thresholds)
+    return _result(_grade_hover_checks(samples, thresholds), thresholds) | {
+        "height_reference": flight_height_reference(samples),
+    }
 
 
 def yaw_passed_command_direction(samples, minimum_deg: float = 90.0) -> dict:
@@ -503,8 +620,6 @@ def grade_dropout(samples, hold_m: float = 0.5) -> dict:
     """Brake, hold, and land after a vision cut. Legs and yaw are not graded."""
     checks = []
     brake = _phase(samples, "vision_brake")
-    land = _phase(samples, "land")
-    start = _phase(samples, "start")
     checks.append(_check("brake", bool(brake), len(brake), 1, "vision_brake phase"))
     if brake:
         origin = (brake[0]["x"], brake[0]["y"])
@@ -514,16 +629,26 @@ def grade_dropout(samples, hold_m: float = 0.5) -> dict:
         )
     else:
         checks.append(_check("hold", False, None, hold_m, "no brake samples"))
-    if land and start:
-        ground = float(start[-1]["z"])
-        height = abs(float(land[-1]["z"]) - ground)
-        checks.append(_check("land", height <= 0.5, round(height, 4), 0.5, "height above takeoff ground"))
+    settled = _settled_landing(samples)
+    prearm = _prearm_sample(samples)
+    if settled is not None and prearm is not None:
+        height = abs(_above_prearm(settled, prearm))
+        checks.append(
+            _check(
+                "land",
+                height <= 0.5,
+                round(height, 4),
+                0.5,
+                "settled base_link above its pre-arm height",
+            )
+        )
     else:
         checks.append(_check("land", False, None, 0.5, "no land samples"))
     return {
         "passed": bool(checks) and all(item["passed"] for item in checks),
         "checks": checks,
         "thresholds": {"dropout_hold_m": hold_m},
+        "height_reference": flight_height_reference(samples),
     }
 
 
@@ -531,7 +656,12 @@ def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
     thresholds = thresholds or load_thresholds()
     checks = _grade_hover_checks(samples, thresholds)
     if any(item["name"] == "samples" and not item["passed"] for item in checks):
-        return {"passed": False, "checks": checks, "thresholds": asdict(thresholds)}
+        return {
+            "passed": False,
+            "checks": checks,
+            "thresholds": asdict(thresholds),
+            "height_reference": flight_height_reference(samples),
+        }
 
     start = _phase(samples, "start")
     hover = _phase(samples, "hover")
@@ -568,4 +698,5 @@ def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
         "checks": checks,
         "thresholds": asdict(thresholds),
         "yaw": yaw_report,
+        "height_reference": flight_height_reference(samples),
     }

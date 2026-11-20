@@ -85,7 +85,8 @@ looser limits (`E2E_LEG_TOLERANCE_M=0.08`, `E2E_RETURN_TOLERANCE_M=0.12`,
 feed mid-yaw and grades brake, hold, and land. Both write
 `logs/flights/fake_vision/<mode>/grade.json` and
 `logs/flights/fake_vision/<mode>/summary.json` (yaw change from takeoff,
-baro / vision / EKF height, estimator flags) and exit non-zero on failure.
+baro / vision / EKF height as base_link above each source's pre-arm value,
+estimator flags) and exit non-zero on failure.
 `.env.example` keeps the 3 cm / 5° camera-flight defaults.
 
 The offline half of the same check is `pytest tests/frames`.

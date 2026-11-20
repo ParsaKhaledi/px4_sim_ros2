@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Baro, vision, and EKF height from a flight ULog, next to estimator flags.
 
+Each series is also written above its own on-ground pre-arm value, so the
+numbers are base_link climbs. The 0.24 m x500_base pose is not added here:
+baro and the IMU are already on base_link, and the vision pose is the model
+origin with that offset constant, so it cancels once the series is zeroed.
 The fake RTAB-Map drift is +East in the odom frame. Its z term is 0.
 """
 
@@ -78,6 +82,97 @@ def aligned_rows(
     return rows
 
 
+# Same figure as grading.BASE_LINK_ABOVE_MODEL_ORIGIN_M. Repeated here so the
+# summary does not import the grader.
+BASE_LINK_ABOVE_MODEL_ORIGIN_M = 0.24
+
+SOURCE_POINTS = {
+    "ekf": (
+        "vehicle_local_position.z is NED down of the EKF position. The IMU is "
+        "on base_link with no extra pose, so this is base_link in the EKF "
+        "frame. EKF2_HGT_REF=0 puts the origin at the baro height when the "
+        "estimator starts, not at the Gazebo model origin. A resting z near "
+        "-0.24 m means that run's origin happened to sit near the model origin, "
+        "0.24 m below base_link."
+    ),
+    "baro_alt": (
+        "vehicle_air_data.baro_alt_meter is the air_pressure sensor on "
+        "base_link, no extra pose, up-positive. The resting value is the "
+        "noisy pressure reference (about 0.15 m of scatter), not the 0.24 m "
+        "link offset."
+    ),
+    "baro_observation": (
+        "estimator_aid_src_baro_hgt.observation is that same baro height in "
+        "the EKF's NED frame. Zeroing it removes the reference, so the climb "
+        "is base_link above its pre-arm baro reading."
+    ),
+    "vision": (
+        "vehicle_visual_odometry.position[2] is NED down of the pose the "
+        "bridge forwarded. The fake node copies /ground_truth/odom, which is "
+        "the model origin, and publishes it as odom -> base_link zeroed at "
+        "the first sample. The 0.24 m base_link offset is missing from the "
+        "absolute pose and cancels in the climb."
+    ),
+}
+
+
+def prearm_level(times_us, values) -> float:
+    """Median up-height in the 2 s on the ground just before the climb."""
+
+    times = np.asarray(times_us, dtype=np.int64)
+    up = np.asarray(values, dtype=float)
+    finite = np.isfinite(up)
+    times = times[finite]
+    up = up[finite]
+    if up.size == 0:
+        return 0.0
+    t0 = int(times[0])
+    early = up[times <= t0 + 5_000_000]
+    if early.size == 0:
+        early = up[: min(10, up.size)]
+    seed = float(np.median(early))
+    moved = np.flatnonzero(np.abs(up - seed) > 0.4)
+    if moved.size == 0:
+        return seed
+    climb_t = int(times[int(moved[0])])
+    held = up[(times >= climb_t - 2_000_000) & (times < climb_t)]
+    if held.size < 5:
+        held = up[(times >= climb_t - 5_000_000) & (times < climb_t)]
+    if held.size == 0:
+        return seed
+    return float(np.median(held))
+
+
+def _hover_and_landing(times_us, up_values, zero: float, landing_after_us: int | None = None) -> dict:
+    times = np.asarray(times_us, dtype=np.int64)
+    up = np.asarray(up_values, dtype=float)
+    finite = np.isfinite(up)
+    times = times[finite]
+    up = up[finite]
+    empty = {
+        "prearm_up_m": round(zero, 4),
+        "raw_hover_up_m": None,
+        "hover_above_prearm_m": None,
+        "landing_above_prearm_m": None,
+    }
+    if up.size == 0:
+        return empty
+    relative = up - zero
+    peak = float(np.max(relative))
+    hover = relative >= peak - 0.4
+    end = int(times[-1]) if landing_after_us is None else int(landing_after_us)
+    landed = times >= end - 2_000_000
+    landing = None
+    if np.any(landed):
+        landing = round(float(np.median(relative[landed])), 4)
+    return {
+        "prearm_up_m": round(float(zero), 4),
+        "raw_hover_up_m": round(float(np.median(up[hover])), 4),
+        "hover_above_prearm_m": round(float(np.median(relative[hover])), 4),
+        "landing_above_prearm_m": landing,
+    }
+
+
 def _dataset(ulg, name: str):
     matches = [item for item in ulg.data_list if item.name == name]
     if not matches:
@@ -97,25 +192,54 @@ def summarize_ulog(path: Path, *, step_us: int = 1_000_000) -> dict:
     if local is None:
         return {"rows": [], "note": "vehicle_local_position missing"}
     clock = np.asarray(local["timestamp"], dtype=np.int64)
+    ekf_up = -np.asarray(local["z"], dtype=float)
+    ekf_zero = prearm_level(clock, ekf_up)
+    flight_end = int(clock[-1])
     columns = {
         "ekf_z_down_m": (clock, np.asarray(local["z"], dtype=float)),
-        "ekf_height_m": (clock, -np.asarray(local["z"], dtype=float)),
+        "ekf_height_m": (clock, ekf_up),
+        "ekf_above_prearm_m": (clock, ekf_up - ekf_zero),
+    }
+    sources = {
+        "ekf": {
+            "point": SOURCE_POINTS["ekf"],
+            **_hover_and_landing(clock, ekf_up, ekf_zero, flight_end),
+        }
     }
     if air is not None and "baro_alt_meter" in air:
-        columns["baro_alt_m"] = (
-            np.asarray(air["timestamp"], dtype=np.int64),
-            np.asarray(air["baro_alt_meter"], dtype=float),
-        )
+        stamps = np.asarray(air["timestamp"], dtype=np.int64)
+        baro_alt = np.asarray(air["baro_alt_meter"], dtype=float)
+        baro_zero = prearm_level(stamps, baro_alt)
+        columns["baro_alt_m"] = (stamps, baro_alt)
+        columns["baro_alt_above_prearm_m"] = (stamps, baro_alt - baro_zero)
+        sources["baro_alt"] = {
+            "point": SOURCE_POINTS["baro_alt"],
+            **_hover_and_landing(stamps, baro_alt, baro_zero, flight_end),
+        }
     if baro is not None and "observation" in baro:
         observation = np.asarray(baro["observation"], dtype=float)
         stamps = np.asarray(baro["timestamp"], dtype=np.int64)
+        baro_up = -observation
+        baro_zero = prearm_level(stamps, baro_up)
         columns["baro_obs_down_m"] = (stamps, observation)
-        columns["baro_height_m"] = (stamps, -observation)
+        columns["baro_height_m"] = (stamps, baro_up)
+        columns["baro_above_prearm_m"] = (stamps, baro_up - baro_zero)
+        sources["baro_observation"] = {
+            "point": SOURCE_POINTS["baro_observation"],
+            **_hover_and_landing(stamps, baro_up, baro_zero, flight_end),
+        }
     if visual is not None and "position[2]" in visual:
         vision_z = np.asarray(visual["position[2]"], dtype=float)
         stamps = np.asarray(visual["timestamp"], dtype=np.int64)
+        vision_up = -vision_z
+        vision_zero = prearm_level(stamps, vision_up)
         columns["vision_z_down_m"] = (stamps, vision_z)
-        columns["vision_height_m"] = (stamps, -vision_z)
+        columns["vision_height_m"] = (stamps, vision_up)
+        columns["vision_above_prearm_m"] = (stamps, vision_up - vision_zero)
+        sources["vision"] = {
+            "point": SOURCE_POINTS["vision"],
+            **_hover_and_landing(stamps, vision_up, vision_zero, flight_end),
+        }
     if flags is not None:
         count = len(flags["timestamp"])
         packed = []
@@ -128,12 +252,19 @@ def summarize_ulog(path: Path, *, step_us: int = 1_000_000) -> dict:
         columns["flags"] = (np.asarray(flags["timestamp"], dtype=np.int64), packed)
     rows = aligned_rows(clock, columns, step_us=step_us)
     return {
+        "frame": "base_link",
+        "zero": "each source's own on-ground pre-arm value",
+        "base_link_above_model_origin_m": BASE_LINK_ABOVE_MODEL_ORIGIN_M,
         "height_frames": {
-            "baro_alt_m": "vehicle_air_data.baro_alt_meter, up",
+            "baro_alt_m": "vehicle_air_data.baro_alt_meter, up, sensor on base_link",
             "baro_height_m": "minus estimator_aid_src_baro_hgt.observation",
-            "vision_height_m": "minus vehicle_visual_odometry.position[2]",
-            "ekf_height_m": "minus vehicle_local_position.z",
+            "baro_above_prearm_m": "baro observation height minus its pre-arm value",
+            "vision_height_m": "minus vehicle_visual_odometry.position[2], model origin published as base_link",
+            "vision_above_prearm_m": "vision height minus its pre-arm value",
+            "ekf_height_m": "minus vehicle_local_position.z, base_link in the EKF frame",
+            "ekf_above_prearm_m": "EKF height minus its pre-arm value",
         },
+        "sources": sources,
         "rows": rows,
     }
 
@@ -175,6 +306,7 @@ def write_flight_summary(flight_dir: Path) -> dict:
         "status": grade.get("status"),
         "passed": grade.get("passed"),
         "yaw": grade.get("yaw"),
+        "height_reference": grade.get("height_reference"),
         "checks": [
             {key: item.get(key) for key in ("name", "passed", "measured", "limit", "detail")}
             for item in grade.get("checks") or []

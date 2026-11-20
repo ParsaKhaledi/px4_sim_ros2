@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "e2e"))
 
-from height_summary import aligned_rows, fake_z_drift  # noqa: E402
+from height_summary import aligned_rows, fake_z_drift, prearm_level  # noqa: E402
 
 
 def test_rows_share_one_clock_and_skip_a_far_sample():
@@ -26,6 +26,14 @@ def test_rows_share_one_clock_and_skip_a_far_sample():
     assert rows[0]["vision_height_m"] == 0.1
     assert rows[1]["vision_height_m"] is None
     assert rows[2]["flags"]["cs_ev_hgt"] is True
+
+
+def test_prearm_level_is_the_ground_before_the_climb():
+    # Resting 0.24 m (base_link above an origin), then a 2 m climb.
+    times = np.arange(0, 12_000_000, 100_000, dtype=np.int64)
+    values = np.full(times.shape, 0.24)
+    values[times >= 8_000_000] = 2.24
+    assert abs(prearm_level(times, values) - 0.24) < 1e-9
 
 
 def test_fake_drift_z_is_zero():

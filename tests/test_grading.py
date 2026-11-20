@@ -5,7 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests" / "e2e"))
 
-from grading import _grade_leg, _leg_axis, grade_mission, load_thresholds  # noqa: E402
+from grading import (  # noqa: E402
+    _grade_leg,
+    _leg_axis,
+    flight_height_reference,
+    grade_mission,
+    load_thresholds,
+)
 
 
 def _sample(phase, x, y, z, yaw, t):
@@ -166,6 +172,24 @@ def test_final_yaw_is_the_change_from_takeoff():
     final = _check(missed, "final_yaw")
     assert not final["passed"]
     assert final["measured"] == 180.0
+
+
+def test_height_zero_is_prearm_base_link_not_the_ekf_origin():
+    rows = _perfect()
+    # Model origin 0.1 m, base_link 0.34 m. The 0.24 m offset is on both
+    # the pre-arm pose and the hover, so the climb stays 2.0 m.
+    for row in rows:
+        if row["phase"] == "start":
+            row["px4_d"] = -0.24
+        elif row["phase"] == "hover":
+            row["px4_d"] = -2.24
+    result = grade_mission(rows)
+    assert _check(result, "height")["measured"] == 0.0
+    reference = flight_height_reference(rows)
+    assert reference["ground_truth"]["prearm_base_link_z_m"] == 0.34
+    assert reference["ground_truth"]["hover_above_prearm_m"] == 2.0
+    assert reference["ekf"]["hover_above_prearm_m"] == 2.0
+    assert reference["ekf"]["prearm_down_m"] == -0.24
 
 
 def test_leg_axis_follows_enu_at_37_deg():

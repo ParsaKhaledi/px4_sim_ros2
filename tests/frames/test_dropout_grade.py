@@ -20,6 +20,24 @@ def test_dropout_passes_only_brake_hold_land():
     assert {item["name"] for item in result["checks"]} == {"brake", "hold", "land"}
 
 
+def test_landing_height_is_the_settled_pose():
+    # The land phase stops at the 0.20 m gate. The vehicle is on the ground
+    # by disarm. 0.15 m is that gate, not a hover above the takeoff pose.
+    rows = [
+        _row("start", 0.0, 0.0, -0.013, 37.0, 0.0),
+        _row("land", 0.0, 0.0, 0.137, 37.0, 20.0),
+        _row("disarm", 0.0, 0.0, -0.015, 37.0, 22.0),
+    ]
+    result = grade_dropout(rows)
+    land = next(item for item in result["checks"] if item["name"] == "land")
+    assert land["passed"]
+    assert land["measured"] == 0.002
+    reference = result["height_reference"]["ground_truth"]
+    assert reference["landing_phase_exit_above_prearm_m"] == 0.15
+    assert reference["landing_settled_above_prearm_m"] == -0.002
+    assert reference["prearm_base_link_z_m"] == 0.227
+
+
 def test_dropout_fails_without_a_brake():
     rows = [
         _row("start", 0.0, 0.0, 0.1, 0.0, 0.0),
