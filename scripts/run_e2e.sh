@@ -39,6 +39,11 @@ export E2E_YAW_SETTLE_DEG="${E2E_YAW_SETTLE_DEG:-3}"
 export E2E_HOVER_HEIGHT_BAND_M="${E2E_HOVER_HEIGHT_BAND_M:-0.05}"
 export E2E_HOVER_HEIGHT_HOLD_S="${E2E_HOVER_HEIGHT_HOLD_S:-2}"
 export E2E_CHECK_CAMERAS="${E2E_CHECK_CAMERAS:-0}"
+export E2E_GRADE_DROPOUT="${E2E_GRADE_DROPOUT:-0}"
+export E2E_REQUIRE_YAW_PASS_90="${E2E_REQUIRE_YAW_PASS_90:-0}"
+export E2E_CHECK_VO_STAMPS="${E2E_CHECK_VO_STAMPS:-0}"
+export E2E_VO_DELAY_MS="${E2E_VO_DELAY_MS:-}"
+export E2E_VO_DELAY_TOLERANCE_MS="${E2E_VO_DELAY_TOLERANCE_MS:-25}"
 export E2E_WALL_SCALE="${E2E_WALL_SCALE:-1}"
 export E2E_CAMERA_MIN_VARIANCE="${E2E_CAMERA_MIN_VARIANCE:-1.0}"
 export E2E_ATTEMPT_TIMEOUT="${E2E_ATTEMPT_TIMEOUT:-480}"
@@ -187,6 +192,11 @@ run_attempt() {
     -e E2E_CAMERA_MIN_VARIANCE \
     -e E2E_GZ_MODEL \
     -e E2E_REQUIRE_VISION_FUSION \
+    -e E2E_GRADE_DROPOUT \
+    -e E2E_REQUIRE_YAW_PASS_90 \
+    -e E2E_CHECK_VO_STAMPS \
+    -e E2E_VO_DELAY_MS \
+    -e E2E_VO_DELAY_TOLERANCE_MS \
     -e E2E_ATTEMPT="${attempt}" \
     -e E2E_RESULT_PATH="${result}" \
     -e World \
@@ -212,6 +222,56 @@ run_attempt() {
         source /home/px4/volume/ros2_ws/install/setup.bash
       fi
       exec python3 /home/px4/volume/tests/e2e/test_out_and_back.py
+    '
+}
+
+start_fake_rtabmap() {
+  # Detached publisher. compose_exec uses -T and would wait on the node.
+  # A crash recreate kills the previous process, so each attempt starts one.
+  if [ "${FAKE_VISION:-0}" != "1" ]; then
+    return 0
+  fi
+  export FAKE_VISION_DELAY_MS="${FAKE_VISION_DELAY_MS:-45}"
+  export FAKE_VISION_RATE_HZ="${FAKE_VISION_RATE_HZ:-12.5}"
+  export FAKE_VISION_NOISE_M="${FAKE_VISION_NOISE_M:-0}"
+  export FAKE_VISION_NOISE_YAW_DEG="${FAKE_VISION_NOISE_YAW_DEG:-0}"
+  export FAKE_VISION_DRIFT_MPS="${FAKE_VISION_DRIFT_MPS:-0}"
+  export FAKE_VISION_FAULT="${FAKE_VISION_FAULT:-none}"
+  export FAKE_VISION_EXPRESS_CAMERA="${FAKE_VISION_EXPRESS_CAMERA:-0}"
+  export FAKE_VISION_WORLD_AXES="${FAKE_VISION_WORLD_AXES:-1}"
+  export FAKE_VISION_DROPOUT_YAW_DEG="${FAKE_VISION_DROPOUT_YAW_DEG:-70}"
+  export USE_SIM_TIME="${USE_SIM_TIME:-true}"
+  export CAM_X="${CAM_X:-0.12}"
+  export CAM_Y="${CAM_Y:-0.03}"
+  export CAM_Z="${CAM_Z:-0.242}"
+  export CAM_PITCH_DEG="${CAM_PITCH_DEG:-17}"
+  compose_setup
+  echo "Starting fake_rtabmap (fault=${FAKE_VISION_FAULT}, delay=${FAKE_VISION_DELAY_MS} ms)."
+  "${COMPOSE[@]}" exec -d -T \
+    -e FAKE_VISION_DELAY_MS \
+    -e FAKE_VISION_RATE_HZ \
+    -e FAKE_VISION_NOISE_M \
+    -e FAKE_VISION_NOISE_YAW_DEG \
+    -e FAKE_VISION_DRIFT_MPS \
+    -e FAKE_VISION_FAULT \
+    -e FAKE_VISION_EXPRESS_CAMERA \
+    -e FAKE_VISION_WORLD_AXES \
+    -e FAKE_VISION_DROPOUT_YAW_DEG \
+    -e USE_SIM_TIME \
+    -e CAM_X \
+    -e CAM_Y \
+    -e CAM_Z \
+    -e CAM_PITCH_DEG \
+    PX4 \
+    bash -lc '
+      set +u
+      source /opt/ros/${ROS_DISTRO}/setup.bash
+      source /home/px4/ws_px4/install/setup.bash
+      if [ -f /home/px4/volume/ros2_ws/install/setup.bash ]; then
+        source /home/px4/volume/ros2_ws/install/setup.bash
+      fi
+      export PYTHONPATH="/home/px4/volume/ros2_ws/src/px4_control${PYTHONPATH:+:$PYTHONPATH}"
+      exec python3 -m px4_control.testing.fake_rtabmap
     '
 }
 
@@ -301,6 +361,7 @@ fly_until_done() {
     fi
     echo "Flight attempt ${attempt}"
     mkdir -p "${FLIGHTS}/attempt-${attempt}"
+    start_fake_rtabmap
     chmod 777 "${FLIGHTS}" "${FLIGHTS}/attempt-${attempt}" || true
     local attempt_start
     attempt_start="$(date +%s)"

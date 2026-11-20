@@ -403,6 +403,64 @@ def grade_hover(samples, thresholds: Thresholds | None = None) -> dict:
     return _result(_grade_hover_checks(samples, thresholds), thresholds)
 
 
+def yaw_passed_command_direction(samples, minimum_deg: float = 90.0) -> dict:
+    """True when ENU yaw passes ``minimum_deg`` toward the commanded 180.
+
+    The offboard yaw step adds +pi to the NED yaw setpoint. NED yaw
+    positive is clockwise from above, so ENU yaw decreases. A turn that
+    goes the other way can still finish 180 deg away; this check requires
+    the path to pass the 90 deg mark in the commanded direction.
+    """
+    hover = _phase(samples, "hover")
+    yaw_rows = _phase(samples, "yaw")
+    if not hover or not yaw_rows:
+        return _check("yaw_pass_90", False, None, minimum_deg, "no hover or yaw samples")
+    start = float(hover[-1]["yaw"])
+    unwrapped = _unwrap([start] + [float(row["yaw"]) for row in yaw_rows])
+    deltas = [value - unwrapped[0] for value in unwrapped[1:]]
+    if not deltas:
+        return _check("yaw_pass_90", False, None, minimum_deg, "no yaw motion")
+    # Commanded ENU change is negative.
+    reached = min(deltas)
+    wrong = max(deltas)
+    passed = reached <= -abs(minimum_deg) and wrong <= 15.0
+    return _check(
+        "yaw_pass_90",
+        passed,
+        round(reached, 4),
+        -abs(minimum_deg),
+        "ENU yaw must pass -90 deg (NED +180 command) and not reverse",
+    )
+
+
+def grade_dropout(samples, hold_m: float = 0.5) -> dict:
+    """Brake, hold, and land after a vision cut. Legs and yaw are not graded."""
+    checks = []
+    brake = _phase(samples, "vision_brake")
+    land = _phase(samples, "land")
+    start = _phase(samples, "start")
+    checks.append(_check("brake", bool(brake), len(brake), 1, "vision_brake phase"))
+    if brake:
+        origin = (brake[0]["x"], brake[0]["y"])
+        drift = max(horizontal((row["x"], row["y"]), origin) for row in brake)
+        checks.append(
+            _check("hold", drift <= hold_m, round(drift, 4), hold_m, "metres moved during brake")
+        )
+    else:
+        checks.append(_check("hold", False, None, hold_m, "no brake samples"))
+    if land and start:
+        ground = float(start[-1]["z"])
+        height = abs(float(land[-1]["z"]) - ground)
+        checks.append(_check("land", height <= 0.5, round(height, 4), 0.5, "height above takeoff ground"))
+    else:
+        checks.append(_check("land", False, None, 0.5, "no land samples"))
+    return {
+        "passed": bool(checks) and all(item["passed"] for item in checks),
+        "checks": checks,
+        "thresholds": {"dropout_hold_m": hold_m},
+    }
+
+
 def grade_mission(samples, thresholds: Thresholds | None = None) -> dict:
     thresholds = thresholds or load_thresholds()
     checks = _grade_hover_checks(samples, thresholds)

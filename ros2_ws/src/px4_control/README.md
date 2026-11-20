@@ -29,4 +29,4 @@ cd ros2_ws/src/px4_control
 PYTHONPATH=. python3 -m pytest -q test
 ```
 
-Frame, covariance, and trajectory tests do not start Gazebo. `fake_vision_source` republishes a pose topic (default `/ground_truth/odom`) onto `/rtabmap/odom` and logs that it is a test substitute, not RTAB-Map. The default launch does not start it.
+Frame, covariance, and trajectory tests do not start Gazebo. From the repo root, `pytest tests/frames` runs the ENU/NED conversion tests and the static transform-tree check. `fake_vision_source` republishes a pose topic (default `/ground_truth/odom`) onto `/rtabmap/odom` and logs that it is a test substitute, not RTAB-Map. `fake_rtabmap` is the delayed, origin-shifted substitute used by `scripts/ci_fake_vision.sh`. The default launch does not start either one.

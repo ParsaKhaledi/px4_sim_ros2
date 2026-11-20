@@ -27,6 +27,7 @@ setup(
             'px4_control_node = px4_control.node:main',
             'out_and_back = px4_control.examples.out_and_back:main',
             'fake_vision_source = px4_control.testing.fake_vision:main',
+            'fake_rtabmap = px4_control.testing.fake_rtabmap:main',
         ],
     },
 )

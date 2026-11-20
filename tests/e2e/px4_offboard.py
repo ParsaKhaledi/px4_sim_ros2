@@ -18,7 +18,14 @@ import threading
 import time
 
 from crash_monitor import crash_reason, load_crash_thresholds
-from grading import grade_hover, grade_mission, load_thresholds, yaw_from_quat
+from grading import (
+    grade_dropout,
+    grade_hover,
+    grade_mission,
+    load_thresholds,
+    yaw_from_quat,
+    yaw_passed_command_direction,
+)
 from camera_check import CameraTracker, rtf_summary
 from ev_bridge import EvBridgeStats, fill_vehicle_odometry, load_bridge_types, vision_gt_error_m
 from gz_pose import (
@@ -160,6 +167,7 @@ class FlightWatch:
         self._stop = threading.Event()
         self._thread = None
         self._gz_thread = None
+        self._ros_thread = None
         self._node = None
         self._rclpy = None
         self._last_record_sim = -1.0
@@ -225,6 +233,9 @@ class FlightWatch:
         self._vision_brake_sim = None
         self._vision_land_now = False
         self._gps_fix = None
+        self._time_offset = None
+        self._vo_gaps_us: list[int] = []
+        self._armed_before_vision = False
         self.ekf2_ev_delay = float(os.environ.get("EKF2_EV_DELAY") or os.environ.get("PX4_PARAM_EKF2_EV_DELAY") or "0")
         self.ekf2_hgt_ref = float(os.environ.get("PX4_PARAM_EKF2_HGT_REF") or "0")
         self.ekf2_hgt_ref_reason = (
@@ -261,8 +272,14 @@ class FlightWatch:
             self._wait_for_estimate()
             self.set_phase("start")
             self._wait_sim(1.0, 30.0)
+            if self.vision_enabled:
+                # AUTO_LOITER requires a global position. With EKF2_GPS_CTRL=0
+                # the vision EKF never has one, and the arm is denied in loiter.
+                # Offboard only requires the setpoint stream.
+                self._engage_offboard()
             self._arm()
-            self._engage_offboard()
+            if not self.vision_enabled:
+                self._engage_offboard()
             self._takeoff()
             # Height has already held. This wait is the hover clock, not a settle.
             self.set_phase("hover")
@@ -394,6 +411,9 @@ class FlightWatch:
             self._vision = bridge_cls()
             self._odom_sample_cls = sample_cls
             self._lost_covariance = lost_cov
+            from px4_control.vision_bridge import TimeSyncOffset
+
+            self._time_offset = TimeSyncOffset()
             from nav_msgs.msg import Odometry as VisionOdometry
 
             node.create_subscription(
@@ -407,9 +427,26 @@ class FlightWatch:
                 )
             except ImportError:
                 print("warn: rtabmap_msgs.OdomInfo missing; lost comes from odom only", flush=True)
-            self._ev_pub = node.create_publisher(
-                VehicleOdometry, "/fmu/in/vehicle_visual_odometry", qos_pub
+            # Keep a few samples queued. A depth-1 publisher leaves uXRCE with
+            # only the latest, and PX4 fuses a sample only inside a 100 ms window.
+            vo_qos = QoSProfile(
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+                history=HistoryPolicy.KEEP_LAST,
+                depth=10,
             )
+            self._ev_pub = node.create_publisher(
+                VehicleOdometry, "/fmu/in/vehicle_visual_odometry", vo_qos
+            )
+            try:
+                from px4_msgs.msg import TimesyncStatus
+
+                self._subscribe(node, TimesyncStatus, (
+                    "/fmu/out/timesync_status",
+                    "/fmu/out/timesync_status_v1",
+                ), self._on_timesync, qos_sub)
+            except ImportError:
+                print("warn: px4_msgs.TimesyncStatus missing; vision offset uses PX4 stamps", flush=True)
             print(
                 f"vision EV bridge: /rtabmap/odom → /fmu/in/vehicle_visual_odometry "
                 f"(EKF2_EV_DELAY={self.ekf2_ev_delay:g} HGT_REF={self.ekf2_hgt_ref:g} "
@@ -442,9 +479,34 @@ class FlightWatch:
             node.create_subscription(
                 TrajectorySetpoint, "/fmu/in/trajectory_setpoint", self._on_setpoint, qos_sub
             )
+        # Spin off the control thread. One spin_once per tick was losing
+        # /clock and /rtabmap/odom to the faster PX4 topics, so the bridge
+        # stamped vision a few hundred milliseconds late and the EKF's
+        # 100 ms sample window never opened.
+        self._ros_thread = threading.Thread(target=self._spin_ros, daemon=True)
+        self._ros_thread.start()
+
+    def _spin_ros(self) -> None:
+        while not self._stop.is_set():
+            node = self._node
+            rclpy = self._rclpy
+            if node is None or rclpy is None:
+                return
+            try:
+                for _ in range(20):
+                    if self._stop.is_set():
+                        return
+                    rclpy.spin_once(node, timeout_sec=0.0)
+            except Exception as exc:
+                print(f"ros spin stopped: {exc}", flush=True)
+                return
+            time.sleep(0.002)
 
     def _close_ros(self) -> None:
         self._stop.set()
+        if self._ros_thread is not None:
+            self._ros_thread.join(timeout=2.0)
+            self._ros_thread = None
         if self._gz_thread is not None:
             self._gz_thread.join(timeout=3.0)
             self._gz_thread = None
@@ -548,6 +610,14 @@ class FlightWatch:
             self.was_armed = True
         self.failsafe = bool(getattr(msg, "failsafe", False))
         self.preflight_ok = bool(getattr(msg, "pre_flight_checks_pass", False))
+        if (
+            armed
+            and self.vision_enabled
+            and (self._vision is None or not self._vision.ever_received)
+        ):
+            self._armed_before_vision = True
+        if getattr(msg, "timestamp", None) is not None and self._time_offset is not None:
+            self._time_offset.note_px4_stamp(int(msg.timestamp), self._sim_s())
 
     def _on_local(self, msg) -> None:
         self.px4_n = float(msg.x)
@@ -569,6 +639,8 @@ class FlightWatch:
         if finite:
             self.speed = math.sqrt(speed_sq)
         self._px4_wall = time.monotonic()
+        if self._time_offset is not None and getattr(msg, "timestamp", None) is not None:
+            self._time_offset.note_px4_stamp(int(msg.timestamp), self._sim_s())
         if self.px4_valid and not self.hold_captured and self.commanding:
             self.sp_n = self.px4_n
             self.sp_e = self.px4_e
@@ -647,6 +719,7 @@ class FlightWatch:
             angular_flu=np.array([twist.angular.x, twist.angular.y, twist.angular.z]),
             pose_covariance=np.array(msg.pose.covariance, dtype=float),
             twist_covariance=np.array(msg.twist.covariance, dtype=float),
+            child_frame_id=str(getattr(msg, "child_frame_id", "") or "base_link"),
         )
         visual = self._vision.push(sample)
         if visual is None:
@@ -655,8 +728,29 @@ class FlightWatch:
             return
         self._ev_stats.note_accepted(stamp, sample.position_enu)
         out = self._types["visual_odometry"]()
-        fill_vehicle_odometry(out, visual)
+        # header.stamp is the capture. Publish time is this node's clock.
+        # A clock sample that is still behind the header is skew, not an
+        # early publish: the source already held the sample for the delay.
+        now = self._sim_s()
+        delay_ms = os.environ.get("E2E_VO_DELAY_MS", "").strip()
+        if now >= float(stamp):
+            publish_sec = now
+        elif delay_ms:
+            publish_sec = float(stamp) + float(delay_ms) / 1000.0
+        else:
+            publish_sec = float(stamp)
+        offset_us = 0 if self._time_offset is None else self._time_offset.offset_us
+        fill_vehicle_odometry(out, visual, publish_sec=publish_sec, offset_us=offset_us)
+        if publish_sec > 0.0:
+            self._vo_gaps_us.append(int(out.timestamp) - int(out.timestamp_sample))
+            if len(self._vo_gaps_us) > 400:
+                self._vo_gaps_us = self._vo_gaps_us[-400:]
         self._ev_pub.publish(out)
+
+    def _on_timesync(self, msg) -> None:
+        if self._time_offset is None:
+            return
+        self._time_offset.note_timesync(int(msg.estimated_offset))
 
     def _on_rtabmap_info(self, msg) -> None:
         if self._vision is None or self._lost_covariance is None:
@@ -696,8 +790,6 @@ class FlightWatch:
             self._publish_offboard()
         if self.commanding:
             self._send_phase_command()
-        if self._node is not None and self._rclpy is not None:
-            self._rclpy.spin_once(self._node, timeout_sec=0.0)
         self._observe()
 
     def _check_vision_tracking(self) -> None:
@@ -966,13 +1058,18 @@ class FlightWatch:
             self._wait_sim(2.0, 30.0)
         except (FlightCrash, VisionLost):
             pass
+        # The hold raises VisionLost once the brake timer elapses. Landing
+        # has to run after that, not abort on the same flag.
+        self._vision_land_now = False
         try:
             self._land()
             self._disarm()
-        except FlightCrash as exc:
-            print(f"vision abort land ended with {exc.reason}", flush=True)
+        except (FlightCrash, VisionLost) as exc:
+            print(f"vision abort land ended with {exc}", flush=True)
 
     def _arm(self) -> None:
+        if self.vision_enabled and (self._vision is None or not self._vision.ever_received):
+            raise FlightCrash("arm_before_vision", dict(self.snapshot), list(self.samples))
         self.set_phase("arm")
         print("phase=arm", flush=True)
         ok = self._wait_until(lambda: bool(self.armed), sim_timeout=20.0, wall_timeout=90.0)
@@ -1070,8 +1167,21 @@ class FlightWatch:
     def _yaw_180(self) -> None:
         self.set_phase("yaw")
         print("phase=yaw", flush=True)
-        self.yaw_sp = wrap_pi(self.yaw_sp + math.pi)
-        self._wait_step_settle(self._yaw_error_deg, self.thresholds.yaw_settle_deg)
+        # A single +pi setpoint is a tie, so the yaw controller may rotate
+        # either way and still finish 180 deg away. Two +90 deg steps keep
+        # the sign of the NED command (ENU yaw decreases).
+        steps = 2 if _env_flag("E2E_REQUIRE_YAW_PASS_90") else 1
+        for index in range(steps):
+            self.yaw_sp = wrap_pi(self.yaw_sp + math.pi / steps)
+            if index + 1 == steps:
+                self._wait_step_settle(self._yaw_error_deg, self.thresholds.yaw_settle_deg)
+                continue
+
+            def yaw_step_close() -> bool:
+                error = self._yaw_error_deg()
+                return error is not None and error <= 12.0
+
+            self._wait_hold(yaw_step_close, 0.4, sim_timeout=8.0, wall_timeout=40.0, label="yaw_step")
 
     def _land(self) -> None:
         self.set_phase("land")
@@ -1095,6 +1205,67 @@ class FlightWatch:
             return height <= self.crash_limits.min_height_m
 
         self._wait_until(down, sim_timeout=40.0, wall_timeout=180.0)
+
+    def _grade_vision_extras(self, graded: dict) -> None:
+        """Arm gate, vision-stamp delay, and the commanded yaw direction."""
+        checks = list(graded.get("checks") or [])
+        checks.append({
+            "name": "vision_before_arm",
+            "passed": not self._armed_before_vision,
+            "measured": 0 if not self._armed_before_vision else 1,
+            "limit": 0,
+            "detail": "arm is refused until the first accepted vision sample",
+        })
+        if self._armed_before_vision:
+            graded["passed"] = False
+            graded["status"] = "failed"
+        if _env_flag("E2E_REQUIRE_YAW_PASS_90"):
+            yaw_check = yaw_passed_command_direction(self.samples)
+            checks.append(yaw_check)
+            if not yaw_check["passed"]:
+                graded["passed"] = False
+                graded["status"] = "failed"
+        if _env_flag("E2E_CHECK_VO_STAMPS"):
+            from px4_control.vision_bridge import vo_stamp_faults
+
+            expected_ms = os.environ.get("E2E_VO_DELAY_MS", "")
+            tolerance_ms = float(os.environ.get("E2E_VO_DELAY_TOLERANCE_MS") or "25")
+            expected_us = None if expected_ms == "" else int(round(float(expected_ms) * 1000.0))
+            faults: list[str] = []
+            if not self._vo_gaps_us:
+                faults.append("no vehicle_visual_odometry timestamps")
+            for gap in self._vo_gaps_us:
+                # Every sample: never negative, never above 100 ms.
+                faults.extend(vo_stamp_faults(gap, 0))
+            if expected_us is not None and self._vo_gaps_us:
+                ordered = sorted(self._vo_gaps_us)
+                median = ordered[len(ordered) // 2]
+                faults.extend(
+                    vo_stamp_faults(
+                        median,
+                        0,
+                        expected_delay_us=expected_us,
+                        tolerance_us=int(round(tolerance_ms * 1000.0)),
+                    )
+                )
+            # vo_stamp_faults(gap, 0) treats gap as timestamp - timestamp_sample.
+            unique = []
+            for item in faults:
+                if item not in unique:
+                    unique.append(item)
+            gap_ms = None if not self._vo_gaps_us else round(self._vo_gaps_us[-1] / 1000.0, 3)
+            checks.append({
+                "name": "vo_timestamp",
+                "passed": not unique,
+                "measured": gap_ms,
+                "limit": "0 ms <= timestamp-timestamp_sample <= 100 ms",
+                "detail": "; ".join(unique) if unique else f"samples {len(self._vo_gaps_us)}",
+            })
+            graded["vo_timestamp_gap_us"] = list(self._vo_gaps_us[-20:])
+            if unique:
+                graded["passed"] = False
+                graded["status"] = "failed"
+        graded["checks"] = checks
 
     def _disarm(self) -> None:
         self.set_phase("disarm")
@@ -1151,7 +1322,22 @@ class FlightWatch:
             if not ok:
                 graded["passed"] = False
                 graded["status"] = "failed"
-        if vision_abort:
+        if self.vision_enabled:
+            self._grade_vision_extras(graded)
+        if vision_abort and _env_flag("E2E_GRADE_DROPOUT"):
+            # The cut is the case under test. Legs and the 180 yaw are not.
+            dropout = grade_dropout(self.samples)
+            graded["checks"] = list(dropout["checks"]) + [
+                item for item in graded.get("checks") or []
+                if item.get("name") in {"vo_timestamp", "vision_before_arm"}
+            ]
+            graded["passed"] = bool(dropout["passed"]) and all(
+                item["passed"] for item in graded["checks"]
+            )
+            graded["status"] = "passed" if graded["passed"] else "failed"
+            graded["vision_tracking_lost"] = True
+            graded["dropout"] = True
+        elif vision_abort:
             graded["passed"] = False
             graded["status"] = "failed"
             graded["vision_tracking_lost"] = True

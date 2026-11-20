@@ -7,6 +7,7 @@ Helpers for launching the stack, checking health, and running the headless tests
 | [up.sh](up.sh) | Start Compose with profiles, camera, world, and spawn pose |
 | [smoke_test.sh](smoke_test.sh) | Headless compose smoke test. Camera rates run first |
 | [ci_camera_flight.sh](ci_camera_flight.sh) | CI RGB-D/stereo: health + hover + out-and-back |
+| [ci_fake_vision.sh](ci_fake_vision.sh) | Headless SITL with the fake RTAB-Map feed (`clean` or `dropout`) |
 | [ci_rgbd_flight.sh](ci_rgbd_flight.sh) / [ci_stereo_flight.sh](ci_stereo_flight.sh) | Thin wrappers around `ci_camera_flight.sh` |
 | [run_e2e.sh](run_e2e.sh) | Out-and-back (or hover-only) flight, with crash restart |
 | [record_flight.sh](record_flight.sh) | Rosbag of the grading topics plus the newest PX4 ULog |
@@ -63,6 +64,29 @@ with the **same** mission and `E2E_*` pass criteria for both cameras:
 
 The `CameraType=none` smoke job still uses [smoke_test.sh](smoke_test.sh) only
 (no offboard hover/legs).
+
+## ci_fake_vision.sh
+
+Headless SITL with cameras and RTAB-Map off. `fake_rtabmap` reads
+`/ground_truth/odom` and publishes `/rtabmap/odom`. The real vision bridge
+forwards that to `/fmu/in/vehicle_visual_odometry`. GPS and magnetometer
+plugins stay on the stock `x500`. Fusion is the issue #38 set:
+`EKF2_GPS_CTRL=0`, `EKF2_MAG_TYPE=5`, `EKF2_EV_CTRL=15`, `EKF2_HGT_REF=0`,
+`EKF2_EV_DELAY=0`. `NAV_DLL_ACT=0` because the run is headless.
+
+```bash
+./scripts/ci_fake_vision.sh clean
+./scripts/ci_fake_vision.sh dropout
+```
+
+`clean` is takeoff, hover, 30 cm forward, yaw 180°, 30 cm back, land. Its
+looser limits (`E2E_LEG_TOLERANCE_M=0.08`, `E2E_RETURN_TOLERANCE_M=0.12`,
+`E2E_YAW_TOLERANCE_DEG=10`) are set only for that run. `dropout` cuts the
+feed mid-yaw and grades brake, hold, and land. Both write
+`logs/flights/fake_vision/<mode>/grade.json` and exit non-zero on failure.
+`.env.example` keeps the 3 cm / 5° camera-flight defaults.
+
+The offline half of the same check is `pytest tests/frames`.
 
 ## run_e2e.sh and record_flight.sh
 
