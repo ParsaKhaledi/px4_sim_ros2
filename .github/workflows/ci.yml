@@ -750,6 +750,19 @@ jobs:
       - name: Image contents
         run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
 
+      # StatePublisher rewrites the URDF as user px4. CameraType none does not
+      # take the rgbd/stereo chmod in compose_stack.sh. height_summary.py needs numpy.
+      - name: Prepare the robot-description mount
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-numpy
+          chmod -R a+rwX \
+            includes/gz/models \
+            includes/gz/x500_tf_publisher \
+            includes/gz/worlds \
+            includes/gz/oakd_s2
+
       - name: Fake vision clean
         timeout-minutes: 40
         env:
@@ -879,6 +892,17 @@ jobs:
 
       - name: Image contents
         run: ./scripts/image_assert.sh "${{ needs.build.outputs.image_ref }}"
+
+      - name: Prepare the robot-description mount
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-numpy
+          chmod -R a+rwX \
+            includes/gz/models \
+            includes/gz/x500_tf_publisher \
+            includes/gz/worlds \
+            includes/gz/oakd_s2
 
       - name: Fake vision dropout
         timeout-minutes: 40
