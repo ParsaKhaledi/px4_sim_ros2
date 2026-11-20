@@ -83,7 +83,9 @@ plugins stay on the stock `x500`. Fusion is the issue #38 set:
 looser limits (`E2E_LEG_TOLERANCE_M=0.08`, `E2E_RETURN_TOLERANCE_M=0.12`,
 `E2E_YAW_TOLERANCE_DEG=10`) are set only for that run. `dropout` cuts the
 feed mid-yaw and grades brake, hold, and land. Both write
-`logs/flights/fake_vision/<mode>/grade.json` and exit non-zero on failure.
+`logs/flights/fake_vision/<mode>/grade.json` and
+`logs/flights/fake_vision/<mode>/summary.json` (yaw change from takeoff,
+baro / vision / EKF height, estimator flags) and exit non-zero on failure.
 `.env.example` keeps the 3 cm / 5° camera-flight defaults.
 
 The offline half of the same check is `pytest tests/frames`.

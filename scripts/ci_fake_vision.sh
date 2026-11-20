@@ -67,7 +67,6 @@ export FAKE_VISION_DELAY_MS=45
 export FAKE_VISION_NOISE_M=0
 export FAKE_VISION_NOISE_YAW_DEG=0
 export FAKE_VISION_DRIFT_MPS=0
-export FAKE_VISION_EXPRESS_CAMERA=0
 export FAKE_VISION_WORLD_AXES=1
 export E2E_CHECK_CAMERAS=0
 export E2E_HEALTH_SERVICES=""
@@ -111,4 +110,5 @@ set -e
 if [ -f "${E2E_FLIGHT_DIR}/trajectory.json" ]; then
   cp "${E2E_FLIGHT_DIR}/trajectory.json" "${E2E_FLIGHT_DIR}/grade.json"
 fi
+python3 "${ROOT}/tests/e2e/height_summary.py" --flight-dir "${E2E_FLIGHT_DIR}" || echo "height summary failed" >&2
 exit "${code}"
